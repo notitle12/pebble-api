@@ -18,6 +18,24 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      DB_URL: jdbc:postgresql://localhost:5432/pebble
+      DB_USERNAME: pebble
+      DB_PASSWORD: pebble-local
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_DB: pebble
+          POSTGRES_USER: pebble
+          POSTGRES_PASSWORD: pebble-local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pebble -d pebble"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v7

@@ -38,7 +38,7 @@
 ./gradlew build
 ```
 
-`bootRun`과 테스트는 해당 작업에 필요한 로컬 서비스와 설정이 준비되어 있어야 한다. 성공 여부가 확인되지 않은 환경 설정이나 명령 결과를 Pull Request에서 성공했다고 표시하지 않는다.
+`bootRun`과 테스트는 해당 작업에 필요한 로컬 서비스와 설정이 준비되어 있어야 한다. 현재 테스트는 PostgreSQL에 연결하므로 테스트 전에 로컬 PostgreSQL을 실행한다. 성공 여부가 확인되지 않은 환경 설정이나 명령 결과를 Pull Request에서 성공했다고 표시하지 않는다.
 
 ### 로컬 PostgreSQL
 
@@ -47,6 +47,7 @@
 ```bash
 docker compose up -d postgres
 docker compose ps
+./gradlew clean test
 ./gradlew bootRun
 docker compose down
 ```
@@ -149,8 +150,8 @@ Pull Request는 관련 Issue에 연결하고 다음 내용을 적는다.
 
 - **CI (Continuous Integration)**는 브랜치 push나 Pull Request 때 빌드와 테스트를 자동 실행해 변경사항을 빠르게 확인하는 절차다. 전체 기능이 완성될 때까지 기다릴 필요는 없다. 로컬에서 기본 빌드·테스트가 재현 가능해지면 최소 CI를 추가하는 편이 좋다.
 - **CD (Continuous Delivery/Deployment)**는 검증된 변경사항을 배포 가능한 산출물로 만들거나 실제 환경에 배포하는 절차다. 자동 배포는 배포 대상, 환경별 설정, 비밀값 보관, 되돌리기 방법이 준비된 뒤 추가한다. 따라서 초기에는 CI만 두고 CD는 배포 환경이 정해질 때 시작해도 된다.
-- `.github/workflows/ci.yml`은 Pull Request의 대상이 `dev`이거나 `dev`에 push할 때 JDK 21과 Gradle Wrapper로 `./gradlew clean test`를 실행한다. CD와 배포는 자동화하지 않는다.
-- 현재 테스트는 PostgreSQL에 연결하지 않는다. 애플리케이션 컨텍스트 테스트에서 DataSource와 JPA 자동 설정을 제외하고 있기 때문이다. DB 연동 테스트를 추가할 때는 CI에도 PostgreSQL 서비스를 구성하고 해당 테스트를 실행한다.
+- `.github/workflows/ci.yml`은 Pull Request의 대상이 `dev`이거나 `dev`에 push할 때 PostgreSQL 17.11 서비스와 JDK 21을 준비하고 Gradle Wrapper로 `./gradlew clean test`를 실행한다. CD와 배포는 자동화하지 않는다.
+- 애플리케이션 컨텍스트 테스트는 DataSource와 JPA를 사용해 PostgreSQL 연결 및 Flyway 초기화를 확인한다.
 
 ### 포매터와 정적 분석
 
