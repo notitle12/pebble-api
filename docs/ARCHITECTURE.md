@@ -642,6 +642,13 @@ Entity는 도메인의 상태와 해당 상태에 필요한 비즈니스 규칙�
 - Persistence Entity와 Domain Entity를 무조건 분리하지 않는다.
 - 식별자는 프로젝트에서 정한 TSID 정책을 따른다.
 
+### 식별자 생성 정책
+
+- `com.github.f4b6a3:tsid-creator` 라이브러리로 애플리케이션에서 TSID를 생성한다. 공통 생성기는 `global/id/TsidGenerator`에 둔다.
+- 생성한 TSID는 PostgreSQL `BIGINT`에 양수 `long`으로 저장한다. DB sequence와 identity column은 사용하지 않는다.
+- API에서는 식별자를 10진 문자열로 반환한다. JavaScript가 정수 정밀도를 보장하지 않는 범위의 ID도 정확히 전달하기 위한 규칙이며, 상세한 계약은 `API.md`를 따른다.
+- 한 프로세스에서는 라이브러리 기본 노드 설정을 사용한다. 여러 애플리케이션 프로세스를 동시에 실행할 때는 각 프로세스에 서로 다른 `TSIDCREATOR_NODE`를 지정하고, 전체 노드 수에 맞게 `TSIDCREATOR_NODE_COUNT`를 설정한다. 배포 환경은 노드 ID를 중복 없이 할당한다.
+
 예:
 
 ```text
