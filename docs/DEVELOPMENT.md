@@ -25,6 +25,7 @@
 
 - JDK 21
 - 저장소에 포함된 Gradle Wrapper 사용
+- 로컬 PostgreSQL을 실행할 Docker Desktop
 - GitHub 저장소 접근 권한
 
 전역 Gradle 설치 대신 저장소 루트에서 `./gradlew`를 사용한다. Windows에서는 `gradlew.bat`을 사용한다.
@@ -39,12 +40,29 @@
 
 `bootRun`과 테스트는 해당 작업에 필요한 로컬 서비스와 설정이 준비되어 있어야 한다. 성공 여부가 확인되지 않은 환경 설정이나 명령 결과를 Pull Request에서 성공했다고 표시하지 않는다.
 
+### 로컬 PostgreSQL
+
+저장소 루트의 `compose.yaml`은 개발용 PostgreSQL만 실행한다. 애플리케이션은 IDE에서 실행하거나 Gradle로 실행하며, 운영 환경의 DB 서비스는 이 Compose 구성과 분리한다.
+
+```bash
+docker compose up -d postgres
+docker compose ps
+./gradlew bootRun
+docker compose down
+```
+
+기본 접속 정보는 로컬 개발 전용이다. PostgreSQL 데이터는 `postgres_data` named volume에 보존한다. DB 이름, 사용자, 비밀번호, 호스트 포트는 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT` 환경변수로 바꿀 수 있다. 애플리케이션은 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`를 사용하며, 기본값은 위 Compose 설정과 일치한다.
+
+로컬 DB 데이터를 모두 버리고 다시 만들 때만 `docker compose down -v`를 실행한다. 이 명령은 `postgres_data`의 데이터를 삭제한다. 운영 데이터에 이 개발용 Compose 명령을 사용하지 않는다.
+
+Flyway가 이후 SQL 마이그레이션을 관리한다. 새 스키마 변경은 `src/main/resources/db/migration` 아래에 순서가 있는 버전 파일로 추가하며, Hibernate가 스키마를 자동 생성하지 않도록 `ddl-auto`를 `validate`로 둔다. 현재는 도메인 테이블을 만들지 않는다.
+
 ### 현재 저장소 상태와 설정 주의사항
 
 - 현재 `build.gradle`은 Spring Boot 3.5.x와 Java 21을 사용한다. 실제 플러그인 버전은 `build.gradle`을 기준으로 한다.
 - `gradlew`와 `gradlew.bat`이 포함되어 있다.
-- `src/main/resources/application.yaml`에는 애플리케이션 이름만 설정되어 있다. PostgreSQL·Redis 접속 설정, 환경변수 이름, `docker-compose` 파일은 아직 정의되어 있지 않다.
-- 필요한 로컬 서비스와 설정 항목을 추가하는 이슈가 생기면 안전한 예제 설정을 문서화한다. 실제 비밀번호, OAuth 비밀값, 서명 키는 저장소에 넣지 않는다.
+- Redis 접속 설정은 아직 정의되어 있지 않다.
+- PostgreSQL의 로컬 개발 설정은 `compose.yaml`과 `src/main/resources/application.yaml`을 기준으로 한다. 운영 접속 정보와 실제 비밀번호, OAuth 비밀값, 서명 키는 저장소에 넣지 않는다.
 - `.env`, `application-local.yml`, `application-secret.yml` 등 `.gitignore`에 지정된 비밀 설정 파일은 커밋하지 않는다.
 
 ## 3. Git 작업 절차
