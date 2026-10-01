@@ -21,6 +21,22 @@ public class MemberQueryService {
         Member member = memberRepository.findById(id)
                 .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND));
 
+        return requireActive(member);
+    }
+
+    @Transactional
+    public Member findActiveForWrite(long id) {
+        return requireActive(memberRepository.findByIdForWrite(id)
+                .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND)));
+    }
+
+    public Member findProfileCompleted(long id) {
+        Member member = findActiveById(id);
+        if (!member.isProfileCompleted()) throw new ApplicationException(MemberError.PROFILE_REQUIRED);
+        return member;
+    }
+
+    private Member requireActive(Member member) {
         if (member.getStatus() == MemberStatus.SUSPENDED) {
             throw new ApplicationException(MemberError.ACCOUNT_SUSPENDED);
         }

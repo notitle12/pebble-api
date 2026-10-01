@@ -211,7 +211,9 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | POST | /api/v1/admin/auth/login | Guest | 관리자 로그인 |
 | POST | /api/v1/admin/auth/token/refresh | Admin Refresh Cookie | 관리자 Access Token 갱신 및 Refresh Cookie 회전 |
 | POST | /api/v1/admin/auth/logout | Admin Refresh Cookie | 관리자 Refresh Token·`sid` 세션 폐기 및 쿠키 삭제 |
-| GET | /api/v1/members/me | USER | 내 계정 조회 |
+| GET | /api/v1/members/me | USER | 내 계정·프로필 설정 상태 조회 |
+| POST | /api/v1/members/me/profile | USER | 블로그명·고정 공개 아이디 최초 설정 |
+| PATCH | /api/v1/members/me/profile | USER | 블로그명·닉네임 변경, 필드별 7일 쿨타임 |
 | DELETE | /api/v1/members/me | USER | 회원 탈퇴 |
 | GET | /api/v1/members/me/posts | USER | 내 Post 목록, 공개 상태 필터 가능 |
 | GET | /api/v1/members/me/projects | USER | 내 Project 목록, 공개 상태 필터 가능 |
@@ -354,7 +356,10 @@ Naver 로그인 요청:
       "nickname": "pebble",
       "profileImageUrl": null,
       "status": "ACTIVE",
-      "role": "USER"
+      "role": "USER",
+      "blogName": null,
+      "handle": null,
+      "profileCompleted": false
     }
   }
 }
@@ -387,10 +392,26 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
     "nickname": "pebble",
     "profileImageUrl": null,
     "status": "ACTIVE",
-    "createdAt": "2026-09-30T03:00:00Z"
+    "createdAt": "2026-09-30T03:00:00Z",
+    "blogName": null,
+    "handle": null,
+    "profileCompleted": false,
+    "nicknameChangeAvailableAt": null,
+    "blogNameChangeAvailableAt": null
   }
 }
 ~~~
+
+일반 회원 최초 설정과 변경:
+
+- 신규 Naver 가입의 닉네임은 공급자 별명(없거나 공백이면 `pebble`)을 기본값으로 한다. 이미 사용 중이면 `별명-2`, `별명-3`처럼 첫 빈 숫자 접미사를 붙인다. 접미사를 포함해 30 유니코드 문자 이내로 잘라 저장한다. 재로그인은 저장된 닉네임을 변경하지 않는다. Naver 로그인 member 응답에도 `blogName`, `handle`, `profileCompleted`를 포함한다.
+- `POST /members/me/profile` 요청은 `{blogName, handle, nickname?}`이다. 200과 위 회원 응답을 반환한다. 최초 설정 전에 기본 닉네임을 직접 바꿀 수 있으며 생략하면 현재 기본값을 사용한다. `blogName`은 최대 100자, `nickname`은 최대 30자이고 공백만 있는 값은 거부한다. 앞뒤 공백을 제거하고 NFC로 정규화한다. 두 표시 이름은 한글·영문을 허용하며 정규화한 저장 값의 정확한 일치로 중복을 검사한다.
+- `handle`은 Naver 식별자와 별개의 영구 공개 아이디다. 영문 소문자로 시작하고 영문 소문자·숫자·하이픈 3~30자를 사용한다. 대문자는 소문자로 정규화하고 끝 하이픈 및 예약어 `admin`, `api`, `auth`, `me`, `posts`, `search`, `settings`, `www`를 거부한다. 최초 설정 후 변경할 수 없으며 DB에서도 변경을 막는다.
+- 블로그명·닉네임·handle은 서비스 전체에서 각각 고유하다. 최종 저장까지 같은 이름 공간의 PostgreSQL 트랜잭션 잠금과 고유 제약으로 조정한다. 직접 선택한 이름은 자동으로 수정하지 않고 `DUPLICATE_NICKNAME`, `DUPLICATE_BLOG_NAME`, `DUPLICATE_HANDLE` 409를 반환한다. 기본 Naver 닉네임에만 자동 접미사를 사용한다.
+- 최초 설정은 한 번만 가능하고 재요청은 `PROFILE_ALREADY_COMPLETED` 409다. 로그인 직후 `profileCompleted=false`이면 최초 설정이 필요하다. 미설정 회원도 설정·본인 조회·기존 인증 API는 사용할 수 있고, 후속 콘텐츠 쓰기는 member의 완료 상태 검증을 적용한다.
+- `PATCH /members/me/profile`은 `{blogName?, nickname?}`만 허용한다. 생략은 유지하고 명시 null·비문자열·미지원 필드는 400이다. handle을 포함하면 값이 같아도 400이다. 최초 설정 전 PATCH는 `PROFILE_REQUIRED` 409다.
+- 최초 설정일부터 각 표시 이름의 마지막 실제 변경 시각을 기준으로 독립적인 7일(168시간) 쿨타임을 적용한다. 같은 값 또는 빈 PATCH는 성공하며 시각을 갱신하지 않는다. 제한 중 변경은 `NICKNAME_CHANGE_COOLDOWN` 또는 `BLOG_NAME_CHANGE_COOLDOWN` 409다. 변경 가능 시각은 위 응답의 두 `*ChangeAvailableAt` UTC 필드로 확인한다. 여러 필드를 보낸 요청은 모두 성공하거나 모두 취소된다.
+- 두 쓰기 API는 검증된 USER Bearer JWT와 DB ACTIVE 상태를 요구하며 같은 회원 행을 잠가 최초 설정·쿨타임을 검증한다. Refresh Cookie나 세션 쿠키로 인증하지 않는다. 허용 Origin에 POST/PATCH와 Authorization·Content-Type CORS를 제공한다. 별도 프로필 GET은 제공하지 않고 `GET /members/me`를 사용한다.
 
 `DELETE /members/me`는 Refresh Token Family를 즉시 폐기하고 Refresh Cookie를 만료시킨 뒤 회원을 `WITHDRAWAL_PENDING`으로 전환한다. 응답은 202이며 `withdrawalScheduledAt`에 삭제 예정 시각을 반환한다. 탈퇴 예약 뒤에는 기존 Access JWT의 만료 여부와 관계없이 보호된 USER 요청을 거부하고 회원의 콘텐츠·댓글·좋아요·미디어를 일반 사용자에게 숨긴다. Naver authorization code를 다시 검증하는 `POST /auth/naver/withdrawal/cancel`로 예약 후 7일 이내 취소할 수 있다. 취소는 계정을 ACTIVE로 돌리고 탈퇴 기간에 발급된 세션은 복구하지 않으므로 회원은 다시 로그인한다. 예약 시각에 도달하면 취소할 수 없으며 회원 레코드, OAuth 연결, 사용자 콘텐츠와 저장 미디어를 운영 데이터베이스 및 R2에서 물리 삭제한다. 법령상 보관하는 관리자 접속기록은 회원 콘텐츠와 분리해 SECURITY.md 정책에 따라 보관한다.
 

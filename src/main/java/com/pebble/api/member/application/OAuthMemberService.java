@@ -19,21 +19,28 @@ public class OAuthMemberService {
     private final MemberRepository memberRepository;
     private final MemberOAuthIdentityRepository identityRepository;
     private final TransactionTemplate transaction;
+    private final MemberNames names;
 
     public OAuthMemberService(MemberRepository memberRepository,
                               MemberOAuthIdentityRepository identityRepository,
-                              PlatformTransactionManager transactionManager) {
+                              PlatformTransactionManager transactionManager, MemberNames names) {
         this.memberRepository = memberRepository;
         this.identityRepository = identityRepository;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.names = names;
     }
 
     public Member resolve(OAuthProvider provider, String subject, String nickname, String profileImageUrl) {
         try {
-            return Objects.requireNonNull(transaction.execute(status -> identityRepository
-                    .findByProviderAndProviderSubject(provider, subject)
-                    .map(MemberOAuthIdentity::getMember)
-                    .orElseGet(() -> createMember(provider, subject, nickname, profileImageUrl))));
+            return Objects.requireNonNull(transaction.execute(status -> {
+                var existing = identityRepository.findByProviderAndProviderSubject(provider, subject);
+                if (existing.isPresent()) return existing.get().getMember();
+                names.lockNames();
+                // 잠금을 기다리는 동안 동일 OAuth 계정이 생성됐을 수 있으므로 다시 확인한다.
+                return identityRepository.findByProviderAndProviderSubject(provider, subject)
+                        .map(MemberOAuthIdentity::getMember)
+                        .orElseGet(() -> createMember(provider, subject, nickname, profileImageUrl));
+            }));
         } catch (DataIntegrityViolationException exception) {
             if (!isConcurrentRegistration(exception)) {
                 throw exception;
@@ -51,7 +58,7 @@ public class OAuthMemberService {
     }
 
     private Member createMember(OAuthProvider provider, String subject, String nickname, String profileImageUrl) {
-        String initialNickname = nickname == null || nickname.isBlank() ? "pebble" : nickname;
+        String initialNickname = names.initialNickname(nickname);
         Member member = memberRepository.saveAndFlush(
                 new Member(initialNickname, profileImageUrl, MemberStatus.ACTIVE, null, null));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, provider, subject));

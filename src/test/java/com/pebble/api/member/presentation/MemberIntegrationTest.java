@@ -79,7 +79,9 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(jsonPath("$.data.profileImageUrl").isEmpty())
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
-                .andExpect(jsonPath("$.data.length()").value(5));
+                .andExpect(jsonPath("$.data.profileCompleted").value(false))
+                .andExpect(jsonPath("$.data.handle").isEmpty())
+                .andExpect(jsonPath("$.data.length()").value(10));
     }
 
     @Test
