@@ -87,7 +87,8 @@ Spring Security 설정에서는 명시적인 authority를 사용한다. 예를 �
 ### 5.1 일반 회원: Naver OAuth
 
 - Naver OAuth Authorization Code 흐름으로 공급자 사용자를 인증한다.
-- OAuth `state`를 검증해 로그인 요청과 callback을 결합하고 위조된 callback을 거부한다. Provider와 Client가 지원하면 PKCE도 사용한다.
+- 서버가 암호학적 난수로 OAuth `state`를 만들고 짧은 만료 시간을 둔 일회용 저장소에 보관한다. 브라우저에는 HttpOnly·Secure·SameSite=Lax 쿠키로 설정하고, callback에서 받은 state·쿠키·저장소 값을 모두 대조한 뒤 한 번만 소비한다. 검증하지 못한 callback은 공급자 token API에 전달하지 않는다.
+- Naver Authorization Code 교환 요청에도 검증한 `state`를 전달한다. Provider와 Client가 지원하면 PKCE도 사용한다.
 - 공급자 인증 결과는 `member_oauth_identity`의 Provider와 고유 subject로 회원에 연결한다. 이메일, 닉네임 등 프로필 값만으로 계정을 연결하지 않는다.
 - Naver Access Token 등 Provider 자격 증명은 Pebble API 토큰과 구분한다. 필요하지 않으면 저장하지 않는다.
 - OAuth 인증이 끝나면 Pebble 자체의 Access JWT와 Refresh Token을 발급한다. Naver 토큰을 Pebble API Bearer Token으로 받지 않는다.
@@ -136,6 +137,7 @@ JWT 서명은 Claim이 위조되지 않았음을 보장하지만 이미 발급�
 - Refresh Token은 CSPRNG로 생성한 예측 불가능한 임의 값으로 만들고 인증 자격 증명처럼 취급한다. 충분한 엔트로피를 확보하며, ID나 시각을 토큰에 인코딩하지 않는다.
 - 원문 Refresh Token을 DB, Redis, 로그, 분석 이벤트에 저장하지 않는다.
 - Redis 조회 값은 `HMAC-SHA-256(refreshTokenPepper, refreshToken)`로 계산한 digest를 사용한다. 일반 SHA-256만으로 digest를 저장하는 것보다 별도 비밀 키를 요구한다.
+- 신규 USER 로그인은 Refresh Token 원문을 CSPRNG로 생성해 브라우저 쿠키에만 반환한다. Redis에는 digest를 키로 사용하고 세션 메타데이터를 저장한다. digest 계산에는 32바이트 이상 Refresh Token pepper를 HMAC-SHA-256으로 적용한다.
 - Redis에는 Token digest, 주체 유형·ID, 세션 ID, Token Family ID, 상태, Token 발급 시각, 마지막 성공 사용 시각, Family 최초 로그인 시각(`familyCreatedAt`), 비활성 만료 시각(`idleExpiresAt`), 절대 만료 시각(`absoluteExpiresAt`)을 저장한다. `familyCreatedAt`과 `absoluteExpiresAt`은 Token 회전 때 바꾸지 않는다. 키 이름에도 원문 Token을 넣지 않는다.
 - Refresh Token 만료 정책은 다음과 같다. `idle`은 성공한 Refresh Token 사용으로 연장하고, `absolute`는 최초 로그인 시각부터 연장하지 않는다. MANAGER와 MASTER에는 같은 관리자 정책을 적용한다.
 
