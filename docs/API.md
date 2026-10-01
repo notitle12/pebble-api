@@ -238,7 +238,7 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 (후속, 미구현) |
 | DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 (후속, 미구현) |
 
-개인 Board 연결, Project 연결, 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았다. 검색 endpoint는 접근이 거부되며 위 검색·썸네일 행은 후속 계획 계약을 보존한다.
+Board 관리와 Post의 Board 지정은 구현되어 있다. Project 연결, 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았다. 검색 endpoint는 접근이 거부되며 위 검색·썸네일 행은 후속 계획 계약을 보존한다.
 
 ### 5.3 Project
 
@@ -260,12 +260,14 @@ Project CRUD·검색·미디어 API는 후속 기능이며 현재 제공하지 �
 
 | Method | Path | 접근 | 설명 |
 |---|---|---|---|
-| GET | /api/v1/members/me/boards | USER | 내 Board 구조 |
-| POST | /api/v1/boards | USER | Board 생성 |
-| PATCH | /api/v1/boards/{boardId} | 소유자 | 이름, 부모, 순서 수정 |
-| DELETE | /api/v1/boards/{boardId} | 소유자 | Board 삭제. Post는 미분류 처리 |
+| GET | /api/v1/members/me/boards | ACTIVE USER | 내 Board 구조 |
+| GET | /api/v1/members/{memberId}/boards | Guest | 공개 블로그 Board 구조 |
+| GET | /api/v1/members/{memberId}/boards/{boardId}/posts | Guest | 해당 Board에 직접 배치한 공개 Post 목록 |
+| POST | /api/v1/boards | ACTIVE USER | Board 생성 |
+| PATCH | /api/v1/boards/{boardId} | ACTIVE 소유자 | 이름, 부모, 순서 수정 |
+| DELETE | /api/v1/boards/{boardId} | ACTIVE 소유자 | Board 삭제. 연결 Post는 미분류 처리 |
 
-Board 관리와 Post 배치 API는 후속 기능이며 현재 제공하지 않는다.
+Board 쓰기는 프로필 설정 완료를 요구하지 않는다. POST는 name을 필수로 받고 parentId는 생략 또는 null이면 루트, displayOrder는 생략 시 0이다. PATCH에서 생략 필드는 보존하고 parentId에 null을 지정하면 루트로 이동한다. Board 구조 조회는 query parameter를 받지 않는다. Board별 Post 목록은 page(기본 0), size(기본 20, 최대 100), sort를 지원하며 기본 정렬은 displayOrder 오름차순, 같은 순서는 숫자 ID 오름차순이다. 이 목록은 지정 Board에 직접 배치한 Post만 포함하며 하위 Board의 Post를 합치지 않고 categoryId·tagId 필터도 지원하지 않는다. 전역 Post 목록의 boardId 필터는 제공하지 않는다.
 
 ### 5.5 Category와 Tag
 
@@ -462,10 +464,10 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 - 시스템은 작성자별 `postNumber`를 1부터 증가시키며 논리 삭제 뒤에도 재사용하지 않는다. 내부 `id`는 TSID다.
 - `categoryId`는 null 또는 최하위 Category 하나다. 신규 연결은 ACTIVE Category만 허용한다. 기존 Post가 사용 중인 뒤 비활성화된 Category는 공개 조회와 분류 탐색에서 계속 연결 결과를 제공한다. 부모 Category 조회는 해당 하위 Category의 공개 Post를 포함한다.
 - tagIds는 중복 없는 ID 배열이며 신규 연결은 ACTIVE Tag만 허용한다.
-- `boardId`와 `projectId`는 생략하거나 null로 둘 수 있으며, non-null 값은 현재 지원하지 않아 400이다.
+- `boardId`는 본인 소유의 미삭제 Board ID 문자열 또는 null이다. 생성 시 생략하면 미분류, PATCH 시 생략하면 기존 연결을 유지하고 null은 연결을 해제한다. 타인 소유·삭제·존재하지 않는 Board는 404다. `projectId`는 생략 또는 null만 허용하며 non-null 값은 후속 기능이므로 400이다.
 - visibilityStatus는 PUBLIC 또는 HIDDEN이다. DELETED는 DELETE 동작으로만 설정한다.
 - isBlocked, blockedAt, blockedByAdminId는 응답 전용이며 요청에 포함하면 400이다.
-- 생성 시 title, blocks, visibilityStatus는 필수다. PATCH에서 blocks와 tagIds는 전체 교체이며, categoryId, summary는 null로 지정해 값·연결을 제거할 수 있다.
+- 생성 시 title, blocks, visibilityStatus는 필수다. PATCH에서 blocks와 tagIds는 전체 교체이며, categoryId, boardId, summary는 null로 지정해 값·연결을 제거할 수 있다.
 - 작성·수정·삭제에는 ACTIVE이며 최초 프로필 설정을 완료한 USER가 필요하다. 미완료 프로필은 `PROFILE_REQUIRED` 409다. 본인 글만 변경할 수 있다.
 - Guest는 PUBLIC이며 차단되지 않은 Post만 조회한다. 작성자는 자신의 HIDDEN Post도 조회할 수 있으며 다른 사용자의 비공개 Post는 404다.
 
@@ -515,7 +517,7 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
 
 `urlKey`는 slug가 있으면 slug, 없으면 `postNumber` 문자열이다. `GET /api/v1/blogs/{handle}/posts/{postKey}`에서 숫자 키는 작성자별 번호, 그 외 키는 slug로 해석한다. 본인 블로그 기본 목록은 displayOrder 오름차순이고 공개 전체 목록 기본 순서는 publishedAt 내림차순이다. 공개 주소 경로는 공개 handle과 postNumber 또는 slug를 사용하며 Naver 식별자와 내부 TSID를 경로에 사용하지 않는다. 응답의 `id`는 TSID 문자열이다.
 
-Post 응답의 `boardId`, `projectId`, `thumbnailUrl`은 현재 항상 null이고 `likeCount`는 0, `likedByMe`는 false다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
+Post 응답의 `boardId`는 연결 Board ID 문자열 또는 null이다. `projectId`, `thumbnailUrl`은 현재 항상 null이고 `likeCount`는 0, `likedByMe`는 false다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
 
 ### 6.4 Project
 
@@ -586,11 +588,11 @@ Category 트리는 활성 하위의 경로를 보존하기 위해 비활성 상�
 
 Category 생성 요청은 `{parentId, name, slug, displayOrder}`이며 Tag 생성 요청은 `{name, slug, displayOrder}`다. 수정 요청은 각 생성 필드와 status를 부분 변경한다. status 값은 ACTIVE 또는 INACTIVE다. 참조 항목을 물리 삭제하는 API는 없다.
 
-공개 Board 응답은 `{id, name, displayOrder, children}` 트리다. Board는 최대 3단계이며 공개 조회에서 해당 작성자의 PUBLIC이고 차단되지 않은 Post만 보인다. 자신의 Board API에는 숨김 또는 차단된 Post가 노출되지 않으며 Post 자체 조회 권한에 따르도록 한다.
+내 Board 응답은 `{id, parentId, name, displayOrder, children}` 트리이고 공개 Board 응답은 `{id, name, displayOrder, children}` 트리로 parentId를 생략한다. POST와 PATCH는 단일 항목 `{id, parentId, name, displayOrder}`을 반환하며 children은 포함하지 않는다. ID는 문자열이고 루트의 parentId는 null, children이 없는 항목의 children은 `[]`다. Board와 children은 displayOrder 오름차순, 같은 값이면 숫자 ID 오름차순이다.
 
-개인 Board와 Project API는 현재 제공하지 않는다. Post 요청의 Board·Project non-null ID는 거부하며 응답 값은 null이다.
+Board 생성 요청은 `{name, parentId, displayOrder}`다. name은 공백이 아닌 문자열이며 최대 50 유니코드 코드 포인트다. parentId는 양의 10진 문자열 또는 null이고, displayOrder는 0 이상의 정수다. 생성 시 name은 필수이며 parentId 기본값은 null, displayOrder 기본값은 0이다. 수정은 필드별 부분 변경이며 누락은 기존 값 유지, parentId의 명시적 null은 루트 이동이다. displayOrder는 형제 정렬 키이며 항목을 이동시키거나 다른 항목의 순서를 자동으로 밀지 않는다.
 
-Board 응답 항목은 `{id, parentId, name, displayOrder, children}`다. Board 생성 요청은 `{name, parentId, displayOrder}`다. name은 최대 50자다. 수정은 이 세 필드를 부분 변경한다. 부모 변경 시 소유자 일치, 최대 깊이, 순환 참조, 형제 이름 중복을 검증한다. 하위 Board가 있는 경우 삭제 요청은 RESOURCE_HAS_CHILDREN을 반환한다. 성공한 Board 삭제는 연결된 Post의 boardId를 null로 만든다.
+부모 변경 시 같은 소유자 Board인지, 최대 3단계와 순환 참조를 위반하지 않는지, 같은 부모 아래에 대소문자까지 동일한 이름이 이미 있는지 검증한다. 이름 중복은 400 VALIDATION_ERROR다. 삭제되지 않은 Board의 이름만 중복 검증에 참여하므로 삭제한 이름은 재사용할 수 있다. 부모 또는 Board를 찾을 수 없거나 다른 소유자의 Board이면 404다. 하위 미삭제 Board가 남은 삭제 요청은 409 RESOURCE_HAS_CHILDREN이다. 삭제는 Board를 논리 삭제하고 같은 트랜잭션에서 연결 Post의 boardId를 null로 만든다. ACTIVE USER는 프로필 완료 없이 자신의 Board를 관리할 수 있다. 공개 Board 트리는 빈 Board도 포함하며 WITHDRAWAL_PENDING 소유자는 404다. SUSPENDED 소유자의 공개 데이터는 유지한다. Board별 Post 목록은 PUBLIC·비차단·미삭제 Post만 포함한다. Project API와 Post의 Project 연결은 아직 제공하지 않는다. Post 작성·수정은 기존과 같이 프로필 완료가 필요하다.
 
 ### 6.7 댓글과 좋아요
 
@@ -656,7 +658,7 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 - q는 앞뒤 공백을 제거한 비어 있지 않은 검색어다.
 - 알 수 없는 query parameter와 같은 parameter의 중복 전달은 400이다. 각 목록의 필터와 sort 허용값은 endpoint 계약에 따른다.
 - 목록 endpoint는 공통으로 page(기본 0), size(기본 20, 최대 100), sort를 지원한다. GET /posts 기본 정렬은 publishedAt 내림차순이고 허용 sort 필드는 publishedAt, createdAt이다. 블로그 목록은 displayOrder 오름차순이며 허용 필드는 displayOrder, publishedAt, createdAt이다. 정렬 방향은 asc 또는 desc다.
-- Post 검색은 아직 구현하지 않았다. Board·Project 필터도 현재 Post 목록에서 지원하지 않는다.
+- Post 검색과 Project 필터는 아직 구현하지 않았다. Board별 Post 목록은 지정 Board의 직접 연결만 조회하며 전역 Post 목록은 boardId 필터를 지원하지 않는다.
 - 본인 Post 목록의 visibilityStatus는 PUBLIC 또는 HIDDEN이며 DELETED는 400이다.
 - Project 검색 대상은 이름, 소개, 상세 설명, 기술 스택이다. Project 검색 API도 후속 기능으로 현재 제공하지 않는다.
 - Guest 검색은 PUBLIC이고 차단되지 않은 콘텐츠만 대상으로 한다.
