@@ -4,6 +4,7 @@ import com.pebble.api.global.exception.ErrorCode;
 import org.springframework.http.HttpStatus;
 
 public enum AuthError implements ErrorCode {
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN", "갱신 토큰이 유효하지 않습니다."),
     INVALID_OAUTH_STATE(HttpStatus.UNAUTHORIZED, "INVALID_OAUTH_STATE", "로그인 요청을 확인할 수 없습니다."),
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "로그인 정보가 유효하지 않습니다."),
     ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "ACCOUNT_SUSPENDED", "정지된 계정은 로그인할 수 없습니다."),

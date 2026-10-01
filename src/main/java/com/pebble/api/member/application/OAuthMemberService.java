@@ -46,6 +46,10 @@ public class OAuthMemberService {
         }
     }
 
+    public java.util.Optional<MemberStatus> findStatus(long memberId) {
+        return transaction.execute(status -> memberRepository.findById(memberId).map(Member::getStatus));
+    }
+
     private Member createMember(OAuthProvider provider, String subject, String nickname, String profileImageUrl) {
         String initialNickname = nickname == null || nickname.isBlank() ? "pebble" : nickname;
         Member member = memberRepository.saveAndFlush(

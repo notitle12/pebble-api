@@ -362,6 +362,12 @@ Naver 로그인 요청:
 
 로그인 성공 시 Refresh Token은 JSON 응답에 넣지 않고 `HttpOnly; Secure; SameSite=Lax` 쿠키의 `Set-Cookie` 헤더로 전달한다. USER Refresh Token은 비활성 14일, 최초 로그인부터 절대 30일 동안 유효하다. 브라우저는 이후 refresh와 logout 요청에 쿠키를 자동으로 포함한다. refresh 요청은 JSON 본문 없이 쿠키로 인증하고, 성공 시 회전된 Refresh Token을 쿠키로 다시 설정하며 새 Access Token은 응답 본문으로 반환한다. 쿠키 `Max-Age`는 비활성 만료와 남은 절대 만료 기간 중 짧은 쪽으로 설정한다. 로그아웃은 Refresh Token 세션을 서버에서 폐기하고 쿠키를 만료시킨 뒤 204를 반환한다.
 
+`POST /api/v1/auth/token/refresh`와 `POST /api/v1/auth/logout`에는 정확한 허용 프런트엔드 `Origin` 헤더가 필수다. 누락, `null`, 중복 또는 허용 목록 밖 Origin은 상태 변경 없이 403 `INSUFFICIENT_ROLE` 공통 오류로 거부한다. 브라우저는 헤더를 자동으로 보내고, API 클라이언트 테스트는 이를 명시해야 한다. CORS는 이 두 경로에도 POST와 `Content-Type`, `Authorization`, `Accept` 헤더 및 Credential을 정확한 Origin에만 허용한다.
+
+Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900}`이다. Refresh Token 원문은 응답 본문에 포함하지 않는다. 쿠키 누락·변조·만료·폐기·재사용은 401 `INVALID_REFRESH_TOKEN`이다. SUSPENDED는 403 `ACCOUNT_SUSPENDED`, WITHDRAWAL_PENDING은 409 `WITHDRAWAL_PENDING`으로 거부하고 제출된 Family를 폐기한다. 회원이 사라진 경우도 Family를 폐기하고 401로 거부한다. Redis 장애는 갱신·폐기를 성공으로 간주하지 않으며 공통 500 오류를 반환한다.
+
+기존 토큰의 재사용은 새 토큰을 포함한 Family 전체를 폐기한다. 동일 세션의 Refresh를 탭 간에도 단일화하고, 응답 유실 후 이전 쿠키로 재시도하면 재로그인이 필요하다. 로그아웃은 소비된 이전 토큰으로도 Family를 폐기한다. 쿠키가 없거나 알 수 없거나 이미 만료·폐기된 경우에도 로그아웃은 멱등적으로 쿠키를 삭제하고 204를 반환한다. Origin 방어는 이러한 요청에도 동일하게 적용한다. Refresh 오류 응답은 회전 쿠키를 발급하지 않는다.
+
 클라이언트는 Access Token을 메모리에 보관하고 보호된 요청에 `Authorization: Bearer`로 전달한다. USER 로그아웃 뒤 이미 발급된 USER Access JWT는 만료 시각까지 서버에서 서명 검증을 통과할 수 있다. USER Access JWT의 즉시 블랙리스트 확인은 하지 않는다. USER와 관리자 Access JWT의 수명은 발급 시점부터 900초(15분)이며 응답의 `accessTokenExpiresIn`은 초 단위로 `900`을 반환한다.
 
 ### 6.2 관리자 인증과 회원

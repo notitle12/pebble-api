@@ -162,6 +162,10 @@ Refresh 요청이 성공할 때마다 기존 Token을 한 번만 사용할 수 �
 4. 이미 소비된 Refresh Token이 다시 제출되면 Token Family와 그 세션의 활성 Refresh Token을 폐기하고 보안 이벤트를 기록한다. 공격자와 정상 클라이언트를 구분할 수 없으므로 사용자는 다시 로그인해야 할 수 있다.
 5. 클라이언트는 동일 세션에서 Refresh 요청을 동시에 보내지 않도록 단일화한다. 응답 유실 뒤 이전 Token을 재전송하는 동작도 재사용 탐지로 처리될 수 있다.
 
+현재 USER 구현은 단일 Redis 인스턴스의 Lua Script로 토큰 상태 검사·소비·후속 digest 저장 또는 Family 폐기 표식 저장을 한 번에 처리한다. 개별 digest hash와 Family digest set은 기존 초기 세션 형식을 유지한다. Family 폐기 표식이 있으면 모든 후속 갱신이 거부되어 활성 digest도 즉시 논리적으로 폐기된다. 소비 hash와 폐기 표식은 절대 만료까지 보관하며 활성 hash는 유휴·절대 만료 중 이른 시각에 만료한다. Lua는 Redis TIME으로 만료를 다시 검사한다. Family set이 사라진 경우도 갱신을 거부한다. 토큰 원문을 복구하거나 응답 유실 유예를 제공하지 않는다. 동시 요청의 첫 회전 성공 응답이 늦게 도착해도 이후 재사용 요청으로 그 Family가 폐기될 수 있다. 클라이언트는 재로그인한다.
+
+조회한 회원 상태는 회전 직전에 member Application 계약으로 확인하고 비활성 상태라면 제출된 Family를 폐기한다. PostgreSQL 회원 상태 조회와 Redis 전이는 분산 트랜잭션이 아니다. 향후 탈퇴·상태 변경 기능은 7.3절의 전체 Family 폐기 조정을 구현해야 하며, 이번 USER refresh/logout 기능이 전체 회원 세션 폐기 기능을 대신하지 않는다. Redis Cluster는 동적 Family 키와 digest 키의 같은 hash slot을 보장하지 않으므로 현재 지원하지 않는다. Cluster 전환 시 키 설계와 원자성 검증을 함께 변경한다.
+
 토큰 교체와 재사용 판정은 하나의 원자적 상태 전이여야 한다. Redis의 개별 읽기와 쓰기를 순서대로 실행하는 것만으로 회전 동시성을 보장하지 않는다.
 
 ### 7.3 로그아웃과 계정 상태 변경
@@ -185,6 +189,10 @@ Refresh Token digest용 pepper는 Refresh Token을 Redis에 보관할 때 HMAC �
 - 정상 교체는 이전·현재 pepper를 제한된 교체 기간 동안 검증할 수 있게 준비하고, 이전 pepper로 일치한 활성 토큰은 성공적인 회전 시 현재 pepper로 다시 저장한다. 이전 키 제거 시점은 최대 Refresh Token 수명 이후로 정한다.
 - pepper 유출이 의심되면 이전 버전으로 계산된 Refresh Token 세션을 폐기하고 새 pepper로 재로그인하게 한다.
 
+현재 설정은 `REFRESH_TOKEN_PEPPER_BASE64`(현재 비밀)와 `REFRESH_TOKEN_PEPPER_VERSION`(기본 `v1`)을 사용한다. 이전 비밀은 보호된 설정 주입으로 `pebble.auth.refresh-token.previous-peppers`의 버전별 Base64 map에 제공한다. 예를 들어 현재 버전을 `v2`로 전환할 때 `previous-peppers.v1`에 기존 비밀을 주입한다. 저장소 설정에는 실제 map 비밀을 작성하지 않는다. 버전은 변경한 키마다 고유하게 지정하고 같은 버전에 다른 비밀을 덮어쓰지 않는다. 버전 없는 기존 초기 hash는 `v1`로만 해석한다. 이전 활성 토큰은 현재 pepper로 회전하며 같은 Family·세션·절대 만료를 유지한다. 이전 소비 digest의 재사용 탐지를 위해 모든 노드에 이전 pepper를 마지막 이전 버전 발급 이후 최소 30일 동안 유지한다. 롤링 배포에서는 새 버전을 모든 노드가 검증할 수 있게 먼저 배포한 뒤 발급 버전을 전환한다.
+
+유출된 버전은 정상 교체 기간을 적용하지 않고 검증 설정에서 제거하여 해당 digest를 즉시 거부한다. 그 버전의 세션 Family 폐기는 내부 운영 절차로 Redis Family 폐기 표식을 절대 만료까지 설정한다. 이미 회전된 Family까지 폐기해야 하는 사고라면 관련 Family 전체를 식별해 폐기해야 한다. 자동 사고 대응·전체 세션 관리 도구와 Secret Manager 담당자·복구 절차 확정은 출시 전 별도 작업이다. JWT signing key는 이 설정과 독립적이며 기존 RS256 키 검증 정책을 변경하지 않는다.
+
 Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access Token 만료 또는 회전 정책을 대체하지 않는다.
 
 ### 8.2 다른 비밀
@@ -199,6 +207,8 @@ Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access To
 - Access JWT는 로그인·갱신 응답 본문으로 전달하고 클라이언트 메모리에만 보관한다. 보호된 API에는 `Authorization: Bearer`로 보낸다. `localStorage`나 `sessionStorage`에 저장하지 않는다.
 - Refresh Token은 별도 USER/Admin 쿠키에만 담아 전달한다. 쿠키는 `HttpOnly; Secure; SameSite=Lax`로 설정하고 API 계약처럼 브라우저가 refresh·logout 요청에 자동으로 포함한다. JSON 본문에 Refresh Token을 넣지 않는다.
 - Cookie가 자동으로 전송되는 refresh·logout 요청에는 CSRF 방어를 적용한다. `SameSite`는 방어의 한 겹으로 사용하고, 허용 Origin 검증과 필요 시 CSRF Token을 함께 적용한다.
+- USER refresh/logout POST는 허용 CORS 목록과 정확히 같은 단일 Origin을 필수로 검증한다. 누락·null·중복·불허 Origin은 쿠키 사용과 Redis 변경 이전에 공통 403으로 거부한다. SameSite=Lax와 필수 Origin 검증을 함께 사용하는 현재 계약에서는 별도 CSRF Token을 요구하지 않는다. 비브라우저 호출도 Origin 계약을 따른다. Origin 검사 제외·SameSite 변경·새 Cookie 인증 경로 추가 시 CSRF 정책을 다시 검토한다.
+- 전역 CSRF는 활성화한다. POST Naver authorization/login은 OAuth state 검증 흐름, USER refresh/logout은 별도 필수 Origin 필터를 적용한 명시적 예외다. 그 밖의 경로는 기본 CSRF 검사와 기존 접근 거부 정책을 유지한다.
 - CORS는 필요한 Origin, Method, Header만 허용한다. 쿠키 Credential을 허용할 때는 와일드카드 Origin을 사용하지 않는다.
 - 현재 기본값은 같은 사이트 배포를 위한 `SameSite=Lax`다. UI와 API가 서로 다른 사이트에 배포되어 `SameSite=None`이 필요한 경우에도 `Secure`를 유지하고 CSRF 방어와 정확한 Credential 허용 Origin을 적용한다. 가능한 경우 Cookie `Domain`은 지정하지 않는다.
 
@@ -219,7 +229,7 @@ Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access To
 다음 구현 세부사항은 코드·배포 환경과 함께 확정한다. 관리자 접속기록 보유기간은 10절의 정책을 따른다.
 
 1. 서명 알고리즘, 키 크기, Key ID 형식, Secret Manager/HSM 및 키 교체 절차
-2. Redis 토큰 Family 자료구조, 원자 회전 구현, 동시 Refresh와 응답 유실 정책
+2. 관리자 Redis 토큰 Family 구현 및 Redis Cluster 전환 시 키·원자성 설계 (USER 정책은 7.2절에서 구현)
 3. Refresh Token pepper와 선택적 Password pepper의 관리·교체 담당자 및 장애 복구 절차
 4. 로그인 속도 제한, 계정별 잠금/지연 수치와 비접속 운영 로그의 목적별 보유기간
 5. Admin API가 별도 백엔드로 분리될 경우 Token Issuer, Audience, 관리자 전용 세션과 키 경계

@@ -77,6 +77,7 @@ Flyway가 SQL 마이그레이션을 관리한다. 새 스키마 변경은 `src/m
 - `gradlew`와 `gradlew.bat`이 포함되어 있다.
 - Naver OAuth Client ID·Secret, callback URL, JWT 키와 Refresh Token pepper는 환경변수로 제공한다. 비밀 키는 저장소에 넣지 않는다.
 - `JWT_PRIVATE_KEY_LOCATION`과 `JWT_PUBLIC_KEY_LOCATION`은 RS256 PEM 파일 경로를 가리킨다. `REFRESH_TOKEN_PEPPER_BASE64`에는 32바이트 이상 난수의 Base64 값을 설정한다. Naver 로그인에는 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `NAVER_REDIRECT_URI`를 설정한다.
+- `REFRESH_TOKEN_PEPPER_VERSION`은 현재 pepper 버전이며 기본값은 `v1`이다. 정상 교체 시 보호된 설정으로 `pebble.auth.refresh-token.previous-peppers` map을 주입하고 SECURITY.md 8.1절의 노드 배포·소비 기록 보존 기간을 따른다.
 - `CORS_ALLOWED_ORIGINS`에는 쿠키 인증을 허용할 프런트엔드 Origin을 쉼표로 구분해 설정한다. 로컬 기본값은 `http://localhost:3000`이며 와일드카드 Origin을 사용하지 않는다. 배포 환경에서는 `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_KEY_ID`도 해당 환경에 맞게 설정한다.
 - PostgreSQL·Redis의 로컬 개발 설정은 `compose.yaml`과 `src/main/resources/application.yaml`을 기준으로 한다. 운영 접속 정보와 실제 비밀번호, OAuth 비밀값, 서명 키는 저장소에 넣지 않는다.
 - `.env`, `application-local.yml`, `application-secret.yml` 등 `.gitignore`에 지정된 비밀 설정 파일은 커밋하지 않는다.

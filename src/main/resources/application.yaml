@@ -37,3 +37,5 @@ pebble:
       key-id: ${JWT_KEY_ID:local}
     refresh-token:
       pepper-base64: ${REFRESH_TOKEN_PEPPER_BASE64:}
+      pepper-version: ${REFRESH_TOKEN_PEPPER_VERSION:v1}
+      previous-peppers: {}
