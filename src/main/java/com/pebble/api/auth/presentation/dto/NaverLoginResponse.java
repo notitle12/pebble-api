@@ -6,6 +6,7 @@ public record NaverLoginResponse(
         long accessTokenExpiresIn,
         MemberResponse member) {
 
-    public record MemberResponse(String id, String nickname, String profileImageUrl, String status, String role) {
+    public record MemberResponse(String id, String nickname, String profileImageUrl, String status, String role,
+                                 String blogName, String handle, boolean profileCompleted) {
     }
 }
