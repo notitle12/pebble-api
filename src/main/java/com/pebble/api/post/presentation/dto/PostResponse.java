@@ -30,7 +30,8 @@ public record PostResponse(String id, String postNumber, String slug, String url
                 category == null ? null : new Classification(category.getId().toString(), category.getName(),
                         category.getSlug(), category.getStatus()),
                 view.tags().stream().map(tag -> new Technology(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getStatus())).toList(),
-                post.getBoardId() == null ? null : post.getBoardId().toString(), null, null, post.getVisibility(), 0, false, post.getPublishedAt(), post.getCreatedAt(),
+                post.getBoardId() == null ? null : post.getBoardId().toString(),
+                post.getProjectId() == null ? null : post.getProjectId().toString(), null, post.getVisibility(), 0, false, post.getPublishedAt(), post.getCreatedAt(),
                 post.getUpdatedAt(), view.owner() ? post.isBlocked() : null);
     }
 

@@ -20,6 +20,7 @@ import com.pebble.api.project.infrastructure.persistence.ProjectRepository;
 import com.pebble.api.project.infrastructure.persistence.ProjectTagRepository;
 import com.pebble.api.tag.application.TagQueryService;
 import com.pebble.api.tag.domain.Tag;
+import com.pebble.api.post.application.PostProjectService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ public class ProjectService {
     private final MemberQueryService members;
     private final TagQueryService tags;
     private final EntityManager entityManager;
+    private final PostProjectService postProjects;
 
     @Transactional
     public ProjectView create(long memberId, ProjectChanges input) {
@@ -72,12 +74,47 @@ public class ProjectService {
     }
 
     public Page<ProjectView> listPublic(Long tagId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, null), pageable), false);
+    }
+
+    public Page<ProjectView> listMember(long memberId, Long tagId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        members.findPublicById(memberId);
+        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, memberId), pageable), false);
+    }
+
+    public Page<ProjectView> listMine(long memberId, ProjectVisibility visibility, Pageable pageable) {
+        members.findActiveById(memberId);
+        Specification<Project> filter = (root, query, cb) -> cb.and(
+                cb.equal(root.get("owner").get("id"), memberId),
+                cb.notEqual(root.get("visibility"), ProjectVisibility.DELETED),
+                visibility == null ? cb.conjunction() : cb.equal(root.get("visibility"), visibility));
+        return page(projects.findAll(filter, pageable), true);
+    }
+
+    public Page<ProjectView> search(String term, Long tagId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        Specification<Project> matching = (root, query, cb) -> {
+            var lowered = cb.lower(cb.literal(pattern));
+            var technology = query.subquery(Long.class);
+            var link = technology.from(ProjectTag.class);
+            technology.select(link.get("project").get("id")).where(cb.equal(link.get("project").get("id"), root.get("id")),
+                    cb.like(cb.lower(link.get("tag").get("name")), lowered, '\\'));
+            // EXISTS로 여러 기술 Tag가 일치해도 목록과 집계가 중복되지 않게 한다.
+            return cb.or(cb.like(cb.lower(root.get("name")), lowered, '\\'),
+                    cb.like(cb.lower(root.get("summary")), lowered, '\\'),
+                    cb.like(cb.lower(root.get("description")), lowered, '\\'), cb.exists(technology));
+        };
+        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, null).and(matching), pageable), false);
+    }
+
+    private Specification<Project> publicFilter(Long tagId, ProjectLifecycleStatus lifecycleStatus, Long ownerId) {
         Specification<Project> filter = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("visibility"), ProjectVisibility.PUBLIC));
             predicates.add(cb.isFalse(root.get("blocked")));
             predicates.add(cb.notEqual(root.get("owner").get("status"), MemberStatus.WITHDRAWAL_PENDING));
             if (lifecycleStatus != null) predicates.add(cb.equal(root.get("lifecycleStatus"), lifecycleStatus));
+            if (ownerId != null) predicates.add(cb.equal(root.get("owner").get("id"), ownerId));
             if (tagId != null) {
                 var subquery = query.subquery(Long.class);
                 var link = subquery.from(ProjectTag.class);
@@ -88,7 +125,7 @@ public class ProjectService {
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
-        return page(projects.findAll(filter, pageable));
+        return filter;
     }
 
     @Transactional
@@ -118,6 +155,7 @@ public class ProjectService {
     public void delete(long projectId, long memberId) {
         members.findProfileCompletedForWrite(memberId);
         Project project = ownedForUpdate(projectId, memberId);
+        postProjects.detach(memberId, projectId);
         project.delete();
         projects.flush();
     }
@@ -164,7 +202,7 @@ public class ProjectService {
                 projectTags.findForProjects(List.of(project.getId())).stream().map(ProjectTag::getTag).toList(), true, owner);
     }
 
-    private Page<ProjectView> page(Page<Project> page) {
+    private Page<ProjectView> page(Page<Project> page, boolean owner) {
         Map<Long, List<Tag>> byProject = new HashMap<>();
         if (!page.isEmpty()) {
             for (ProjectTag link : projectTags.findForProjects(page.getContent().stream().map(Project::getId).toList())) {
@@ -174,7 +212,7 @@ public class ProjectService {
         return page.map(project -> {
             initializeOwner(project);
             return new ProjectView(project, null, null,
-                    List.copyOf(byProject.getOrDefault(project.getId(), List.of())), false, false);
+                    List.copyOf(byProject.getOrDefault(project.getId(), List.of())), false, owner);
         });
     }
 
