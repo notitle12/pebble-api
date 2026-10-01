@@ -40,3 +40,8 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// 개인 로컬 설정과 공유 예시는 운영 배포용 JAR에 포함하지 않는다.
+tasks.named('bootJar') {
+    exclude('**/application-local.yaml', '**/application-local.yml', '**/application-local.yaml.example')
+}

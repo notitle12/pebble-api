@@ -6,7 +6,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record JwtProperties(
         String issuer,
         String audience,
-        String privateKeyLocation,
-        String publicKeyLocation,
-        String keyId) {
+        String keyId,
+        String privateKeyBase64,
+        String publicKeyBase64) {
+
+    @Override
+    public String toString() {
+        return "JwtProperties[redacted]";
+    }
 }

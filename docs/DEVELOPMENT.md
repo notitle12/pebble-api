@@ -52,17 +52,15 @@ docker compose ps
 docker compose down
 ```
 
-기본 접속 정보는 로컬 개발 전용이다. PostgreSQL 데이터는 `postgres_data` named volume에 보존한다. DB 이름, 사용자, 비밀번호, 호스트 포트는 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT` 환경변수로 바꿀 수 있다. 애플리케이션은 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`를 사용하며, 기본값은 위 Compose 설정과 일치한다.
+기본 접속 정보는 로컬 개발 전용이다. PostgreSQL 데이터는 `postgres_data` named volume에 보존한다. DB 이름, 사용자, 비밀번호, 호스트 포트는 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT` 환경변수로 바꿀 수 있다. 애플리케이션은 프로필 설정의 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`를 사용한다. `DB_USERNAME`/`DB_PASSWORD`는 Compose의 `POSTGRES_USER`/`POSTGRES_PASSWORD`와 같은 값이어야 한다. PostgreSQL은 데이터 디렉터리가 처음 초기화될 때만 `POSTGRES_*`를 적용하므로, 기존 `postgres_data` 볼륨에서 이 값을 바꿔도 DB 사용자나 비밀번호는 바뀌지 않는다. 기존 DB 자격 증명을 변경하거나 볼륨을 새로 초기화해야 한다.
 
 로컬 DB 데이터를 모두 버리고 다시 만들 때만 `docker compose down -v`를 실행한다. 이 명령은 `postgres_data`의 데이터를 삭제한다. 운영 데이터에 이 개발용 Compose 명령을 사용하지 않는다.
 
-Naver 로그인 개발에는 Naver Developers에서 발급한 Client ID와 Client Secret, 등록된 callback URL이 필요하다. RS256 서명 키와 Refresh Token pepper는 로컬에서 아래처럼 생성한 뒤 환경변수로 지정한다. 생성한 키 파일은 저장소에 커밋하지 않는다.
+Naver 로그인 개발에는 Naver Developers에서 발급한 Client ID와 Client Secret, 등록된 callback URL이 필요하다. 프런트엔드는 `/oauth/callback/naver` 또는 `/auth/naver/callback` 등 사용할 callback 경로를 선택하고, `NAVER_REDIRECT_URI`, Naver Developers에 등록한 callback URL, 프런트엔드 경로를 모두 동일하게 맞춘다. RS256 서명 키와 Refresh Token pepper는 로컬에서 아래처럼 생성한 뒤 환경변수로 지정한다. `JWT_PRIVATE_KEY_BASE64`는 개인 PKCS#8 DER, `JWT_PUBLIC_KEY_BASE64`는 공개 X.509 DER를 각각 한 줄 Base64로 인코딩한 값이다. Base64는 암호화가 아니며 키를 저장소·로그·채팅에 넣지 않는다. 아래 명령은 PEM 파일 없이 키를 생성해 셸 환경변수에만 담는다. `.env`를 사용한다면 먼저 로드한 뒤 실행하며, 이후 실행에서도 유지하려면 로컬 `.env`의 해당 항목 또는 IDE의 비밀 환경변수에 보관한다.
 
 ```bash
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out jwt-private.pem
-openssl pkey -in jwt-private.pem -pubout -out jwt-public.pem
-export JWT_PRIVATE_KEY_LOCATION="file:$(pwd)/jwt-private.pem"
-export JWT_PUBLIC_KEY_LOCATION="file:$(pwd)/jwt-public.pem"
+export JWT_PRIVATE_KEY_BASE64="$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 | openssl pkcs8 -topk8 -nocrypt -outform DER | openssl base64 -A)"
+export JWT_PUBLIC_KEY_BASE64="$(printf '%s' "$JWT_PRIVATE_KEY_BASE64" | openssl base64 -d -A | openssl pkey -inform DER -pubout -outform DER | openssl base64 -A)"
 export REFRESH_TOKEN_PEPPER_BASE64="$(openssl rand -base64 32)"
 export NAVER_CLIENT_ID="발급받은 Client ID"
 export NAVER_CLIENT_SECRET="발급받은 Client Secret"
@@ -76,11 +74,36 @@ Flyway가 SQL 마이그레이션을 관리한다. 새 스키마 변경은 `src/m
 - 현재 `build.gradle`은 Spring Boot 3.5.x와 Java 21을 사용한다. 실제 플러그인 버전은 `build.gradle`을 기준으로 한다.
 - `gradlew`와 `gradlew.bat`이 포함되어 있다.
 - Naver OAuth Client ID·Secret, callback URL, JWT 키와 Refresh Token pepper는 환경변수로 제공한다. 비밀 키는 저장소에 넣지 않는다.
-- `JWT_PRIVATE_KEY_LOCATION`과 `JWT_PUBLIC_KEY_LOCATION`은 RS256 PEM 파일 경로를 가리킨다. `REFRESH_TOKEN_PEPPER_BASE64`에는 32바이트 이상 난수의 Base64 값을 설정한다. Naver 로그인에는 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `NAVER_REDIRECT_URI`를 설정한다.
+- `JWT_PRIVATE_KEY_BASE64`와 `JWT_PUBLIC_KEY_BASE64`는 한 줄 Base64 DER 키를 받는다. PEM 경로 입력은 지원하지 않는다. 개인 키로 서명하고 공개 키로 검증하는 RS256을 사용하며 신규 키는 RSA 3072비트로 생성한다. `REFRESH_TOKEN_PEPPER_BASE64`에는 32바이트 이상 난수의 Base64 값을 설정한다. Naver 로그인에는 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `NAVER_REDIRECT_URI`를 설정한다.
 - `REFRESH_TOKEN_PEPPER_VERSION`은 현재 pepper 버전이며 기본값은 `v1`이다. 정상 교체 시 보호된 설정으로 `pebble.auth.refresh-token.previous-peppers` map을 주입하고 SECURITY.md 8.1절의 노드 배포·소비 기록 보존 기간을 따른다.
 - `CORS_ALLOWED_ORIGINS`에는 쿠키 인증을 허용할 프런트엔드 Origin을 쉼표로 구분해 설정한다. 로컬 기본값은 `http://localhost:3000`이며 와일드카드 Origin을 사용하지 않는다. 배포 환경에서는 `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_KEY_ID`도 해당 환경에 맞게 설정한다.
-- PostgreSQL·Redis의 로컬 개발 설정은 `compose.yaml`과 `src/main/resources/application.yaml`을 기준으로 한다. 운영 접속 정보와 실제 비밀번호, OAuth 비밀값, 서명 키는 저장소에 넣지 않는다.
+- PostgreSQL·Redis 컨테이너는 `compose.yaml`, 애플리케이션의 접속 설정은 `application.yaml`에서 선택하는 `local`/`prod` 프로필을 기준으로 한다. 운영 접속 정보와 실제 비밀번호, OAuth 비밀값, 서명 키는 저장소에 넣지 않는다.
 - `.env`, `application-local.yml`, `application-secret.yml` 등 `.gitignore`에 지정된 비밀 설정 파일은 커밋하지 않는다.
+
+### local·prod 프로필과 환경변수 파일
+
+루트 `.env.example`을 복사한 `.env`에 로컬 값을 입력한다. `.env`와 실제 `application-local.yaml`은 Git에서 제외한다. 공유하는 로컬 예시는 `src/main/resources/application-local.yaml.example`이며, 운영 `application-prod.yaml`은 환경변수만 참조하는 설정 파일로 Git에 보관한다. `.env.example`과 `.env.prod.example`에는 비밀이 없는 항목 목록만 유지한다. YAML에 비밀을 직접 입력하기보다 환경변수로 주입한다.
+
+Spring Boot와 `./gradlew bootRun`은 `.env`를 자동으로 읽지 않는다. 저장소 루트에서 신뢰할 수 있는 본인의 `.env`를 셸 환경변수로 내보낸 뒤 실행한다. 이 파일은 셸 문법이므로 값은 작은따옴표로 감싸고, 명령이나 명령 치환을 작성하지 않는다.
+
+```bash
+# 새 checkout에서 최초 한 번 복사한 뒤 값을 설정한다.
+cp -n .env.example .env
+cp -n src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
+
+set -a
+source .env
+set +a
+./gradlew bootRun
+```
+
+IntelliJ Run Configuration에서는 `SPRING_PROFILES_ACTIVE=local`을 지정하고, Environment variables에서 `.env` 파일을 실행 설정에 명시적으로 연결하거나 필요한 환경변수를 직접 입력한다. `.env`는 Docker Compose에서는 자동 참조하지만 Spring Boot 애플리케이션 프로세스에는 자동 전달되지 않는다. Compose의 DB 사용자·비밀번호를 변경할 때는 앱의 `DB_USERNAME`·`DB_PASSWORD`도 동일한 값으로 맞춘다. 이미 초기화된 `postgres_data` 볼륨에는 새 `POSTGRES_USER`·`POSTGRES_PASSWORD`가 적용되지 않으므로 기존 DB 자격 증명을 함께 변경하거나 개발 데이터를 버리고 볼륨을 다시 만들어야 한다.
+
+`application.yaml`은 `${SPRING_PROFILES_ACTIVE:local}`로 프로필만 선택한다. `local`과 `prod`의 애플리케이션·DB·Redis·Naver·JWT·pepper·CORS 설정은 각각의 프로필 YAML에 둔다. 새 checkout에서는 로컬 예시를 복사해 실제 `application-local.yaml`을 준비한다. 운영은 개인 local 파일에 의존하지 않는다. 테스트는 test 프로필과 `src/test/resources/application-test.yaml`을 사용하여 개인 local 파일 없이 실행한다. 미지정 시 `local`을 사용하고 운영 배포는 `prod`를 명시한다. `local`은 개발용 DB·Redis 기본값을 사용한다. JWT Base64 키, 32바이트 이상 난수 pepper, Naver Client ID·Secret을 채워야 로그인 검증이 가능하다. 키·pepper 생성 방법은 위의 로컬 개발 환경 절을 따른다.
+
+운영에서는 `SPRING_PROFILES_ACTIVE=prod`를 지정하고 `.env.prod.example`의 항목을 배포 플랫폼의 Secret/환경변수에 주입한다. `application-prod.yaml`은 비밀을 포함하지 않아 Git에 보관할 수 있다. 운영 DB·Redis host, CORS, Naver, JWT, pepper에는 로컬 기본값을 두지 않는다. Redis는 TLS를 기본 활성화하며 서비스의 실제 TLS·ACL 설정을 확인한다. PostgreSQL TLS 옵션은 운영 `DB_URL`에 지정한다. API HTTPS는 배포 환경에서 구성하고 기존 Secure Cookie 정책을 유지한다. 정상 pepper 교체용 이전 버전 map은 SECURITY.md 8.1절대로 별도 보호된 설정에 주입한다.
+
+`bootJar`는 실제 `application-local.yaml`·`application-local.yml`과 로컬 예시를 배포 JAR에서 제외한다. IDE와 `bootRun`에서는 개인 로컬 설정을 사용할 수 있지만 배포 JAR은 운영 프로필과 환경변수를 사용한다.
 
 ## 3. Git 작업 절차
 
@@ -166,7 +189,7 @@ Pull Request는 관련 Issue에 연결하고 다음 내용을 적는다.
 
 - **CI (Continuous Integration)**는 브랜치 push나 Pull Request 때 빌드와 테스트를 자동 실행해 변경사항을 빠르게 확인하는 절차다. 전체 기능이 완성될 때까지 기다릴 필요는 없다. 로컬에서 기본 빌드·테스트가 재현 가능해지면 최소 CI를 추가하는 편이 좋다.
 - **CD (Continuous Delivery/Deployment)**는 검증된 변경사항을 배포 가능한 산출물로 만들거나 실제 환경에 배포하는 절차다. 자동 배포는 배포 대상, 환경별 설정, 비밀값 보관, 되돌리기 방법이 준비된 뒤 추가한다. 따라서 초기에는 CI만 두고 CD는 배포 환경이 정해질 때 시작해도 된다.
-- `.github/workflows/ci.yml`은 Pull Request의 대상이 `dev`이거나 `dev`에 push할 때 PostgreSQL 17.11과 Redis 7.4 서비스, JDK 21을 준비하고 Gradle Wrapper로 `./gradlew clean test`를 실행한다. CD와 배포는 자동화하지 않는다.
+- `.github/workflows/ci.yml`은 Pull Request의 대상이 `dev`이거나 `dev`에 push할 때 PostgreSQL 17.11과 Redis 7.4 서비스, JDK 21을 준비하고 Gradle Wrapper로 `./gradlew clean test bootJar`를 실행한다. CD와 배포는 자동화하지 않는다.
 - 애플리케이션 컨텍스트 테스트는 DataSource와 JPA를 사용해 PostgreSQL 연결 및 Flyway 초기화를 확인한다.
 - 인증 테스트는 실행 중에 임시 RSA 키와 Refresh Token pepper를 생성한다. 실제 Naver 자격 증명이나 고정된 테스트 비밀 키를 저장소에 넣지 않는다.
 
