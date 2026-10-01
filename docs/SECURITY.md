@@ -72,7 +72,9 @@
 
 회원 최초 설정 `POST /api/v1/members/me/profile`과 표시 이름 변경 `PATCH`는 정확한 USER Bearer 경로로만 허용한다. member Application이 DB ACTIVE 상태·본인 계정·최초 완료 여부·필드별 쿨타임을 확인하며 회원 행 배타 잠금으로 동시 설정/변경을 직렬화한다. 공개 handle은 Naver 식별자나 내부 TSID와 구분하고 최초 확정 후 변경하지 않는다. 아직 설정하지 않은 회원의 콘텐츠 작성 제한은 해당 콘텐츠 Application이 member의 완료 상태 검증을 호출해야 한다.
 
-프로필 쓰기는 Cookie/HTTP 세션/Basic 인증을 제공하지 않는다. Spring Resource Server의 Bearer 요청 CSRF 처리와 JWT 검증을 사용하며 전역 CSRF disable 또는 Cookie Origin 검사 제외를 추가하지 않는다. Refresh Cookie 단독 쓰기는 거부하고 refresh/logout은 Bearer 헤더가 있어도 기존 필수 Origin 검사를 유지한다. CORS는 프로필 경로의 POST/PATCH에만 확장한다.
+Post의 POST·PATCH·DELETE는 인증된 USER Bearer 요청만 허용한다. Post Application이 ACTIVE 회원, 프로필 설정 완료, 리소스 소유권을 확인한다. 수정·삭제는 대상 Post 행 잠금 아래에서 수행하며 본인 콘텐츠 밖의 ID는 공개되지 않은 리소스와 동일하게 처리한다. Post 작성·수정 권한을 관리자 권한으로 우회하지 않으며 관리자 Post 조회·차단 경로는 아직 구현하지 않았다. slug와 postNumber는 공개 주소 식별자일 뿐 권한 근거가 아니다.
+
+프로필과 Post 쓰기는 Cookie/HTTP 세션/Basic 인증을 제공하지 않는다. Spring Resource Server의 Bearer 요청 CSRF 처리와 JWT 검증을 사용하며 전역 CSRF disable 또는 Cookie Origin 검사 제외를 추가하지 않는다. Refresh Cookie 단독 쓰기는 거부하고 refresh/logout은 Bearer 헤더가 있어도 기존 필수 Origin 검사를 유지한다. CORS는 프로필 POST/PATCH, Post 목록 POST/GET 및 상세 GET/PATCH/DELETE, 공개 블로그와 회원 Post GET에만 허용 Origin을 등록한다.
 
 ## 4. 주체와 권한
 

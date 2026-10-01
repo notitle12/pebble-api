@@ -203,7 +203,7 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
     @Test
     void continuesToDenyUnimplementedRoutesAndPreserveCsrf() throws Exception {
         String bearer = bearer(member(MemberStatus.ACTIVE));
-        mockMvc.perform(get("/api/v1/members/me/posts").header(HttpHeaders.AUTHORIZATION, bearer))
+        mockMvc.perform(get("/api/v1/members/me/projects").header(HttpHeaders.AUTHORIZATION, bearer))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("INSUFFICIENT_ROLE"));
         mockMvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, bearer))
