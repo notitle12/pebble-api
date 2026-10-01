@@ -27,7 +27,7 @@ public final class PostWriteRequest {
         if (!create && json.has("slug")) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
         Set<String> supplied = new HashSet<>();
         json.fieldNames().forEachRemaining(supplied::add);
-        for (String unsupported : List.of("boardId", "projectId")) {
+        for (String unsupported : List.of("projectId")) {
             if (json.hasNonNull(unsupported)) {
                 throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
             }
@@ -38,6 +38,7 @@ public final class PostWriteRequest {
         }
         String summary = json.has("summary") ? text(json.get("summary"), "summary", 500, true, false) : null;
         Long categoryId = json.hasNonNull("categoryId") ? id(json.get("categoryId"), "categoryId") : null;
+        Long boardId = json.hasNonNull("boardId") ? id(json.get("boardId"), "boardId") : null;
         List<Long> tags = null;
         if (json.has("tagIds")) {
             JsonNode node = json.get("tagIds");
@@ -84,7 +85,7 @@ public final class PostWriteRequest {
             if (!node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() < 0) fail("displayOrder", "0 이상의 정수 위치를 입력해 주세요.");
             order = node.intValue();
         }
-        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order);
+        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order, boardId);
     }
 
     public static long id(String value, String field) {
