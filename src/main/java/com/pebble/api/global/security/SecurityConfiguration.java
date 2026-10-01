@@ -11,6 +11,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -35,13 +37,24 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/members/me").hasRole("USER")
                         .anyRequest().denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .authenticationEntryPoint(errorHandler)
                         .accessDeniedHandler(errorHandler)
-                        .jwt(Customizer.withDefaults()))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(userJwtAuthenticationConverter())))
                 .build();
+    }
+
+    private JwtAuthenticationConverter userJwtAuthenticationConverter() {
+        // 검증된 서버 발급 role claim만 HTTP 역할 권한으로 변환한다.
+        JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
+        authorities.setAuthoritiesClaimName("role");
+        authorities.setAuthorityPrefix("ROLE_");
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        return converter;
     }
 
     @Bean
@@ -66,6 +79,9 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/auth/naver/**", cors);
         source.registerCorsConfiguration("/api/v1/auth/token/refresh", cors);
         source.registerCorsConfiguration("/api/v1/auth/logout", cors);
+        CorsConfiguration memberCors = new CorsConfiguration(cors);
+        memberCors.setAllowedMethods(List.of("GET"));
+        source.registerCorsConfiguration("/api/v1/members/me", memberCors);
         return source;
     }
 }
