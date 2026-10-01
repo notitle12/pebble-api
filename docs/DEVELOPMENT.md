@@ -25,7 +25,7 @@
 
 - JDK 21
 - 저장소에 포함된 Gradle Wrapper 사용
-- 로컬 PostgreSQL을 실행할 Docker Desktop
+- 로컬 PostgreSQL과 Redis를 실행할 Docker Desktop
 - GitHub 저장소 접근 권한
 
 전역 Gradle 설치 대신 저장소 루트에서 `./gradlew`를 사용한다. Windows에서는 `gradlew.bat`을 사용한다.
@@ -38,14 +38,14 @@
 ./gradlew build
 ```
 
-`bootRun`과 테스트는 해당 작업에 필요한 로컬 서비스와 설정이 준비되어 있어야 한다. 현재 테스트는 PostgreSQL에 연결하므로 테스트 전에 로컬 PostgreSQL을 실행한다. 성공 여부가 확인되지 않은 환경 설정이나 명령 결과를 Pull Request에서 성공했다고 표시하지 않는다.
+`bootRun`과 테스트는 해당 작업에 필요한 로컬 서비스와 설정이 준비되어 있어야 한다. 현재 테스트는 PostgreSQL과 Redis에 연결하므로 테스트 전에 두 서비스를 실행한다. 테스트는 임시 서명 키와 pepper를 자동 생성하며, `bootRun`은 아래의 인증 환경변수를 먼저 설정해야 한다. 성공 여부가 확인되지 않은 환경 설정이나 명령 결과를 Pull Request에서 성공했다고 표시하지 않는다.
 
-### 로컬 PostgreSQL
+### 로컬 PostgreSQL과 Redis
 
-저장소 루트의 `compose.yaml`은 개발용 PostgreSQL만 실행한다. 애플리케이션은 IDE에서 실행하거나 Gradle로 실행하며, 운영 환경의 DB 서비스는 이 Compose 구성과 분리한다.
+저장소 루트의 `compose.yaml`은 개발용 PostgreSQL과 Redis를 실행한다. 애플리케이션은 IDE에서 실행하거나 Gradle로 실행하며, 운영 환경의 DB·Redis 서비스는 이 Compose 구성과 분리한다.
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres redis
 docker compose ps
 ./gradlew clean test
 ./gradlew bootRun
@@ -56,14 +56,29 @@ docker compose down
 
 로컬 DB 데이터를 모두 버리고 다시 만들 때만 `docker compose down -v`를 실행한다. 이 명령은 `postgres_data`의 데이터를 삭제한다. 운영 데이터에 이 개발용 Compose 명령을 사용하지 않는다.
 
-Flyway가 이후 SQL 마이그레이션을 관리한다. 새 스키마 변경은 `src/main/resources/db/migration` 아래에 순서가 있는 버전 파일로 추가하며, Hibernate가 스키마를 자동 생성하지 않도록 `ddl-auto`를 `validate`로 둔다. 현재는 도메인 테이블을 만들지 않는다.
+Naver 로그인 개발에는 Naver Developers에서 발급한 Client ID와 Client Secret, 등록된 callback URL이 필요하다. RS256 서명 키와 Refresh Token pepper는 로컬에서 아래처럼 생성한 뒤 환경변수로 지정한다. 생성한 키 파일은 저장소에 커밋하지 않는다.
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out jwt-private.pem
+openssl pkey -in jwt-private.pem -pubout -out jwt-public.pem
+export JWT_PRIVATE_KEY_LOCATION="file:$(pwd)/jwt-private.pem"
+export JWT_PUBLIC_KEY_LOCATION="file:$(pwd)/jwt-public.pem"
+export REFRESH_TOKEN_PEPPER_BASE64="$(openssl rand -base64 32)"
+export NAVER_CLIENT_ID="발급받은 Client ID"
+export NAVER_CLIENT_SECRET="발급받은 Client Secret"
+export NAVER_REDIRECT_URI="등록한 callback URL"
+```
+
+Flyway가 SQL 마이그레이션을 관리한다. 새 스키마 변경은 `src/main/resources/db/migration` 아래에 순서가 있는 버전 파일로 추가하며, Hibernate가 스키마를 자동 생성하지 않도록 `ddl-auto`를 `validate`로 둔다. 현재 회원·Naver OAuth 식별자 테이블을 마이그레이션으로 만든다.
 
 ### 현재 저장소 상태와 설정 주의사항
 
 - 현재 `build.gradle`은 Spring Boot 3.5.x와 Java 21을 사용한다. 실제 플러그인 버전은 `build.gradle`을 기준으로 한다.
 - `gradlew`와 `gradlew.bat`이 포함되어 있다.
-- Redis 접속 설정은 아직 정의되어 있지 않다.
-- PostgreSQL의 로컬 개발 설정은 `compose.yaml`과 `src/main/resources/application.yaml`을 기준으로 한다. 운영 접속 정보와 실제 비밀번호, OAuth 비밀값, 서명 키는 저장소에 넣지 않는다.
+- Naver OAuth Client ID·Secret, callback URL, JWT 키와 Refresh Token pepper는 환경변수로 제공한다. 비밀 키는 저장소에 넣지 않는다.
+- `JWT_PRIVATE_KEY_LOCATION`과 `JWT_PUBLIC_KEY_LOCATION`은 RS256 PEM 파일 경로를 가리킨다. `REFRESH_TOKEN_PEPPER_BASE64`에는 32바이트 이상 난수의 Base64 값을 설정한다. Naver 로그인에는 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `NAVER_REDIRECT_URI`를 설정한다.
+- `CORS_ALLOWED_ORIGINS`에는 쿠키 인증을 허용할 프런트엔드 Origin을 쉼표로 구분해 설정한다. 로컬 기본값은 `http://localhost:3000`이며 와일드카드 Origin을 사용하지 않는다. 배포 환경에서는 `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_KEY_ID`도 해당 환경에 맞게 설정한다.
+- PostgreSQL·Redis의 로컬 개발 설정은 `compose.yaml`과 `src/main/resources/application.yaml`을 기준으로 한다. 운영 접속 정보와 실제 비밀번호, OAuth 비밀값, 서명 키는 저장소에 넣지 않는다.
 - `.env`, `application-local.yml`, `application-secret.yml` 등 `.gitignore`에 지정된 비밀 설정 파일은 커밋하지 않는다.
 
 ## 3. Git 작업 절차
@@ -128,7 +143,7 @@ chore: update Gradle configuration
 
 - 동작 변경에는 해당 동작을 검증하는 테스트를 추가하거나 수정한다.
 - 기본 테스트 명령은 `./gradlew test`다. 전체 빌드 확인에는 `./gradlew build`를 사용한다.
-- DB나 Redis가 필요한 테스트는 실행에 필요한 서비스와 설정을 함께 명시한다. 현재 저장소에는 로컬 서비스 실행 구성이 없으므로, 그 구성을 추가하는 작업에서 실행 방법을 문서화한다.
+- DB나 Redis가 필요한 테스트는 실행에 필요한 서비스를 먼저 실행한다. 현재 로컬 PostgreSQL·Redis 구성은 `docker compose up -d postgres redis`로 시작한다.
 - 테스트를 실행하지 못했거나 환경 때문에 일부만 실행했다면 Pull Request에 실행 명령과 제한 사항을 사실대로 적는다.
 - 문서 전용 변경은 내용과 문서 간 용어·수치가 일치하는지 확인한다.
 
@@ -150,8 +165,9 @@ Pull Request는 관련 Issue에 연결하고 다음 내용을 적는다.
 
 - **CI (Continuous Integration)**는 브랜치 push나 Pull Request 때 빌드와 테스트를 자동 실행해 변경사항을 빠르게 확인하는 절차다. 전체 기능이 완성될 때까지 기다릴 필요는 없다. 로컬에서 기본 빌드·테스트가 재현 가능해지면 최소 CI를 추가하는 편이 좋다.
 - **CD (Continuous Delivery/Deployment)**는 검증된 변경사항을 배포 가능한 산출물로 만들거나 실제 환경에 배포하는 절차다. 자동 배포는 배포 대상, 환경별 설정, 비밀값 보관, 되돌리기 방법이 준비된 뒤 추가한다. 따라서 초기에는 CI만 두고 CD는 배포 환경이 정해질 때 시작해도 된다.
-- `.github/workflows/ci.yml`은 Pull Request의 대상이 `dev`이거나 `dev`에 push할 때 PostgreSQL 17.11 서비스와 JDK 21을 준비하고 Gradle Wrapper로 `./gradlew clean test`를 실행한다. CD와 배포는 자동화하지 않는다.
+- `.github/workflows/ci.yml`은 Pull Request의 대상이 `dev`이거나 `dev`에 push할 때 PostgreSQL 17.11과 Redis 7.4 서비스, JDK 21을 준비하고 Gradle Wrapper로 `./gradlew clean test`를 실행한다. CD와 배포는 자동화하지 않는다.
 - 애플리케이션 컨텍스트 테스트는 DataSource와 JPA를 사용해 PostgreSQL 연결 및 Flyway 초기화를 확인한다.
+- 인증 테스트는 실행 중에 임시 RSA 키와 Refresh Token pepper를 생성한다. 실제 Naver 자격 증명이나 고정된 테스트 비밀 키를 저장소에 넣지 않는다.
 
 ### 포매터와 정적 분석
 
