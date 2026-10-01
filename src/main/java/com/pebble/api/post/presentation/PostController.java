@@ -116,6 +116,13 @@ public class PostController {
                 PostWriteRequest.id(boardId, "boardId"), pageable(query, "displayOrder"))));
     }
 
+    @GetMapping("/api/v1/projects/{projectId:[0-9]+}/posts")
+    public ApiResponse<PostPage> project(@PathVariable String projectId, @RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size", "sort"));
+        return ApiResponse.of(PostPage.from(posts.listProject(PostWriteRequest.id(projectId, "projectId"),
+                pageable(query, "publishedAt"))));
+    }
+
     private long memberId(Jwt jwt) {
         return Long.parseLong(jwt.getSubject().substring("member:".length()));
     }
