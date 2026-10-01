@@ -6,6 +6,7 @@ import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
 import com.pebble.api.project.application.ProjectService;
 import com.pebble.api.project.domain.ProjectLifecycleStatus;
+import com.pebble.api.project.domain.ProjectVisibility;
 import com.pebble.api.project.presentation.dto.ProjectResponse;
 import com.pebble.api.project.presentation.dto.ProjectResponse.ProjectPage;
 import com.pebble.api.project.presentation.dto.ProjectWriteRequest;
@@ -31,6 +32,35 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectController {
     private final ProjectService projects;
 
+    @GetMapping("/api/v1/projects/search")
+    public ApiResponse<ProjectPage> search(@RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("q", "page", "size", "sort", "tagId", "lifecycleStatus"));
+        return ApiResponse.of(ProjectPage.from(projects.search(ProjectWriteRequest.searchTerm(query.getFirst("q")),
+                optionalId(query, "tagId"), lifecycle(query), pageable(query))));
+    }
+
+    @GetMapping("/api/v1/members/{memberId:[0-9]+}/projects")
+    public ApiResponse<ProjectPage> member(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
+        return ApiResponse.of(ProjectPage.from(projects.listMember(ProjectWriteRequest.id(memberId, "memberId"),
+                optionalId(query, "tagId"), lifecycle(query), pageable(query))));
+    }
+
+    @GetMapping("/api/v1/members/me/projects")
+    public ApiResponse<ProjectPage> mine(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size", "sort", "visibilityStatus"));
+        ProjectVisibility visibility = null;
+        if (query.containsKey("visibilityStatus")) {
+            try {
+                visibility = ProjectVisibility.valueOf(query.getFirst("visibilityStatus"));
+                if (visibility == ProjectVisibility.DELETED) throw new IllegalArgumentException();
+            } catch (RuntimeException exception) {
+                throw invalid("visibilityStatus");
+            }
+        }
+        return ApiResponse.of(ProjectPage.from(projects.listMine(memberId(jwt), visibility, pageable(query))));
+    }
+
     @PostMapping(value = "/api/v1/projects", consumes = "application/json")
     public ResponseEntity<ApiResponse<ProjectResponse>> create(@AuthenticationPrincipal Jwt jwt,
                                                                 @RequestBody JsonNode request) {
@@ -42,7 +72,14 @@ public class ProjectController {
     @GetMapping("/api/v1/projects")
     public ApiResponse<ProjectPage> list(@RequestParam MultiValueMap<String, String> query) {
         checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
-        Long tagId = query.containsKey("tagId") ? ProjectWriteRequest.id(query.getFirst("tagId"), "tagId") : null;
+        return ApiResponse.of(ProjectPage.from(projects.listPublic(optionalId(query, "tagId"), lifecycle(query), pageable(query))));
+    }
+
+    private Long optionalId(MultiValueMap<String, String> query, String field) {
+        return query.containsKey(field) ? ProjectWriteRequest.id(query.getFirst(field), field) : null;
+    }
+
+    private ProjectLifecycleStatus lifecycle(MultiValueMap<String, String> query) {
         ProjectLifecycleStatus lifecycle = null;
         if (query.containsKey("lifecycleStatus")) {
             try {
@@ -51,7 +88,7 @@ public class ProjectController {
                 throw invalid("lifecycleStatus");
             }
         }
-        return ApiResponse.of(ProjectPage.from(projects.listPublic(tagId, lifecycle, pageable(query))));
+        return lifecycle;
     }
 
     @GetMapping("/api/v1/projects/{projectId:[0-9]+}")
