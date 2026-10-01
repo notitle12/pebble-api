@@ -3,6 +3,7 @@ package com.pebble.api.auth.infrastructure.naver;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.pebble.api.auth.domain.AuthError;
 import com.pebble.api.auth.domain.AuthException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -13,15 +14,11 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
+@RequiredArgsConstructor
 public class RestClientNaverOAuthGateway implements NaverOAuthGateway {
 
     private final RestClient restClient;
     private final NaverOAuthProperties properties;
-
-    public RestClientNaverOAuthGateway(RestClient restClient, NaverOAuthProperties properties) {
-        this.restClient = restClient;
-        this.properties = properties;
-    }
 
     @Override
     public String authorizationUrl(String state) {

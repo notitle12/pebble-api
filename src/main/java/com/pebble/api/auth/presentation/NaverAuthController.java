@@ -2,13 +2,17 @@ package com.pebble.api.auth.presentation;
 
 import com.pebble.api.auth.application.NaverLoginService.AuthorizationGrant;
 import com.pebble.api.auth.application.NaverLoginService.LoginGrant;
-import com.pebble.api.auth.application.NaverLoginService.LoginResponse;
+import com.pebble.api.auth.application.AccessTokenService;
 import com.pebble.api.auth.application.NaverLoginService;
+import com.pebble.api.auth.presentation.dto.NaverLoginResponse;
+import com.pebble.api.auth.presentation.dto.NaverLoginResponse.MemberResponse;
 import com.pebble.api.global.presentation.response.ApiResponse;
+import com.pebble.api.member.domain.Member;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Duration;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth/naver")
+@RequiredArgsConstructor
 public class NaverAuthController {
 
     static final String STATE_COOKIE = "naver_oauth_state";
@@ -27,10 +32,6 @@ public class NaverAuthController {
     private static final String COOKIE_PATH = "/api/v1/auth";
 
     private final NaverLoginService naverLoginService;
-
-    public NaverAuthController(NaverLoginService naverLoginService) {
-        this.naverLoginService = naverLoginService;
-    }
 
     @PostMapping("/authorization")
     public ResponseEntity<ApiResponse<AuthorizationResponse>> beginAuthorization() {
@@ -48,7 +49,7 @@ public class NaverAuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<LoginResponse>> login(
+    public ResponseEntity<ApiResponse<NaverLoginResponse>> login(
             @Valid @RequestBody NaverLoginRequest request,
             @CookieValue(name = STATE_COOKIE, required = false) String cookieState) {
         LoginGrant grant = naverLoginService.login(request.authorizationCode(), request.state(), cookieState);
@@ -68,7 +69,20 @@ public class NaverAuthController {
                 .build();
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, expiredStateCookie.toString(), refreshCookie.toString())
-                .body(ApiResponse.of(grant.response()));
+                .body(ApiResponse.of(new NaverLoginResponse(
+                        grant.accessToken(),
+                        "Bearer",
+                        AccessTokenService.EXPIRES_IN_SECONDS,
+                        toMemberResponse(grant.member()))));
+    }
+
+    private MemberResponse toMemberResponse(Member member) {
+        return new MemberResponse(
+                Long.toString(member.getId()),
+                member.getNickname(),
+                member.getProfileImageUrl(),
+                member.getStatus().name(),
+                "USER");
     }
 
     public record AuthorizationResponse(String authorizationUrl) {

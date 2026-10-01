@@ -718,6 +718,8 @@ infrastructure/dto/
 
 여러 Feature에서 공통적으로 사용하는 기술 요소는 `global`에 둔다.
 
+오류 규격은 `global.exception.ErrorCode`, 공통 오류는 `GlobalErrorCode`, 유스케이스 예외는 `ApplicationException`을 사용한다. Feature 오류는 이 규격을 구현해 해당 Feature에서 소유한다. MVC 예외는 `global.presentation.ApiExceptionHandler`에서 공통 응답으로 변환하고, Security Filter 오류는 공통 오류 규격을 사용하는 별도 기술 핸들러에서 처리한다.
+
 예:
 
 ```text
