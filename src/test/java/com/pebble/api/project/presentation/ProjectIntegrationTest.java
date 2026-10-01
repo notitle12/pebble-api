@@ -338,7 +338,7 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(PATH).param("sort", "createdAt,asc")).andExpect(status().isOk());
         mvc.perform(get(PATH).param("tagId", "999999999")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(0));
-        mvc.perform(get(PATH + "/search")).andExpect(status().isUnauthorized());
+        mvc.perform(get(PATH + "/search")).andExpect(status().isBadRequest());
         mvc.perform(get(PATH + "/" + id)).andExpect(jsonPath("$.data.isBlocked").doesNotExist());
     }
 

@@ -74,7 +74,7 @@
 
 Post의 POST·PATCH·DELETE는 인증된 USER Bearer 요청만 허용한다. Post Application이 ACTIVE 회원, 프로필 설정 완료, 리소스 소유권을 확인한다. 수정·삭제는 대상 Post 행 잠금 아래에서 수행하며 본인 콘텐츠 밖의 ID는 공개되지 않은 리소스와 동일하게 처리한다. Post 작성·수정 권한을 관리자 권한으로 우회하지 않으며 관리자 Post 조회·차단 경로는 아직 구현하지 않았다. slug와 postNumber는 공개 주소 식별자일 뿐 권한 근거가 아니다.
 
-Project의 POST·PATCH·DELETE도 인증된 USER Bearer 요청만 허용하며 Project Application이 ACTIVE·프로필 완료·소유권을 검증한다. Member 행을 먼저 잠그고 수정·삭제 시 Project 행을 잠가 하위 배열 교체와 상태 전이를 직렬화한다. 공개 GET은 PUBLIC·미차단·미삭제이며 소유자가 WITHDRAWAL_PENDING이 아닌 콘텐츠만 반환한다. 작성자 상세의 HIDDEN·차단 조회에는 ACTIVE 검증을 적용한다. Project 검색·미디어·관리자 운영 경로는 아직 허용하지 않으며 CSRF 예외를 추가하지 않는다. CORS는 허용 Origin에 Project 목록 GET/POST와 숫자 ID 상세 GET/PATCH/DELETE만 등록한다.
+Project의 POST·PATCH·DELETE도 인증된 USER Bearer 요청만 허용하며 Project Application이 ACTIVE·프로필 완료·소유권을 검증한다. Member 행을 먼저 잠그고 수정·삭제 시 Project 행을 잠가 하위 배열 교체와 상태 전이를 직렬화한다. Post 연결 변경도 같은 Member 잠금을 사용하며 Project Application 조회 계약으로 본인 소유·미삭제를 검증한다. 삭제 시 Post Application이 같은 트랜잭션에서 모든 연결을 해제한다. 공개 GET·검색·회원별 목록은 PUBLIC·미차단·미삭제이며 소유자가 WITHDRAWAL_PENDING이 아닌 콘텐츠만 반환한다. 작성자 상세·본인 목록의 HIDDEN·차단 조회에는 ACTIVE 검증을 적용하고 본인 목록은 USER만 허용한다. 숫자 ID Project의 관련 Post 목록은 부모의 공개 조건과 Post의 공개 조건을 모두 검증한다. 미디어·관리자 운영 경로는 아직 허용하지 않으며 CSRF 예외를 추가하지 않는다. CORS는 허용 Origin에 Project 목록 GET/POST, 숫자 ID 상세 GET/PATCH/DELETE, 검색·본인/회원별 목록·관련 Post 목록 GET을 등록한다.
 
 프로필과 Post 쓰기는 Cookie/HTTP 세션/Basic 인증을 제공하지 않는다. Spring Resource Server의 Bearer 요청 CSRF 처리와 JWT 검증을 사용하며 전역 CSRF disable 또는 Cookie Origin 검사 제외를 추가하지 않는다. Refresh Cookie 단독 쓰기는 거부하고 refresh/logout은 Bearer 헤더가 있어도 기존 필수 Origin 검사를 유지한다. CORS는 프로필 POST/PATCH, Post 목록 POST/GET 및 상세 GET/PATCH/DELETE, 공개 블로그와 회원 Post GET에만 허용 Origin을 등록한다.
 
