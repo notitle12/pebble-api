@@ -170,7 +170,7 @@ Post 기술 태그와 Project 기술 스택에서 공유하는 관리자 관리 
 
 회원 소유의 개인 게시판 트리를 저장한다. 서비스 공통 Category와 별도 테이블로 관리한다.
 
-Board 테이블과 API는 후속 기능의 목표 스키마다. 현재 Flyway에는 Board 테이블이 없고, Post에도 `board_id`가 없다.
+Board 테이블과 Post의 `board_id`는 V7에서 생성한다. Board는 회원이 소유하는 최대 3단계 트리이며 Post 연결은 작성자 소유 Board로 제한한다.
 
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
 |---|---|---:|---|
@@ -185,9 +185,9 @@ Board 테이블과 API는 후속 기능의 목표 스키마다. 현재 Flyway에
 
 - UNIQUE (`id`, `owner_member_id`)를 두어 복합 FK로 소유자를 검증할 수 있게 한다.
 - 복합 FK (`parent_id`, `owner_member_id`) → `board(id`, `owner_member_id)`로 부모 게시판도 같은 회원 소유임을 보장한다. 루트 게시판은 `parent_id = NULL`이므로 이 FK 검증에서 제외된다.
-- 최대 깊이 3, 순환 참조 방지, 형제 간 이름 중복 방지는 애플리케이션에서 검증한다.
-- Board 삭제 시 하위 Board가 없어야 한다. 연결된 Post의 `board_id`는 NULL로 변경한 뒤 Board에 `deleted_at`을 설정한다.
-- Board 자체의 공개 상태는 MVP에서 두지 않는다. 공개 조회는 해당 소유자의 PUBLIC Post만 반환한다.
+- 최대 깊이 3, 순환 참조 방지, 같은 부모 아래 대소문자 구분 이름 중복 방지는 애플리케이션에서 검증한다. 이름은 공백이 아닌 최대 50 유니코드 코드 포인트다. 논리 삭제된 Board의 이름은 재사용할 수 있다. display_order는 0 이상이며 형제 정렬 키다. 같은 순서에서는 숫자 ID 오름차순으로 조회한다.
+- Board 삭제 시 하위 미삭제 Board가 없어야 한다. 연결된 모든 Post(논리 삭제된 Post 포함)의 `board_id`를 NULL로 변경하고 Board에 `deleted_at`을 설정한다. Post Feature의 애플리케이션 계약을 통해 한 트랜잭션으로 수행한다.
+- Board 자체의 공개 상태는 두지 않는다. 공개 트리는 작성자 회원이 조회 가능한 경우 반환하며 게시판별 Post 조회는 지정 Board에 직접 연결된 PUBLIC·비차단 Post만 반환한다. 하위 Board Post는 포함하지 않는다. 탈퇴 대기 회원은 공개 조회에서 404이며 정지 회원의 Board와 콘텐츠는 공개 정책에 따라 조회할 수 있다.
 
 ---
 
@@ -201,6 +201,7 @@ Board 테이블과 API는 후속 기능의 목표 스키마다. 현재 Flyway에
 |---|---|---:|---|
 | `id` | BIGINT | N | PK, TSID |
 | `author_member_id` | BIGINT | N | FK → `member.id` |
+| `board_id` | BIGINT | Y | 복합 FK의 일부 → 같은 작성자 소유 `board.id` |
 | `post_number` | BIGINT | N | 작성자별 공개 주소 번호, 1부터 증가; 작성자와 복합 UNIQUE, 0보다 큼 |
 | `category_id` | BIGINT | Y | FK → `category.id`; 최하위 분류만 허용 |
 | `title` | VARCHAR(200) | N | 제목 |
@@ -220,15 +221,14 @@ Board 테이블과 API는 후속 기능의 목표 스키마다. 현재 Flyway에
 - 생성은 작성자 Member 행을 잠근 뒤 해당 작성자의 기존 최대 post_number에 1을 더한다. 논리 삭제된 Post도 번호 할당 기준에 포함하므로 번호는 재사용하지 않는다. DB는 CHECK (`post_number > 0`)와 UNIQUE (`author_member_id`, `post_number`)를 적용한다.
 - `slug`는 null 또는 작성자별 고유 값이며 UNIQUE (`author_member_id`, `slug`)로 제한한다. 애플리케이션은 최대 200자의 소문자 영문·숫자·하이픈만 허용하고 숫자 전용 값과 `search`를 거부한다. 중복이면 `-2`, `-3` 접미사를 붙이며 논리 삭제 후에도 기존 slug를 예약한다.
 - `display_order`는 작성자의 DELETED가 아닌 Post 목록에서 0부터 시작한다. 생성 기본값은 0이며 이동 시 재정렬하고 논리 삭제 뒤 남은 항목을 압축한다. 복합 UNIQUE는 두지 않는다.
-- 생성은 Member 행을 잠가 slug 및 번호 할당을 직렬화한다. 수정·삭제는 프로필 상태를 확인한 뒤 Member 행과 대상 Post 행을 잠그고 소유권을 검증한다.
+- Post와 Board의 쓰기는 ACTIVE 상태 검증 뒤 작성자 Member 행을 비관적 쓰기 잠금해 같은 회원의 콘텐츠·Board 변경을 직렬화한다. Post 생성에서는 이 잠금으로 slug 및 번호 할당도 직렬화한다. 수정·삭제는 소유권을 검증하고 대상 Post 행을 잠근다. Post 쓰기는 프로필 설정을 완료해야 하며 Board 쓰기는 프로필 완료를 요구하지 않는다.
 - `category_id`가 설정되면 Category가 최하위인지 애플리케이션에서 검증한다.
 - 기존 Post가 사용 중인 비활성 Category 연결은 보존하고 공개 조회에서 계속 포함한다. 부모 Category 조회는 해당 하위 Category의 공개 Post를 포함한다.
 - CHECK 제약으로 is_blocked = TRUE이면 blocked_at과 blocked_by_admin_id가 모두 존재하고, FALSE이면 둘 다 NULL이 되도록 한다. 차단 해제 시 현재 차단 메타데이터를 비운다.
 - 공개 조회는 visibility_status = PUBLIC AND is_blocked = FALSE인 Post만 대상으로 한다. Post 검색은 미구현이다.
 - is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER 차단·차단 해제 기능은 미구현이다.
 - Post 본문과 코드 블록은 `post_block`에 순서대로 저장한다.
-- Board·Project 참조 FK와 썸네일 키는 현재 Post 테이블에 없다. API는 해당 필드 non-null 입력을 거부하고 응답에서 null을 반환한다. Board·Project·미디어 저장 연결은 후속 범위다.
-- 후속 Board 연결은 복합 FK (`board_id`, `author_member_id`) → `board(id, owner_member_id)`로 타인 게시판 배치를 차단한다. Project 연결도 복합 FK (`project_id`, `author_member_id`) → `project(id, owner_member_id)`로 본인 Project에만 연결하며 대상 테이블에 복합 UNIQUE를 둔다. 관리자 계정 구현 시 `blocked_by_admin_id`의 실제 FK도 추가한다.
+- Board 연결은 V7에서 복합 FK (`board_id`, `author_member_id`) → `board(id, owner_member_id)`를 적용해 타인 게시판 배치를 차단한다. 공개 게시판 목록은 board_id와 작성자 상태를 기준으로 직접 연결된 공개 Post를 조회한다. Project 참조 FK와 썸네일 키는 아직 없다. Project 연결도 복합 FK로 본인 Project만 참조할 계획이며 대상 테이블에 복합 UNIQUE를 둔다. 관리자 계정 구현 시 `blocked_by_admin_id`의 실제 FK도 추가한다.
 - Post 쓰기와 순서 변경은 ACTIVE이며 프로필 설정을 완료한 작성자만 수행한다.
 - 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. 단일 Post 물리 삭제 API는 없으며, 물리 파기 시 post_block·post_tag의 Post FK CASCADE에 따라 하위 행도 함께 정리된다. 계정 탈퇴에 따른 Post 물리 파기와 이 시점의 주소 예약 정리는 계정 데이터 보존·파기 절차에서 다룬다.
 
