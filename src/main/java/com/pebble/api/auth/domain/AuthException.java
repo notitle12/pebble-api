@@ -1,15 +1,15 @@
 package com.pebble.api.auth.domain;
 
-public class AuthException extends RuntimeException {
+import com.pebble.api.global.exception.ApplicationException;
 
-    private final AuthError error;
+public class AuthException extends ApplicationException {
 
     public AuthException(AuthError error) {
-        super(error.message());
-        this.error = error;
+        super(error);
     }
 
+    @Override
     public AuthError error() {
-        return error;
+        return (AuthError) super.error();
     }
 }
