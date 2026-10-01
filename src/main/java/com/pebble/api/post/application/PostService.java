@@ -1,6 +1,7 @@
 package com.pebble.api.post.application;
 
 import com.pebble.api.category.application.CategoryQueryService;
+import com.pebble.api.board.application.BoardQueryService;
 import com.pebble.api.category.domain.Category;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
@@ -44,10 +45,12 @@ public class PostService {
     private final MemberQueryService members;
     private final CategoryQueryService categories;
     private final TagQueryService tags;
+    private final BoardQueryService boards;
 
     @Transactional
     public PostView create(long memberId, PostChanges input) {
         Member author = members.findProfileCompletedForWrite(memberId);
+        if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);
         Category category = input.categoryId() == null ? null : categories.resolveForPost(input.categoryId(), null);
         List<Tag> selected = tags.resolveForPost(input.tagIds(), Set.of());
         List<Post> ordered = posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, PostVisibility.DELETED);
@@ -57,6 +60,7 @@ public class PostService {
         if (lastNumber == Long.MAX_VALUE) throw invalidOrder();
         String slug = allocateSlug(memberId, input.slug());
         Post post = posts.saveAndFlush(new Post(author, category, input.title(), input.summary(), input.visibilityStatus(), slug, lastNumber + 1));
+        post.changeBoard(input.boardId());
         ordered.add(position, post);
         applyOrder(ordered);
         replaceBlocks(post, input.blocks());
@@ -102,6 +106,10 @@ public class PostService {
     public PostView update(long postId, long memberId, PostChanges input) {
         members.findProfileCompletedForWrite(memberId);
         Post post = ownedForUpdate(postId, memberId);
+        if (input.has("boardId")) {
+            if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);
+            post.changeBoard(input.boardId());
+        }
         Category category = post.getCategory();
         if (input.has("categoryId")) {
             category = input.categoryId() == null ? null : categories.resolveForPost(input.categoryId(),
@@ -136,7 +144,7 @@ public class PostService {
     }
 
     public Page<PostView> listPublic(Long categoryId, Long tagId, Long authorId, Pageable pageable) {
-        return page(posts.findAll(publicFilter(categoryId, tagId, authorId), pageable), false);
+        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null), pageable), false);
     }
 
     public Page<PostView> search(String term, Long categoryId, Long tagId, Long authorId, Pageable pageable) {
@@ -160,10 +168,15 @@ public class PostService {
                     cb.like(cb.lower(category.get("name")), loweredPattern, '\\'),
                     cb.like(cb.lower(parent.get("name")), loweredPattern, '\\'), cb.exists(technology));
         };
-        return page(posts.findAll(publicFilter(categoryId, tagId, authorId).and(matching), pageable), false);
+        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null).and(matching), pageable), false);
     }
 
-    private Specification<Post> publicFilter(Long categoryId, Long tagId, Long authorId) {
+    public Page<PostView> listBoard(long ownerId, long boardId, Pageable pageable) {
+        boards.requirePublic(ownerId, boardId);
+        return page(posts.findAll(publicFilter(null, null, ownerId, boardId), pageable), false);
+    }
+
+    private Specification<Post> publicFilter(Long categoryId, Long tagId, Long authorId, Long boardId) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("visibility"), PostVisibility.PUBLIC));
@@ -174,6 +187,7 @@ public class PostService {
                 var parent = category.join("parent", JoinType.LEFT);
                 predicates.add(cb.or(cb.equal(category.get("id"), categoryId), cb.equal(parent.get("id"), categoryId)));
             }
+            if (boardId != null) predicates.add(cb.equal(root.get("boardId"), boardId));
             if (authorId != null) predicates.add(cb.equal(root.get("author").get("id"), authorId));
             if (tagId != null) {
                 var subquery = query.subquery(Long.class);

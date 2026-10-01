@@ -4,6 +4,8 @@ import com.pebble.api.post.domain.Post;
 import com.pebble.api.post.domain.PostVisibility;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import java.time.Instant;
+import org.springframework.data.jpa.repository.Modifying;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -46,6 +48,10 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
             + "join member m on m.id = p.author_member_id where p.visibility_status = 'PUBLIC' "
             + "and not p.is_blocked and m.status <> 'WITHDRAWAL_PENDING'", nativeQuery = true)
     List<Long> findPublicTagIds();
+
+    @Modifying(flushAutomatically = true)
+    @Query("update Post p set p.boardId = null, p.updatedAt = :now where p.author.id = :memberId and p.boardId = :boardId")
+    int detachBoard(@Param("memberId") long memberId, @Param("boardId") long boardId, @Param("now") Instant now);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Post p where p.id = :id")
