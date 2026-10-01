@@ -225,7 +225,7 @@ Board 테이블과 Post의 `board_id`는 V7에서 생성한다. Board는 회원�
 - `category_id`가 설정되면 Category가 최하위인지 애플리케이션에서 검증한다.
 - 기존 Post가 사용 중인 비활성 Category 연결은 보존하고 공개 조회에서 계속 포함한다. 부모 Category 조회는 해당 하위 Category의 공개 Post를 포함한다.
 - CHECK 제약으로 is_blocked = TRUE이면 blocked_at과 blocked_by_admin_id가 모두 존재하고, FALSE이면 둘 다 NULL이 되도록 한다. 차단 해제 시 현재 차단 메타데이터를 비운다.
-- 공개 조회는 visibility_status = PUBLIC AND is_blocked = FALSE인 Post만 대상으로 한다. Post 검색은 미구현이다.
+- 공개 조회는 visibility_status = PUBLIC AND is_blocked = FALSE인 Post만 대상으로 한다. Post 검색은 제목·본문 블록·Category와 상위 Category·Tag 이름의 기본 부분 문자열 검색을 제공한다. 본문과 Tag는 EXISTS로 검색해 일치 항목 수에 따라 글이나 집계가 중복되지 않으며 공개 조건과 검색을 적용한 뒤 페이징한다. 별도 검색 테이블·인덱스·migration은 추가하지 않는다. 데이터가 늘어나면 쿼리 비용을 측정해 검색 인덱스 필요성을 검토한다.
 - is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER 차단·차단 해제 기능은 미구현이다.
 - Post 본문과 코드 블록은 `post_block`에 순서대로 저장한다.
 - Board 연결은 V7에서 복합 FK (`board_id`, `author_member_id`) → `board(id, owner_member_id)`를 적용해 타인 게시판 배치를 차단한다. 공개 게시판 목록은 board_id와 작성자 상태를 기준으로 직접 연결된 공개 Post를 조회한다. Project 참조 FK와 썸네일 키는 아직 없다. Project 연결도 복합 FK로 본인 Project만 참조할 계획이며 대상 테이블에 복합 UNIQUE를 둔다. 관리자 계정 구현 시 `blocked_by_admin_id`의 실제 FK도 추가한다.

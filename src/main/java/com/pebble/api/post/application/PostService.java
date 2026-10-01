@@ -144,16 +144,40 @@ public class PostService {
     }
 
     public Page<PostView> listPublic(Long categoryId, Long tagId, Long authorId, Pageable pageable) {
-        return listPublic(categoryId, tagId, authorId, null, pageable);
+        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null), pageable), false);
+    }
+
+    public Page<PostView> search(String term, Long categoryId, Long tagId, Long authorId, Pageable pageable) {
+        // LIKE의 특수 문자를 이스케이프해 사용자가 입력한 부분 문자열만 검색한다.
+        String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        Specification<Post> matching = (root, query, cb) -> {
+            var loweredPattern = cb.lower(cb.literal(pattern));
+            var category = root.join("category", JoinType.LEFT);
+            var parent = category.join("parent", JoinType.LEFT);
+            var body = query.subquery(Long.class);
+            var block = body.from(PostBlock.class);
+            body.select(block.get("post").get("id")).where(cb.equal(block.get("post").get("id"), root.get("id")),
+                    cb.or(cb.like(cb.lower(block.get("content")), loweredPattern, '\\'),
+                            cb.like(cb.lower(block.get("title")), loweredPattern, '\\')));
+            var technology = query.subquery(Long.class);
+            var link = technology.from(PostTag.class);
+            technology.select(link.get("post").get("id")).where(cb.equal(link.get("post").get("id"), root.get("id")),
+                    cb.like(cb.lower(link.get("tag").get("name")), loweredPattern, '\\'));
+            // 본문과 Tag는 EXISTS로 검색해 여러 일치 항목이 있어도 글과 집계를 중복하지 않는다.
+            return cb.or(cb.like(cb.lower(root.get("title")), loweredPattern, '\\'), cb.exists(body),
+                    cb.like(cb.lower(category.get("name")), loweredPattern, '\\'),
+                    cb.like(cb.lower(parent.get("name")), loweredPattern, '\\'), cb.exists(technology));
+        };
+        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null).and(matching), pageable), false);
     }
 
     public Page<PostView> listBoard(long ownerId, long boardId, Pageable pageable) {
         boards.requirePublic(ownerId, boardId);
-        return listPublic(null, null, ownerId, boardId, pageable);
+        return page(posts.findAll(publicFilter(null, null, ownerId, boardId), pageable), false);
     }
 
-    private Page<PostView> listPublic(Long categoryId, Long tagId, Long authorId, Long boardId, Pageable pageable) {
-        return page(posts.findAll((root, query, cb) -> {
+    private Specification<Post> publicFilter(Long categoryId, Long tagId, Long authorId, Long boardId) {
+        return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("visibility"), PostVisibility.PUBLIC));
             predicates.add(cb.isFalse(root.get("blocked")));
@@ -173,7 +197,7 @@ public class PostService {
                 predicates.add(cb.exists(subquery));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
-        }, pageable), false);
+        };
     }
 
     public Page<PostView> listMine(long memberId, PostVisibility visibility, Pageable pageable) {

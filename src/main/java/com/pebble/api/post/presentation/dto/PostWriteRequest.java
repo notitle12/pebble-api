@@ -100,6 +100,11 @@ public final class PostWriteRequest {
         }
     }
 
+    public static String searchTerm(String value) {
+        if (value == null) fail("q", "검색어를 입력해 주세요.");
+        return validateText(value.strip(), "q", 200, true);
+    }
+
     public static String normalizeSlug(String value) {
         String slug = value.toLowerCase(Locale.ROOT);
         if (value.length() > 200 || !value.matches("[A-Za-z0-9]+(-[A-Za-z0-9]+)*")
@@ -124,7 +129,10 @@ public final class PostWriteRequest {
     private static String text(JsonNode json, String field, int max, boolean nullable, boolean nonBlank) {
         if (nullable && json != null && json.isNull()) return null;
         if (json == null || !json.isTextual()) fail(field, "문자열을 입력해 주세요.");
-        String value = json.textValue();
+        return validateText(json.textValue(), field, max, nonBlank);
+    }
+
+    private static String validateText(String value, String field, int max, boolean nonBlank) {
         for (int offset = 0; offset < value.length();) {
             int point = value.codePointAt(offset);
             if (point == 0 || (point >= 0xD800 && point <= 0xDFFF)) fail(field, "올바른 유니코드 문자열을 입력해 주세요.");
