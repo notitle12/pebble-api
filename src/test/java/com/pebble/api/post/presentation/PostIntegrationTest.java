@@ -216,7 +216,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         for (String invalid : List.of("{\"title\":null}", "{\"title\":\" \"}", "{\"blocks\":[]}", "{\"blocks\":null}",
                 "{\"tagIds\":null}", "{\"tagIds\":[\"1\",\"1\"]}", "{\"categoryId\":1}", "{\"categoryId\":\"0\"}",
                 "{\"categoryId\":\"9223372036854775808\"}", "{\"visibilityStatus\":\"DELETED\"}", "{\"visibilityStatus\":null}",
-                "{\"boardId\":1}", "{\"projectId\":\"1\"}", "{\"blockedAt\":null}", "{\"blockedByAdminId\":null}",
+                "{\"boardId\":1}", "{\"projectId\":1}", "{\"blockedAt\":null}", "{\"blockedByAdminId\":null}",
                 "{\"unknown\":true}", "{\"blocks\":[{\"type\":\"CODE\",\"content\":\"code\"}]}",
                 "{\"blocks\":[{\"type\":\"CODE\",\"language\":\"RUST\",\"content\":\"code\"}]}",
                 "{\"blocks\":[{\"type\":\"TEXT\",\"content\":\"text\",\"id\":\"1\"}]}")) {

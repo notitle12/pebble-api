@@ -65,6 +65,11 @@ public final class ProjectWriteRequest {
         }
     }
 
+    public static String searchTerm(String value) {
+        if (value == null) fail("q", "검색어를 입력해 주세요.");
+        return text(com.fasterxml.jackson.databind.node.TextNode.valueOf(value.strip()), "q", 200, false, true);
+    }
+
     private static List<Long> ids(JsonNode node, String field) {
         if (node == null || !node.isArray()) fail(field, "ID 배열을 입력해 주세요.");
         List<Long> result = new ArrayList<>();

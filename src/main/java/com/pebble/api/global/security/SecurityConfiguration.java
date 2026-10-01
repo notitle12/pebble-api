@@ -37,12 +37,14 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards").hasRole("USER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards",
+                                "/api/v1/members/me/projects").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/members/me/profile").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/members/me/profile").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts/search").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/projects", "/api/v1/projects/{projectId:[0-9]+}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/projects", "/api/v1/projects/search", "/api/v1/projects/{projectId:[0-9]+}",
+                                "/api/v1/projects/{projectId:[0-9]+}/posts", "/api/v1/members/{memberId:[0-9]+}/projects").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/{postId:[0-9]+}",
                                 "/api/v1/blogs/{handle}/posts", "/api/v1/blogs/{handle}/posts/{postKey}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/{memberId:[0-9]+}/posts").permitAll()
@@ -121,6 +123,10 @@ public class SecurityConfiguration {
         CorsConfiguration projectDetailCors = new CorsConfiguration(cors);
         projectDetailCors.setAllowedMethods(List.of("GET", "PATCH", "DELETE"));
         source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}", projectDetailCors);
+        source.registerCorsConfiguration("/api/v1/projects/search", getCors);
+        source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}/posts", getCors);
+        source.registerCorsConfiguration("/api/v1/members/{memberId:[0-9]+}/projects", getCors);
+        source.registerCorsConfiguration("/api/v1/members/me/projects", getCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts", getCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts/{postKey}", getCors);
         source.registerCorsConfiguration("/api/v1/members/me/boards", getCors);

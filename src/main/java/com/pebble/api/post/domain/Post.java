@@ -38,6 +38,9 @@ public class Post {
     @Column(name = "board_id")
     private Long boardId;
 
+    @Column(name = "project_id")
+    private Long projectId;
+
     @Column(nullable = false, length = 200)
     private String title;
 
@@ -128,6 +131,11 @@ public class Post {
         this.boardId = boardId;
     }
 
+    public void changeProject(Long projectId) {
+        ensureNotDeleted();
+        this.projectId = projectId;
+    }
+
     public void changeOrder(int displayOrder) {
         ensureNotDeleted();
         if (displayOrder < 0) throw new IllegalArgumentException("Display order must not be negative");
@@ -166,6 +174,7 @@ public class Post {
     public Member getAuthor() { return author; }
     public Category getCategory() { return category; }
     public Long getBoardId() { return boardId; }
+    public Long getProjectId() { return projectId; }
     public String getTitle() { return title; }
     public String getSlug() { return slug; }
     public long getPostNumber() { return postNumber; }
