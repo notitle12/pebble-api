@@ -71,6 +71,14 @@ public class PostController {
                 optionalId(query, "authorId"), pageable(query, "publishedAt"))));
     }
 
+    @GetMapping("/api/v1/posts/search")
+    public ApiResponse<PostPage> search(@RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("q", "page", "size", "sort", "categoryId", "tagId", "authorId"));
+        return ApiResponse.of(PostPage.from(posts.search(PostWriteRequest.searchTerm(query.getFirst("q")),
+                optionalId(query, "categoryId"), optionalId(query, "tagId"), optionalId(query, "authorId"),
+                pageable(query, "publishedAt"))));
+    }
+
     @GetMapping("/api/v1/members/me/posts")
     public ApiResponse<PostPage> mine(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
         checkQuery(query, Set.of("page", "size", "sort", "visibilityStatus"));

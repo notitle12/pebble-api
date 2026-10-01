@@ -228,7 +228,7 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | Method | Path | 접근 | 설명 |
 |---|---|---|---|
 | GET | /api/v1/posts | Guest | 공개 Post 목록 |
-| GET | /api/v1/posts/search | 후속 (현재 미허용) | 공개 Post 검색 |
+| GET | /api/v1/posts/search | Guest | 공개 Post 기본 문자열 검색 |
 | GET | /api/v1/posts/{postId} | Guest, 작성자 | 내부 Post ID로 공개 또는 본인 Post 조회 |
 | GET | /api/v1/blogs/{handle}/posts | Guest | 공개 블로그 Post 목록 |
 | GET | /api/v1/blogs/{handle}/posts/{postKey} | Guest, 작성자 | 공개 주소 키로 공개 또는 본인 Post 조회 |
@@ -238,7 +238,7 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 (후속, 미구현) |
 | DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 (후속, 미구현) |
 
-개인 Board 연결, Project 연결, 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았다. 검색 endpoint는 접근이 거부되며 위 검색·썸네일 행은 후속 계획 계약을 보존한다.
+개인 Board 연결, Project 연결, 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았다. 검색은 제공하며 위 썸네일 행은 후속 계획 계약을 보존한다.
 
 ### 5.3 Project
 
@@ -640,6 +640,7 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 | Resource | 지원 필터 |
 |---|---|
 | GET /posts | categoryId, tagId, authorId |
+| GET /posts/search | q 필수, categoryId, tagId, authorId |
 | GET /blogs/{handle}/posts | categoryId, tagId |
 | GET /projects | tagId, lifecycleStatus |
 | GET /projects/search | q 필수, tagId, lifecycleStatus |
@@ -653,16 +654,17 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 | GET /admin/post-comments | postId, authorId, visibility, deleted |
 | GET /admin/project-comments | projectId, authorId, visibility, deleted |
 
-- q는 앞뒤 공백을 제거한 비어 있지 않은 검색어다.
+- q는 앞뒤 공백을 제거한 비어 있지 않은 검색어다. Post 검색에서는 최대 200 유니코드 코드 포인트를 허용하며 누락·공백 전용·길이 초과·NUL·잘못된 유니코드는 400 VALIDATION_ERROR다.
 - 알 수 없는 query parameter와 같은 parameter의 중복 전달은 400이다. 각 목록의 필터와 sort 허용값은 endpoint 계약에 따른다.
 - 목록 endpoint는 공통으로 page(기본 0), size(기본 20, 최대 100), sort를 지원한다. GET /posts 기본 정렬은 publishedAt 내림차순이고 허용 sort 필드는 publishedAt, createdAt이다. 블로그 목록은 displayOrder 오름차순이며 허용 필드는 displayOrder, publishedAt, createdAt이다. 정렬 방향은 asc 또는 desc다.
-- Post 검색은 아직 구현하지 않았다. Board·Project 필터도 현재 Post 목록에서 지원하지 않는다.
+- Post 검색은 제목, 본문 블록 content와 title, 연결 Category 및 상위 Category의 name, Tag.name에서 대소문자를 구분하지 않는 부분 문자열을 찾는다. 검색 대상 사이는 OR이고 q와 categoryId·tagId·authorId 필터 사이는 AND다. summary·slug는 검색 대상이 아니다. `%`, `_`, 역슬래시는 와일드카드가 아니라 문자 그대로 검색한다. 여러 블록·Tag가 일치해도 같은 Post와 totalElements를 중복하지 않는다.
+- 검색은 PostPage 목록 응답을 사용하며 본문 blocks와 소유자 전용 isBlocked는 포함하지 않는다. 공개 필터와 검색 조건을 적용한 뒤 페이징한다. GET /posts/search는 GET /posts와 같은 page·size·sort 계약을 따른다. Board·Project 필터는 현재 Post 목록과 검색에서 지원하지 않는다.
 - 본인 Post 목록의 visibilityStatus는 PUBLIC 또는 HIDDEN이며 DELETED는 400이다.
 - Project 검색 대상은 이름, 소개, 상세 설명, 기술 스택이다. Project 검색 API도 후속 기능으로 현재 제공하지 않는다.
 - Guest 검색은 PUBLIC이고 차단되지 않은 콘텐츠만 대상으로 한다.
 - 검색은 MVP의 기본 문자열 검색을 제공한다. 자동 완성, 검색어 추천, 개인화, 전문 검색 엔진은 제공하지 않는다.
 - USER 요청의 visibilityStatus 필터는 본인 콘텐츠 목록에서만 사용할 수 있다. 공개 사용자 목록의 필터는 PUBLIC/차단 제외를 우회하지 않는다.
-- 추후 검색 및 댓글·좋아요 집계는 차단된 콘텐츠를 포함하지 않는다.
+- 검색 및 후속 댓글·좋아요 집계는 차단된 콘텐츠를 포함하지 않는다.
 
 ## 8. API 전역 제약
 

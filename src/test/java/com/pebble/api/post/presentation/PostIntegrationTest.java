@@ -304,7 +304,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isOk());
         mvc.perform(options(PATH + "/123").header(HttpHeaders.ORIGIN, "https://evil.example").header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PATCH"))
                 .andExpect(status().isForbidden());
-        for (String path : List.of(PATH + "/search", PATH + "/123/thumbnail", "/api/v1/admin/posts")) {
+        for (String path : List.of(PATH + "/123/thumbnail", "/api/v1/admin/posts")) {
             mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isForbidden());
         }
         mvc.perform(options(PATH + "/123/thumbnail").header(HttpHeaders.ORIGIN, ORIGIN).header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT"))
