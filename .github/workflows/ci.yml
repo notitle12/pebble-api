@@ -60,5 +60,5 @@ jobs:
         with:
           cache-provider: basic
 
-      - name: Run tests
-        run: ./gradlew clean test
+      - name: Run tests and build deployment JAR
+        run: ./gradlew clean test bootJar

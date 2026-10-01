@@ -2,9 +2,6 @@ package com.pebble.api.global.security;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateKey;
@@ -19,11 +16,10 @@ import java.util.Map;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -43,16 +39,21 @@ public class JwtConfiguration {
     }
 
     @Bean
-    JwtKeyPair jwtKeyPair(JwtProperties properties, ResourceLoader resourceLoader) {
+    JwtKeyPair jwtKeyPair(JwtProperties properties) {
         try {
-            RSAPrivateKey privateKey = readPrivateKey(resourceLoader.getResource(properties.privateKeyLocation()));
-            RSAPublicKey publicKey = readPublicKey(resourceLoader.getResource(properties.publicKeyLocation()));
+            byte[] privateDer = keyBytes(properties.privateKeyBase64());
+            byte[] publicDer = keyBytes(properties.publicKeyBase64());
+            RSAPrivateKey privateKey = (RSAPrivateKey) KeyFactory.getInstance("RSA")
+                    .generatePrivate(new PKCS8EncodedKeySpec(privateDer));
+            RSAPublicKey publicKey = (RSAPublicKey) KeyFactory.getInstance("RSA")
+                    .generatePublic(new X509EncodedKeySpec(publicDer));
             if (publicKey.getModulus().bitLength() < 2048 || !privateKey.getModulus().equals(publicKey.getModulus())) {
                 throw new IllegalStateException("JWT requires a matching RSA key pair of at least 2048 bits");
             }
             return new JwtKeyPair(privateKey, publicKey, properties.keyId());
-        } catch (IOException | GeneralSecurityException exception) {
-            throw new IllegalStateException("JWT signing keys could not be loaded", exception);
+        } catch (GeneralSecurityException | IllegalArgumentException exception) {
+            // 키 값이나 디코딩 오류의 원문이 로그에 노출되지 않도록 원인 예외를 전달하지 않는다.
+            throw new IllegalStateException("JWT signing keys could not be loaded");
         }
     }
 
@@ -67,7 +68,8 @@ public class JwtConfiguration {
 
     @Bean
     JwtDecoder jwtDecoder(JwtKeyPair keyPair, JwtProperties properties, Clock clock) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(keyPair.publicKey()).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(keyPair.publicKey())
+                .signatureAlgorithm(SignatureAlgorithm.RS256).build();
         // 식별자를 문자열로 강제 변환하지 않고 원래 타입을 검증한다.
         decoder.setClaimSetConverter(MappedJwtClaimSetConverter.withDefaults(Map.of(
                 "jti", value -> value, "sub", value -> value)));
@@ -111,29 +113,11 @@ public class JwtConfiguration {
         }
     }
 
-    private RSAPrivateKey readPrivateKey(Resource resource) throws IOException, GeneralSecurityException {
-        String pem = readPem(resource);
-        byte[] der = decodePem(pem, "PRIVATE KEY");
-        return (RSAPrivateKey) KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der));
-    }
-
-    private RSAPublicKey readPublicKey(Resource resource) throws IOException, GeneralSecurityException {
-        String pem = readPem(resource);
-        byte[] der = decodePem(pem, "PUBLIC KEY");
-        return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(der));
-    }
-
-    private byte[] decodePem(String pem, String type) {
-        String content = pem.replace("-----BEGIN " + type + "-----", "")
-                .replace("-----END " + type + "-----", "")
-                .replaceAll("\\s", "");
-        return Base64.getDecoder().decode(content);
-    }
-
-    private String readPem(Resource resource) throws IOException {
-        try (InputStream input = resource.getInputStream()) {
-            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+    private byte[] keyBytes(String base64) {
+        if (base64 == null || base64.isBlank()) {
+            throw new IllegalStateException("JWT RSA Base64 keys are required");
         }
+        return Base64.getDecoder().decode(base64);
     }
 
     record JwtKeyPair(RSAPrivateKey privateKey, RSAPublicKey publicKey, String keyId) {

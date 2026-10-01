@@ -1,0 +1,49 @@
+# 개인 local 파일 없이 실행하는 통합 테스트 설정. 인증 비밀은 AuthenticationTestSupport가 임시 생성한다.
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: pebble-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pebble}
+    username: ${DB_USERNAME:pebble}
+    password: ${DB_PASSWORD:pebble-local}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+
+pebble:
+  security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  auth:
+    naver:
+      client-id: ${NAVER_CLIENT_ID:}
+      client-secret: ${NAVER_CLIENT_SECRET:}
+      redirect-uri: ${NAVER_REDIRECT_URI:http://localhost:3000/auth/naver/callback}
+      authorization-uri: https://nid.naver.com/oauth2.0/authorize
+      token-uri: https://nid.naver.com/oauth2.0/token
+      profile-uri: https://openapi.naver.com/v1/nid/me
+      state-ttl: 5m
+    jwt:
+      issuer: ${JWT_ISSUER:https://pebble.local}
+      audience: ${JWT_AUDIENCE:pebble-api}
+      private-key-base64: ${JWT_PRIVATE_KEY_BASE64:}
+      public-key-base64: ${JWT_PUBLIC_KEY_BASE64:}
+      key-id: ${JWT_KEY_ID:local}
+    refresh-token:
+      pepper-base64: ${REFRESH_TOKEN_PEPPER_BASE64:}
+      pepper-version: ${REFRESH_TOKEN_PEPPER_VERSION:v1}
+      previous-peppers: {}
