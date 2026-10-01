@@ -12,6 +12,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     boolean existsByNickname(String nickname);
     boolean existsByBlogName(String blogName);
     boolean existsByHandle(String handle);
+    Optional<Member> findByHandle(String handle);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from Member m where m.id = :id")
