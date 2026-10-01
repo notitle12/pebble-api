@@ -132,6 +132,8 @@ Post와 Project는 서로 다른 Feature와 테이블을 유지한다. 댓글과
 - 비활성 Category는 신규 지정에서 제외하고 선택 목록에서 숨긴다. 기존 Post 연결·표시는 유지하며, 공개 Post는 비활성 Category 기준 탐색 결과에도 계속 포함한다.
 - 참조 중인 Category를 물리 삭제하지 않는다.
 
+현재 저장 기반은 `V2__create_category_and_tag_tables.sql`이며 `V3__seed_initial_categories_and_tags.sql`이 주제 Category 5개와 기술 Tag 8개를 ACTIVE 상태로 초기 등록한다. 최대 깊이는 Category 생성 모델에서 2단계로 제한한다. 이후 관리자 이동·수정 기능에서도 최대 깊이와 순환을 검증해야 한다. Post의 최하위 판정은 비활성 하위도 포함한 저장 구조를 기준으로 하며, 참조 중인 최상위 Category에 하위를 추가할 때는 기존 Post의 최하위 분류 규칙을 함께 유지해야 한다.
+
 ### 4.2 `tag`
 
 Post 기술 태그와 Project 기술 스택에서 공유하는 관리자 관리 기술 어휘다.

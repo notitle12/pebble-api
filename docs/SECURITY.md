@@ -66,6 +66,8 @@
 
 인증 성공은 모든 동작이 허용되었다는 뜻이 아니다. URL 역할 검사는 소유권·계정 상태·콘텐츠 공개 상태 검사를 대체하지 않는다. 다른 Feature의 Domain 상태를 관리자 API에서 직접 변경하지 않고 소유 Feature의 책임을 통해 처리한다.
 
+`GET /api/v1/categories`와 `GET /api/v1/tags`는 Guest 공개 탐색 조회다. 정확히 이 두 GET 경로만 미인증 접근을 허용하며, 프런트엔드 허용 Origin의 GET CORS를 지원한다. Category·Tag의 관리자 경로와 일반 회원 쓰기 경로는 아직 구현하지 않았고 계속 거부한다. 분류 조회를 위해 기존 OAuth·Refresh·logout의 쿠키 Origin 방어나 전역 CSRF 정책을 변경하지 않는다.
+
 현재 `GET /api/v1/members/me`는 검증된 USER JWT의 role을 `ROLE_USER`로 변환해 HTTP 접근을 허용하고, member Application이 본인 계정을 조회해 현재 DB 상태가 ACTIVE인지 확인한다. 정지·탈퇴 대기 상태는 각각 `ACCOUNT_SUSPENDED`·`ACCOUNT_WITHDRAWAL_PENDING` 403으로 거부한다. 토큰에 포함된 회원 ID 외에 요청으로 조회 대상을 지정할 수 없으며, Refresh Cookie는 이 조회의 인증 수단이 아니다. JWT 서명·claim 검증과 Redis 세션 정책은 그대로 유지한다.
 
 ## 4. 주체와 권한

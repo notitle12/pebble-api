@@ -38,6 +38,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me").hasRole("USER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
                         .anyRequest().denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
                 .oauth2ResourceServer(resourceServer -> resourceServer
@@ -79,9 +80,11 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/auth/naver/**", cors);
         source.registerCorsConfiguration("/api/v1/auth/token/refresh", cors);
         source.registerCorsConfiguration("/api/v1/auth/logout", cors);
-        CorsConfiguration memberCors = new CorsConfiguration(cors);
-        memberCors.setAllowedMethods(List.of("GET"));
-        source.registerCorsConfiguration("/api/v1/members/me", memberCors);
+        CorsConfiguration getCors = new CorsConfiguration(cors);
+        getCors.setAllowedMethods(List.of("GET"));
+        source.registerCorsConfiguration("/api/v1/members/me", getCors);
+        source.registerCorsConfiguration("/api/v1/categories", getCors);
+        source.registerCorsConfiguration("/api/v1/tags", getCors);
         return source;
     }
 }
