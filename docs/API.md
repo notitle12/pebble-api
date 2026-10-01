@@ -378,6 +378,8 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 회원 상세 응답:
 
+`GET /members/me`는 USER Access JWT의 검증된 `sub`에서 본인 회원 ID를 식별한다. 요청으로 조회할 회원 ID를 받지 않는다. 현재 DB의 ACTIVE 회원만 아래 정보를 조회할 수 있다. 인증 누락은 `AUTHENTICATION_REQUIRED` 401, 무효·만료 토큰은 `INVALID_TOKEN` 401, 회원이 없으면 `RESOURCE_NOT_FOUND` 404, 정지 상태는 `ACCOUNT_SUSPENDED` 403, 탈퇴 대기 상태는 `ACCOUNT_WITHDRAWAL_PENDING` 403을 반환한다. Refresh Cookie만으로 이 API에 인증할 수 없다. 허용한 프런트엔드 Origin의 GET과 Authorization 헤더 preflight를 지원한다.
+
 ~~~json
 {
   "data": {
