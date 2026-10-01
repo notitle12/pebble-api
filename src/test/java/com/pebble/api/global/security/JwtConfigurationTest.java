@@ -9,6 +9,7 @@ import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -45,7 +46,7 @@ class JwtConfigurationTest {
                 (RSAPrivateKey) pair.getPrivate(), (RSAPublicKey) pair.getPublic(), "test");
         privateKey = keys.privateKey();
         decoder = configuration.jwtDecoder(keys,
-                new JwtProperties("https://pebble.local", "pebble-api", null, null, "test"),
+                new JwtProperties("https://pebble.local", "pebble-api", "test", null, null),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -68,6 +69,21 @@ class JwtConfigurationTest {
         char replacement = token.charAt(signatureStart) == 'A' ? 'B' : 'A';
         String modified = token.substring(0, signatureStart) + replacement + token.substring(signatureStart + 1);
         assertThatThrownBy(() -> decoder.decode(modified)).isInstanceOf(JwtException.class);
+    }
+
+    @Test
+    void rejectsOtherRsaAlgorithmsEvenWithTrustedKey() {
+        for (JWSAlgorithm algorithm : List.of(JWSAlgorithm.RS384, JWSAlgorithm.RS512)) {
+            assertThatThrownBy(() -> decoder.decode(encode(validClaims(), algorithm))).isInstanceOf(JwtException.class);
+        }
+    }
+
+    @Test
+    void rejectsUnsignedToken() {
+        JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder();
+        validClaims().forEach((key, value) -> builder.claim(key,
+                value instanceof Instant instant ? Date.from(instant) : value));
+        assertThatThrownBy(() -> decoder.decode(new PlainJWT(builder.build()).serialize())).isInstanceOf(JwtException.class);
     }
 
     private static Stream<Map<String, Object>> invalidClaims() {
@@ -102,9 +118,13 @@ class JwtConfigurationTest {
     }
 
     private static String encode(Map<String, Object> claims) {
+        return encode(claims, JWSAlgorithm.RS256);
+    }
+
+    private static String encode(Map<String, Object> claims, JWSAlgorithm algorithm) {
         JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder();
         claims.forEach((key, value) -> builder.claim(key, value instanceof Instant instant ? Date.from(instant) : value));
-        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256)
+        SignedJWT jwt = new SignedJWT(new JWSHeader.Builder(algorithm)
                 .type(JOSEObjectType.JWT).keyID("test").build(), builder.build());
         try {
             jwt.sign(new RSASSASigner(privateKey));
