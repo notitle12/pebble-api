@@ -247,14 +247,14 @@ Board 관리와 Post의 Board 지정 및 공개 Post 검색은 구현되어 있�
 | GET | /api/v1/projects | Guest | 공개 Project 목록 |
 | GET | /api/v1/projects/search | Guest | 공개 Project 검색 |
 | GET | /api/v1/projects/{projectId} | Guest, 작성자, MANAGER, MASTER | 공개 Project 또는 권한 있는 상세 조회 |
-| POST | /api/v1/projects | USER | Project 생성 |
-| PATCH | /api/v1/projects/{projectId} | 작성자 | 본인 Project 수정 |
-| DELETE | /api/v1/projects/{projectId} | 작성자 | 본인 Project 논리 삭제 |
+| POST | /api/v1/projects | ACTIVE, 프로필 완료 USER | Project 생성 |
+| PATCH | /api/v1/projects/{projectId} | ACTIVE, 프로필 완료 작성자 | 본인 Project 수정 |
+| DELETE | /api/v1/projects/{projectId} | ACTIVE, 프로필 완료 작성자 | 본인 Project 논리 삭제 |
 | POST | /api/v1/projects/{projectId}/media | 작성자 | 대표 이미지 또는 스크린샷 추가 |
 | PATCH | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | 미디어 설명·순서 수정 |
 | DELETE | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | Project 미디어 제거 |
 
-Project CRUD·검색·미디어 API는 후속 기능이며 현재 제공하지 않는다. 위 표는 계획된 계약을 보존한다.
+Project 기본 CRUD와 공개 목록·상세는 제공한다. 검색·미디어 API는 후속 기능이며 해당 표 행은 계획된 계약을 보존한다.
 
 ### 5.4 Board
 
@@ -558,10 +558,21 @@ Project 생성 요청과 수정 가능한 필드:
 - tagIds는 중복 없는 ID 배열이며 신규 연결은 ACTIVE Tag만 허용한다.
 - features 배열 항목은 title 최대 100자, description 최대 2,000자이며 요청 순서대로 저장한다.
 - links의 linkType은 GITHUB, DEPLOYMENT, DOWNLOAD, OTHER다. url은 필수, 최대 2,048자이며 label은 선택, 최대 100자다. 각 항목의 displayOrder로 표시 순서를 지정한다.
+- 외부 링크는 사용자 정보가 없는 절대 HTTP(S) URL만 허용한다. 상대 경로·실행 가능한 스킴·잘못된 URI는 400이다. 서버는 링크 대상에 접속하지 않는다.
 - visibilityStatus는 PUBLIC 또는 HIDDEN이다. isBlocked는 작성자가 변경할 수 없다.
 - PATCH에서 features, links, tagIds를 보내면 기존 전체 항목을 교체한다.
+- POST에서는 name, lifecycleStatus, visibilityStatus가 필수다. 생략한 tagIds, features, links는 빈 배열로 저장한다.
+- PATCH는 생략한 필드를 보존하고 nullable 문자열·날짜에 null을 보내면 값을 비운다.
+- 작성·수정·삭제에는 ACTIVE이며 최초 프로필 설정을 완료한 USER가 필요하다. 본인 Project만 변경할 수 있다.
+- 공개 목록은 tagId, lifecycleStatus, page, size, sort를 지원한다. 기본 정렬은 publishedAt 내림차순이며 publishedAt, createdAt의 asc 또는 desc를 허용한다.
+- 공개 목록·상세는 PUBLIC·미차단·미삭제 Project만 노출한다. 작성자는 인증 후 자신의 HIDDEN·차단 Project 상세를 조회할 수 있고, DELETED Project는 조회할 수 없다.
+- WITHDRAWAL_PENDING 회원의 Project는 공개 조회에서 제외한다. SUSPENDED 회원의 공개 Project는 유지하며 해당 회원의 쓰기는 거부한다.
+- POST는 201과 `/api/v1/projects/{id}` Location, PATCH는 200, DELETE는 빈 204다. 타인·없는 Project의 변경은 404, 소유자의 DELETED Project 재변경은 CONTENT_DELETED 409다.
+- ID는 TSID의 10진 문자열이다. 응답 owner는 id·handle·blogName·nickname·profileImageUrl을 포함한다. 작성자 상세에는 isBlocked를 포함하고 공개 목록·타인 상세에는 생략한다. 목록·상세는 기술 태그를 요청 순서로 반환하고, 주요 기능은 요청 순서, 링크는 displayOrder와 숫자 ID 오름차순으로 반환한다. 전체 교체 시 주요 기능·링크 ID는 새로 발급한다.
+- 입력 문자열 길이는 유니코드 코드 포인트로 검증하며 NUL·잘못된 유니코드는 거부한다. 선택 문자열과 날짜는 null로 비울 수 있고, 배열의 null은 거부한다. 상세의 선택 description·architectureDescription·executionInstructions는 null이면 생략한다.
+- 같은 이름의 Project 생성은 허용한다. 이번 API는 날짜 형식을 검증하며 기간과 lifecycleStatus를 자동으로 연동하지 않는다. 회원별 공개 목록과 본인 목록은 아직 제공하지 않는다.
 
-Project 상세에는 미디어 배열, 주요 기능, 링크, 기술 태그, 좋아요 수, likedByMe를 포함한다. 목록 응답은 상세 설명과 하위 배열을 생략할 수 있다. 미디어 저장 키는 공개하지 않고, 권한을 통과한 요청에 한해 15분 만료의 signed URL을 반환한다. 만료된 URL로 아직 로드되지 않은 이미지를 요청하면 리소스 조회 API에서 새 URL을 받아 다시 요청한다. 이미 로드된 이미지는 URL 만료만으로 화면에서 사라지지 않는다.
+Project 상세에는 현재 빈 미디어 배열, 주요 기능, 링크, 기술 태그, likeCount 0, likedByMe false를 포함한다. 목록 응답은 상세 설명과 주요 기능·링크·미디어 배열을 생략한다. 미디어 저장 키는 공개하지 않고, 후속 미디어 기능에서는 권한을 통과한 요청에 한해 15분 만료의 signed URL을 반환한다. 만료된 URL로 아직 로드되지 않은 이미지를 요청하면 리소스 조회 API에서 새 URL을 받아 다시 요청한다. 이미 로드된 이미지는 URL 만료만으로 화면에서 사라지지 않는다.
 
 ### 6.5 관리자 차단
 
@@ -659,6 +670,7 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 - q는 앞뒤 공백을 제거한 비어 있지 않은 검색어다. Post 검색에서는 최대 200 유니코드 코드 포인트를 허용하며 누락·공백 전용·길이 초과·NUL·잘못된 유니코드는 400 VALIDATION_ERROR다.
 - 알 수 없는 query parameter와 같은 parameter의 중복 전달은 400이다. 각 목록의 필터와 sort 허용값은 endpoint 계약에 따른다.
 - 목록 endpoint는 공통으로 page(기본 0), size(기본 20, 최대 100), sort를 지원한다. GET /posts 기본 정렬은 publishedAt 내림차순이고 허용 sort 필드는 publishedAt, createdAt이다. 블로그 목록은 displayOrder 오름차순이며 허용 필드는 displayOrder, publishedAt, createdAt이다. 정렬 방향은 asc 또는 desc다.
+- GET /projects의 기본 정렬은 publishedAt 내림차순이고 publishedAt, createdAt 정렬을 허용한다. tagId와 lifecycleStatus는 함께 사용할 수 있다.
 - Post 검색은 제목, 본문 블록 content와 title, 연결 Category 및 상위 Category의 name, Tag.name에서 대소문자를 구분하지 않는 부분 문자열을 찾는다. 검색 대상 사이는 OR이고 q와 categoryId·tagId·authorId 필터 사이는 AND다. summary·slug는 검색 대상이 아니다. `%`, `_`, 역슬래시는 와일드카드가 아니라 문자 그대로 검색한다. 여러 블록·Tag가 일치해도 같은 Post와 totalElements를 중복하지 않는다.
 - 검색은 PostPage 목록 응답을 사용하며 본문 blocks와 소유자 전용 isBlocked는 포함하지 않는다. 공개 필터와 검색 조건을 적용한 뒤 페이징한다. GET /posts/search는 GET /posts와 같은 page·size·sort 계약을 따른다. Board·Project 필터는 현재 Post 목록과 검색에서 지원하지 않는다.
 - Board별 Post 목록은 지정 Board의 직접 연결만 조회하며 하위 Board의 글을 합치지 않는다.

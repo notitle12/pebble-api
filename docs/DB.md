@@ -271,7 +271,7 @@ Post와 기술 Tag의 다대다 연결 테이블이다.
 
 한 명의 회원이 소유하는 개인 포트폴리오 Project 콘텐츠를 저장한다.
 
-Project 스키마는 후속 기능의 목표다. 현재 Flyway에는 Project 테이블이 없으며 Post와 Project를 연결하는 FK도 없다.
+Project와 주요 기능·Tag·외부 링크 스키마는 V8에서 생성한다. Post와 Project를 연결하는 FK와 Project 미디어 테이블은 아직 없다.
 
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
 |---|---|---:|---|
@@ -288,7 +288,7 @@ Project 스키마는 후속 기능의 목표다. 현재 Flyway에는 Project 테
 | `visibility_status` | VARCHAR(20) | N | CHECK: `PUBLIC`, `HIDDEN`, `DELETED` |
 | `is_blocked` | BOOLEAN | N | DEFAULT FALSE; 관리자 차단 여부. visibility_status와 독립 |
 | `blocked_at` | TIMESTAMPTZ | Y | 현재 차단을 설정한 시각 |
-| `blocked_by_admin_id` | BIGINT | Y | FK → admin_account.id; 현재 차단을 설정한 관리자 |
+| `blocked_by_admin_id` | BIGINT | Y | 현재 차단을 설정한 관리자 ID; 관리자 FK는 후속 기능 |
 | `published_at` | TIMESTAMPTZ | Y | 최초 공개 시각 |
 | `deleted_at` | TIMESTAMPTZ | Y | `DELETED` 전환 시각 |
 | `created_at` | TIMESTAMPTZ | N | 생성 시각 |
@@ -299,6 +299,10 @@ Project 스키마는 후속 기능의 목표다. 현재 Flyway에는 Project 테
 - CHECK 제약으로 is_blocked = TRUE이면 blocked_at과 blocked_by_admin_id가 모두 존재하고, FALSE이면 둘 다 NULL이 되도록 한다. 차단 해제 시 현재 차단 메타데이터를 비운다.
 - 공개 조회와 검색은 visibility_status = PUBLIC AND is_blocked = FALSE인 Project만 대상으로 한다.
 - is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER의 차단·차단 해제 유스케이스만 변경한다.
+- Project 생성·수정·삭제는 프로필을 완료한 ACTIVE 소유자의 Member 행을 먼저 잠그고, 수정·삭제는 대상 Project 행도 잠근다. Tag·주요 기능·링크 전체 교체는 Project 변경과 같은 트랜잭션에서 처리한다.
+- 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. DELETED Project는 일반 조회와 작성자 조회에서 제외하며 복원하지 않는다.
+- blocked_by_admin_id의 관리자 FK는 관리자 계정 기능에서 추가한다.
+- V8은 공개 최초 발행 시각·ID 정렬, 소유자 생성 시각, Tag 역방향 탐색 인덱스를 추가한다. 공개 판정은 WITHDRAWAL_PENDING 소유자의 Project도 제외한다.
 
 ### 7.1.1 `project_feature`
 
@@ -331,6 +335,7 @@ Project와 기술 스택 Tag의 다대다 연결 테이블이다.
 - 복합 PK (`project_id`, `tag_id`)로 같은 기술의 중복 지정을 방지한다.
 - UNIQUE (`project_id`, `display_order`)로 기술 스택 표시 순서를 고정한다.
 - 비활성 Tag를 신규 연결할 수 없다.
+- 기존 Project의 비활성 Tag는 보존·재정렬할 수 있다. 공개 Project가 사용하는 비활성 Tag도 공개 Tag 목록에 포함한다.
 
 ### 7.3 `project_link`
 
