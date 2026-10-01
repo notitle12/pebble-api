@@ -191,9 +191,10 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 - 범위를 벗어난 page는 200과 빈 content를 반환한다.
 - 각 endpoint는 허용된 sort 필드만 받는다. 지원하지 않는 정렬 필드는 400이다.
 - 정렬 키가 같은 경우 ID를 보조 정렬 키로 사용해 결과 순서를 안정화한다.
-- Post·Project 목록은 publishedAt 또는 createdAt, 회원·관리자 관리 목록은 createdAt 또는 updatedAt, 댓글은 createdAt 정렬을 허용한다. Category·Tag·Board와 Project 하위 항목은 displayOrder 정렬을 사용한다.
+- 전체 Post·Project 목록은 publishedAt 또는 createdAt, 회원·관리자 관리 목록은 endpoint 계약의 정렬 필드, 댓글은 createdAt 정렬을 허용한다. Category·Tag·Board와 Project 하위 항목은 displayOrder 정렬을 사용한다.
 - 공개 Post·Project 목록 및 검색은 기본적으로 publishedAt 내림차순, ID 내림차순이다.
-- 회원의 관리 목록은 기본적으로 createdAt 내림차순, ID 내림차순이다.
+- Post 블로그 목록과 본인 관리 목록은 기본적으로 displayOrder 오름차순, ID 오름차순이다. Post 목록 sort는 전체 목록에서 publishedAt·createdAt, 블로그·본인 목록에서 displayOrder·publishedAt·createdAt을 허용한다.
+- 회원의 그 밖의 관리 목록은 기본적으로 createdAt 내림차순, ID 내림차순이다.
 - 댓글은 createdAt 오름차순, ID 오름차순이다.
 - Board, Category, Tag, Project 기능·링크·미디어는 displayOrder 오름차순이다.
 - 페이징은 권한 및 공개 상태 필터를 적용한 뒤 수행한다. 권한 없는 SECRET 댓글을 페이지 수 계산에 포함하지 않는다.
@@ -227,13 +228,17 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | Method | Path | 접근 | 설명 |
 |---|---|---|---|
 | GET | /api/v1/posts | Guest | 공개 Post 목록 |
-| GET | /api/v1/posts/search | Guest | 공개 Post 검색 |
-| GET | /api/v1/posts/{postId} | Guest, 작성자, MANAGER, MASTER | 공개 Post 또는 권한 있는 상세 조회 |
-| POST | /api/v1/posts | USER | Post 생성 |
-| PATCH | /api/v1/posts/{postId} | 작성자 | 본인 Post 수정 |
-| DELETE | /api/v1/posts/{postId} | 작성자 | 본인 Post 논리 삭제 |
-| PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 |
-| DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 |
+| GET | /api/v1/posts/search | 후속 (현재 미허용) | 공개 Post 검색 |
+| GET | /api/v1/posts/{postId} | Guest, 작성자 | 내부 Post ID로 공개 또는 본인 Post 조회 |
+| GET | /api/v1/blogs/{handle}/posts | Guest | 공개 블로그 Post 목록 |
+| GET | /api/v1/blogs/{handle}/posts/{postKey} | Guest, 작성자 | 공개 주소 키로 공개 또는 본인 Post 조회 |
+| POST | /api/v1/posts | ACTIVE, 프로필 완료 USER | Post 생성 |
+| PATCH | /api/v1/posts/{postId} | ACTIVE, 프로필 완료 작성자 | 본인 Post 수정 및 순서 이동 |
+| DELETE | /api/v1/posts/{postId} | ACTIVE, 프로필 완료 작성자 | 본인 Post 논리 삭제 및 순서 압축 |
+| PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 (후속, 미구현) |
+| DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 (후속, 미구현) |
+
+개인 Board 연결, Project 연결, 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았다. 검색 endpoint는 접근이 거부되며 위 검색·썸네일 행은 후속 계획 계약을 보존한다.
 
 ### 5.3 Project
 
@@ -249,6 +254,8 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | PATCH | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | 미디어 설명·순서 수정 |
 | DELETE | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | Project 미디어 제거 |
 
+Project CRUD·검색·미디어 API는 후속 기능이며 현재 제공하지 않는다. 위 표는 계획된 계약을 보존한다.
+
 ### 5.4 Board
 
 | Method | Path | 접근 | 설명 |
@@ -257,6 +264,8 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | POST | /api/v1/boards | USER | Board 생성 |
 | PATCH | /api/v1/boards/{boardId} | 소유자 | 이름, 부모, 순서 수정 |
 | DELETE | /api/v1/boards/{boardId} | 소유자 | Board 삭제. Post는 미분류 처리 |
+
+Board 관리와 Post 배치 API는 후속 기능이며 현재 제공하지 않는다.
 
 ### 5.5 Category와 Tag
 
@@ -419,7 +428,7 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 ### 6.3 Post
 
-Post 생성 요청과 수정 가능한 필드:
+`POST /api/v1/posts`와 `PATCH /api/v1/posts/{postId}`는 JSON 요청을 받는다. 생성은 201 Created와 블로그 상세 주소를 가리키는 `Location` 헤더를 반환한다. PATCH는 200 OK, 논리 삭제는 204 No Content를 반환한다.
 
 ~~~json
 {
@@ -439,9 +448,8 @@ Post 생성 요청과 수정 가능한 필드:
   ],
   "categoryId": "721389012345678901",
   "tagIds": ["721389012345678902", "721389012345678903"],
-  "boardId": "721389012345678904",
-  "projectId": null,
-  "visibilityStatus": "PUBLIC"
+  "visibilityStatus": "PUBLIC",
+  "slug": "spring-security-setup"
 }
 ~~~
 
@@ -449,12 +457,17 @@ Post 생성 요청과 수정 가능한 필드:
 - blocks는 순서 있는 배열이다. 최소 한 개를 보낸다. type은 TEXT 또는 CODE다.
 - CODE 블록은 language가 필수이며 title은 선택이다. DB 제한은 content 최대 50,000자, title 최대 100자, language 최대 50자다.
 - API 언어 값은 JAVA, JAVASCRIPT, TYPESCRIPT, PYTHON, HTML, CSS, SQL, JSON, YAML, MARKDOWN, BASH, SHELL이다.
-- categoryId는 null 또는 최하위 Category 하나다. 신규 연결은 ACTIVE Category만 허용한다.
+- `slug`는 생성 시 선택 입력이다. 영문 소문자·숫자와 단어 사이 하이픈만 허용하며 최대 200자다. 대문자는 소문자로 바꾼다. 숫자만으로 된 값과 `search`는 사용할 수 없다. 같은 작성자가 이미 사용한 값은 `-2`, `-3` 접미사를 붙여 첫 빈 값을 할당하며 논리 삭제한 Post의 slug도 예약된 상태로 남는다. 생략하거나 null이면 slug 없이 생성되고 주소에는 postNumber를 사용한다. PATCH에서 `slug`를 보내면 400이다.
+- `displayOrder`는 선택 입력이며 0 이상 정수다. 생성 기본값은 0이고 지정하면 본인의 미삭제 전체 Post 순서 안에 삽입한다. PATCH에서 지정하면 같은 목록 안에서 위치를 이동한다. 삭제하면 뒤의 Post 순서를 압축한다.
+- 시스템은 작성자별 `postNumber`를 1부터 증가시키며 논리 삭제 뒤에도 재사용하지 않는다. 내부 `id`는 TSID다.
+- `categoryId`는 null 또는 최하위 Category 하나다. 신규 연결은 ACTIVE Category만 허용한다. 기존 Post가 사용 중인 뒤 비활성화된 Category는 공개 조회와 분류 탐색에서 계속 연결 결과를 제공한다. 부모 Category 조회는 해당 하위 Category의 공개 Post를 포함한다.
 - tagIds는 중복 없는 ID 배열이며 신규 연결은 ACTIVE Tag만 허용한다.
-- boardId와 projectId는 생략하거나 null로 둘 수 있다. 지정 시 작성자 본인 소유인지 검증한다.
+- `boardId`와 `projectId`는 생략하거나 null로 둘 수 있으며, non-null 값은 현재 지원하지 않아 400이다.
 - visibilityStatus는 PUBLIC 또는 HIDDEN이다. DELETED는 DELETE 동작으로만 설정한다.
 - isBlocked, blockedAt, blockedByAdminId는 응답 전용이며 요청에 포함하면 400이다.
-- PATCH에서 blocks, tagIds는 전체 교체다. categoryId, boardId, projectId, summary는 null로 지정해 연결·값을 제거할 수 있다.
+- 생성 시 title, blocks, visibilityStatus는 필수다. PATCH에서 blocks와 tagIds는 전체 교체이며, categoryId, summary는 null로 지정해 값·연결을 제거할 수 있다.
+- 작성·수정·삭제에는 ACTIVE이며 최초 프로필 설정을 완료한 USER가 필요하다. 미완료 프로필은 `PROFILE_REQUIRED` 409다. 본인 글만 변경할 수 있다.
+- Guest는 PUBLIC이며 차단되지 않은 Post만 조회한다. 작성자는 자신의 HIDDEN Post도 조회할 수 있으며 다른 사용자의 비공개 Post는 404다.
 
 Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 상세 필드를 생략할 수 있다.
 
@@ -462,14 +475,28 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
 {
   "data": {
     "id": "721389012345678901",
+    "postNumber": "12",
+    "slug": "spring-security-setup",
+    "urlKey": "spring-security-setup",
+    "displayOrder": 0,
     "author": {
       "id": "721389012345678902",
+      "handle": "pebble-dev",
+      "blogName": "Pebble 개발 기록",
       "nickname": "pebble",
       "profileImageUrl": null
     },
     "title": "Spring Security 설정",
     "summary": "인증 필터 체인을 구성한 기록",
-    "blocks": [],
+    "blocks": [
+      {
+        "type": "CODE",
+        "content": "http.oauth2Login();",
+        "language": "JAVA",
+        "title": "Security 설정",
+        "displayOrder": 0
+      }
+    ],
     "category": null,
     "tags": [],
     "boardId": null,
@@ -480,12 +507,15 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
     "likedByMe": false,
     "publishedAt": "2026-09-30T03:00:00Z",
     "createdAt": "2026-09-30T03:00:00Z",
-    "updatedAt": "2026-09-30T03:00:00Z"
+    "updatedAt": "2026-09-30T03:00:00Z",
+    "isBlocked": false
   }
 }
 ~~~
 
-작성자 관리 응답은 추가로 isBlocked를 포함한다. 관리자는 isBlocked, blockedAt, blockedByAdminId를 확인할 수 있다. Guest와 다른 회원에게는 차단 메타데이터를 반환하지 않는다.
+`urlKey`는 slug가 있으면 slug, 없으면 `postNumber` 문자열이다. `GET /api/v1/blogs/{handle}/posts/{postKey}`에서 숫자 키는 작성자별 번호, 그 외 키는 slug로 해석한다. 본인 블로그 기본 목록은 displayOrder 오름차순이고 공개 전체 목록 기본 순서는 publishedAt 내림차순이다. 공개 주소 경로는 공개 handle과 postNumber 또는 slug를 사용하며 Naver 식별자와 내부 TSID를 경로에 사용하지 않는다. 응답의 `id`는 TSID 문자열이다.
+
+Post 응답의 `boardId`, `projectId`, `thumbnailUrl`은 현재 항상 null이고 `likeCount`는 0, `likedByMe`는 false다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
 
 ### 6.4 Project
 
@@ -533,7 +563,7 @@ Project 상세에는 미디어 배열, 주요 기능, 링크, 기술 태그, 좋
 
 ### 6.5 관리자 차단
 
-차단 API는 별도 요청 본문 없이 상태 변경을 수행한다.
+차단 API는 별도 요청 본문 없이 상태 변경을 수행한다. Post·Project 관리자 차단 경로는 현재 구현되어 있지 않으며 아래 규칙은 향후 운영 기능 계약이다.
 
 - PUT block은 isBlocked=true, blockedAt=현재 시각, blockedByAdminId=요청 관리자 ID로 설정한다.
 - DELETE block은 isBlocked=false로 설정하고 blockedAt과 blockedByAdminId를 비운다.
@@ -550,17 +580,21 @@ Category 응답 항목: `{id, parentId, name, slug, displayOrder, status, childr
 
 Tag 응답 항목: `{id, name, slug, displayOrder, status}`. name 최대 50자, slug 최대 100자다. 비활성 항목은 기존 공개 콘텐츠에서 참조되는 경우 탐색 결과에 표시될 수 있다.
 
-Category 트리는 활성 하위의 경로를 보존하기 위해 비활성 상위를 `INACTIVE` 상태인 그룹으로 포함할 수 있다. 이 그룹은 신규 선택 대상이 아니다. 사용 중이지 않은 비활성 하위와 Tag는 제외한다. 신규 Post 연결은 ACTIVE이고 저장된 하위 Category가 없는 항목만 허용하며, 공개 children이 비었다는 이유만으로 최하위라고 판단하지 않는다.
+Category 트리는 활성 하위의 경로를 보존하기 위해 비활성 상위를 `INACTIVE` 상태인 그룹으로 포함할 수 있다. 이 그룹은 신규 선택 대상이 아니다. 사용 중이지 않은 비활성 하위와 Tag는 제외한다. 신규 Post 연결은 ACTIVE이고 저장된 하위 Category가 없는 항목만 허용하며, 공개 children이 비었다는 이유만으로 최하위라고 판단하지 않는다. Post는 Category·Tag를 참조하며, 공개 분류 필터에서 상위 Category를 지정하면 하위 Category에 연결된 공개 Post를 포함한다. Post가 사용 중인 비활성 분류도 공개 탐색에서 유지한다.
 
-초기 데이터는 상위 주제 Backend·Frontend·Database·DevOps·Architecture와 기술 Tag Java·Spring Boot·JPA·JavaScript·React·HTML·CSS·PostgreSQL이다. 하위 주제는 관리자 관리 API에서 필요에 따라 구성한다. 현재 분류 기반 단계에는 Post·Project 참조가 없으므로 활성 항목과 활성 하위의 상위 그룹을 조회한다. 콘텐츠 구현 시 공개 콘텐츠에서 사용 중인 비활성 항목의 탐색을 함께 연결한다.
+초기 데이터는 상위 주제 Backend·Frontend·Database·DevOps·Architecture와 기술 Tag Java·Spring Boot·JPA·JavaScript·React·HTML·CSS·PostgreSQL이다. 하위 주제는 관리자 관리 API에서 필요에 따라 구성한다. 분류 조회는 활성 항목과 활성 하위의 상위 그룹을 제공하며, Post가 사용하는 비활성 분류도 공개 탐색에 포함한다. Category 관리자 API는 후속 범위다.
 
 Category 생성 요청은 `{parentId, name, slug, displayOrder}`이며 Tag 생성 요청은 `{name, slug, displayOrder}`다. 수정 요청은 각 생성 필드와 status를 부분 변경한다. status 값은 ACTIVE 또는 INACTIVE다. 참조 항목을 물리 삭제하는 API는 없다.
 
 공개 Board 응답은 `{id, name, displayOrder, children}` 트리다. Board는 최대 3단계이며 공개 조회에서 해당 작성자의 PUBLIC이고 차단되지 않은 Post만 보인다. 자신의 Board API에는 숨김 또는 차단된 Post가 노출되지 않으며 Post 자체 조회 권한에 따르도록 한다.
 
+개인 Board와 Project API는 현재 제공하지 않는다. Post 요청의 Board·Project non-null ID는 거부하며 응답 값은 null이다.
+
 Board 응답 항목은 `{id, parentId, name, displayOrder, children}`다. Board 생성 요청은 `{name, parentId, displayOrder}`다. name은 최대 50자다. 수정은 이 세 필드를 부분 변경한다. 부모 변경 시 소유자 일치, 최대 깊이, 순환 참조, 형제 이름 중복을 검증한다. 하위 Board가 있는 경우 삭제 요청은 RESOURCE_HAS_CHILDREN을 반환한다. 성공한 Board 삭제는 연결된 Post의 boardId를 null로 만든다.
 
 ### 6.7 댓글과 좋아요
+
+Post·Project 좋아요 API는 아직 제공하지 않는다. 현재 Post 응답은 `likeCount: 0`, `likedByMe: false`를 반환한다. 아래 권한 규칙은 좋아요 기능을 제공할 때 적용할 계약이다.
 
 댓글 생성 요청:
 
@@ -589,7 +623,7 @@ Board 응답 항목은 `{id, parentId, name, displayOrder, children}`다. Board 
 
 ### 6.8 미디어
 
-업로드는 multipart/form-data를 사용한다. 원본 파일은 처리 중에만 사용하고 R2에는 WebP 파생 파일만 저장한다.
+Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제공하지 않는다. 아래는 향후 미디어 기능의 제품 계약이다. 구현 시 업로드는 multipart/form-data를 사용하고 원본 파일은 처리 중에만 사용해 R2에 WebP 파생 파일만 저장한다.
 
 - Post 썸네일 업로드 필드: file
 - Project 미디어 업로드 필드: file, mediaRole, 선택적 altText, displayOrder
@@ -605,13 +639,13 @@ Board 응답 항목은 `{id, parentId, name, displayOrder, children}`다. Board 
 
 | Resource | 지원 필터 |
 |---|---|
-| GET /posts | categoryId, tagId, boardId, projectId, authorId |
-| GET /posts/search | q 필수, categoryId, tagId |
+| GET /posts | categoryId, tagId, authorId |
+| GET /blogs/{handle}/posts | categoryId, tagId |
 | GET /projects | tagId, lifecycleStatus |
 | GET /projects/search | q 필수, tagId, lifecycleStatus |
-| GET /members/{memberId}/posts | categoryId, tagId, boardId |
+| GET /members/{memberId}/posts | categoryId, tagId |
 | GET /members/{memberId}/projects | tagId, lifecycleStatus |
-| GET /members/me/posts | visibilityStatus, boardId |
+| GET /members/me/posts | visibilityStatus |
 | GET /members/me/projects | visibilityStatus |
 | GET /admin/posts | q, visibilityStatus, isBlocked, authorId |
 | GET /admin/projects | q, visibilityStatus, isBlocked, ownerId |
@@ -620,17 +654,20 @@ Board 응답 항목은 `{id, parentId, name, displayOrder, children}`다. Board 
 | GET /admin/project-comments | projectId, authorId, visibility, deleted |
 
 - q는 앞뒤 공백을 제거한 비어 있지 않은 검색어다.
-- Post 검색 대상은 제목, 본문, Category와 Tag다.
-- Project 검색 대상은 이름, 소개, 상세 설명, 기술 스택이다.
+- 알 수 없는 query parameter와 같은 parameter의 중복 전달은 400이다. 각 목록의 필터와 sort 허용값은 endpoint 계약에 따른다.
+- 목록 endpoint는 공통으로 page(기본 0), size(기본 20, 최대 100), sort를 지원한다. GET /posts 기본 정렬은 publishedAt 내림차순이고 허용 sort 필드는 publishedAt, createdAt이다. 블로그 목록은 displayOrder 오름차순이며 허용 필드는 displayOrder, publishedAt, createdAt이다. 정렬 방향은 asc 또는 desc다.
+- Post 검색은 아직 구현하지 않았다. Board·Project 필터도 현재 Post 목록에서 지원하지 않는다.
+- 본인 Post 목록의 visibilityStatus는 PUBLIC 또는 HIDDEN이며 DELETED는 400이다.
+- Project 검색 대상은 이름, 소개, 상세 설명, 기술 스택이다. Project 검색 API도 후속 기능으로 현재 제공하지 않는다.
 - Guest 검색은 PUBLIC이고 차단되지 않은 콘텐츠만 대상으로 한다.
 - 검색은 MVP의 기본 문자열 검색을 제공한다. 자동 완성, 검색어 추천, 개인화, 전문 검색 엔진은 제공하지 않는다.
 - USER 요청의 visibilityStatus 필터는 본인 콘텐츠 목록에서만 사용할 수 있다. 공개 사용자 목록의 필터는 PUBLIC/차단 제외를 우회하지 않는다.
-- 검색 결과 및 댓글·좋아요 집계는 차단된 콘텐츠를 포함하지 않는다.
+- 추후 검색 및 댓글·좋아요 집계는 차단된 콘텐츠를 포함하지 않는다.
 
 ## 8. API 전역 제약
 
 - API는 회원이 다른 회원의 Post, Project, Board, 댓글을 수정 또는 삭제하지 못하게 한다.
-- isBlocked, blockedAt, blockedByAdminId는 Post·Project 응답에서 권한에 따라 읽을 수 있지만 USER 생성·수정 요청으로 변경할 수 없다.
-- 관리자 강제 삭제는 visibilityStatus를 DELETED로 전환한다. DELETED 복구 API는 없다.
+- isBlocked, blockedAt, blockedByAdminId는 USER 생성·수정 요청으로 변경할 수 없다. Post 관리자 조회·차단 API는 아직 구현하지 않았다.
+- 구현된 리소스의 관리자 강제 삭제는 visibilityStatus를 DELETED로 전환한다. DELETED 복구 API는 없다. Post 관리자 강제 삭제는 미구현이다.
 - 탈퇴 요청 후 7일 동안 취소할 수 있으며, 요청 즉시 계정 이용과 콘텐츠 공개를 막는다. 예약 기간이 끝나면 계정과 콘텐츠를 영구 삭제한다.
 - 업로드 형식, 크기·픽셀 한도, WebP 파생 크기와 품질, signed GET URL 15분 만료 정책은 6.8절을 따른다.
