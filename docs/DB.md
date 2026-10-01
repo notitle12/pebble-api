@@ -65,7 +65,12 @@ Post와 Project는 서로 다른 Feature와 테이블을 유지한다. 댓글과
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
 |---|---|---:|---|
 | `id` | BIGINT | N | PK, TSID |
-| `nickname` | VARCHAR(30) | N | 표시 이름 |
+| `nickname` | VARCHAR(30) | N | UNIQUE, 표시 이름 |
+| `blog_name` | VARCHAR(100) | Y | UNIQUE, 최초 설정 전 NULL |
+| `handle` | VARCHAR(30) | Y | UNIQUE, 최초 설정 전 NULL; 이후 변경 불가 |
+| `profile_completed_at` | TIMESTAMPTZ | Y | 최초 설정 완료 시각 |
+| `nickname_changed_at` | TIMESTAMPTZ | Y | 닉네임 마지막 설정/변경 시각 |
+| `blog_name_changed_at` | TIMESTAMPTZ | Y | 블로그명 마지막 설정/변경 시각 |
 | `profile_image_url` | VARCHAR(2048) | Y | 프로필 이미지 URL |
 | `status` | VARCHAR(20) | N | CHECK: `ACTIVE`, `SUSPENDED`, `WITHDRAWAL_PENDING` |
 | `withdrawal_requested_at` | TIMESTAMPTZ | Y | 탈퇴 예약 시각 |
@@ -74,6 +79,10 @@ Post와 Project는 서로 다른 Feature와 테이블을 유지한다. 댓글과
 | `updated_at` | TIMESTAMPTZ | N | 수정 시각 |
 
 - CHECK로 `status = 'WITHDRAWAL_PENDING'`일 때 두 탈퇴 시각이 모두 존재하고, 그 외 상태에서는 두 값이 모두 NULL임을 보장한다. 탈퇴 예약 취소 시 시각을 NULL로 되돌린다. 탈퇴 유예 기간이 끝나면 `WITHDRAWN` tombstone을 남기지 않고 회원 및 종속 데이터를 물리 삭제한다.
+
+`V4__add_member_profile.sql`은 최초 설정 컬럼과 세 이름의 고유 제약을 추가한다. 기존 닉네임 중복은 created_at·id 순서의 첫 회원 값을 보존하고 나머지에 30자 이내 숫자 접미사를 부여한다. 기존 접미사 이름도 먼저 예약해 덮어쓰지 않으며 회원 ID·OAuth 연결은 유지한다. 기존 회원의 blog_name·handle·완료 시각은 NULL로 두어 다음 로그인에서 설정한다. 닉네임 변경 시각은 created_at으로 채우며 최초 설정 때 두 쿨타임을 새로 시작한다.
+
+handle은 영문으로 시작하는 3~30자 영문 소문자·숫자·하이픈이며 끝 하이픈 및 API 예약어를 CHECK로 막는다. profile_completed_at이 없으면 blog_name·handle·blog_name_changed_at은 모두 NULL이어야 하고, 완료되면 이름과 변경 시각이 있어야 한다. 최초 handle 확정 뒤 변경 또는 NULL 제거는 DB 트리거도 거부한다. 닉네임 기본값 할당과 직접 이름 설정은 PostgreSQL advisory transaction lock을 공유하고 고유 제약을 최종 방어로 사용한다. 쿨타임은 Redis TTL 대신 회원 변경 시각으로 계산하고 회원 행 배타 잠금 안에서 검증한다.
 
 ### 3.2 `member_oauth_identity`
 
