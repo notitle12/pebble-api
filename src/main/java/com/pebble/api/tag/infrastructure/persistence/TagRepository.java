@@ -8,4 +8,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface TagRepository extends JpaRepository<Tag, Long> {
 
     List<Tag> findByStatusOrderByDisplayOrderAscIdAsc(TagStatus status);
+    List<Tag> findAllByOrderByDisplayOrderAscIdAsc();
 }

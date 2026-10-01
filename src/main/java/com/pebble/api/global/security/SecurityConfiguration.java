@@ -37,10 +37,17 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/members/me").hasRole("USER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/members/me/profile").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/members/me/profile").hasRole("USER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts/search").denyAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/{postId:[0-9]+}",
+                                "/api/v1/blogs/{handle}/posts", "/api/v1/blogs/{handle}/posts/{postKey}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/members/{memberId:[0-9]+}/posts").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/posts").hasRole("USER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
                         .anyRequest().denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
                 .oauth2ResourceServer(resourceServer -> resourceServer
@@ -90,6 +97,17 @@ public class SecurityConfiguration {
         CorsConfiguration profileCors = new CorsConfiguration(cors);
         profileCors.setAllowedMethods(List.of("POST", "PATCH"));
         source.registerCorsConfiguration("/api/v1/members/me/profile", profileCors);
+        source.registerCorsConfiguration("/api/v1/members/me/posts", getCors);
+        source.registerCorsConfiguration("/api/v1/members/{memberId:[0-9]+}/posts", getCors);
+        CorsConfiguration postCollectionCors = new CorsConfiguration(cors);
+        postCollectionCors.setAllowedMethods(List.of("GET", "POST"));
+        source.registerCorsConfiguration("/api/v1/posts", postCollectionCors);
+        CorsConfiguration postDetailCors = new CorsConfiguration(cors);
+        postDetailCors.setAllowedMethods(List.of("GET", "PATCH", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}", postDetailCors);
+        source.registerCorsConfiguration("/api/v1/posts/search", new CorsConfiguration());
+        source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts", getCors);
+        source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts/{postKey}", getCors);
         return source;
     }
 }
