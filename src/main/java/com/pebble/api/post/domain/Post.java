@@ -35,6 +35,9 @@ public class Post {
     @JoinColumn(name = "category_id")
     private Category category;
 
+    @Column(name = "board_id")
+    private Long boardId;
+
     @Column(nullable = false, length = 200)
     private String title;
 
@@ -120,6 +123,11 @@ public class Post {
         deletedAt = Instant.now();
     }
 
+    public void changeBoard(Long boardId) {
+        ensureNotDeleted();
+        this.boardId = boardId;
+    }
+
     public void changeOrder(int displayOrder) {
         ensureNotDeleted();
         if (displayOrder < 0) throw new IllegalArgumentException("Display order must not be negative");
@@ -157,6 +165,7 @@ public class Post {
     public Long getId() { return id; }
     public Member getAuthor() { return author; }
     public Category getCategory() { return category; }
+    public Long getBoardId() { return boardId; }
     public String getTitle() { return title; }
     public String getSlug() { return slug; }
     public long getPostNumber() { return postNumber; }
