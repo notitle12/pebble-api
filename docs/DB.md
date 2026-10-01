@@ -141,7 +141,7 @@ handle은 영문으로 시작하는 3~30자 영문 소문자·숫자·하이픈�
 - 비활성 Category는 신규 지정에서 제외하고 선택 목록에서 숨긴다. 기존 Post 연결·표시는 유지하며, 공개 Post는 비활성 Category 기준 탐색 결과에도 계속 포함한다.
 - 참조 중인 Category를 물리 삭제하지 않는다.
 
-현재 저장 기반은 `V2__create_category_and_tag_tables.sql`이며 `V3__seed_initial_categories_and_tags.sql`이 주제 Category 5개와 기술 Tag 8개를 ACTIVE 상태로 초기 등록한다. 최대 깊이는 Category 생성 모델에서 2단계로 제한한다. 이후 관리자 이동·수정 기능에서도 최대 깊이와 순환을 검증해야 한다. Post의 최하위 판정은 비활성 하위도 포함한 저장 구조를 기준으로 하며, 참조 중인 최상위 Category에 하위를 추가할 때는 기존 Post의 최하위 분류 규칙을 함께 유지해야 한다.
+현재 저장 기반은 `V2__create_category_and_tag_tables.sql`이며 `V3__seed_initial_categories_and_tags.sql`이 주제 Category 5개와 기술 Tag 8개를 ACTIVE 상태로 초기 등록한다. 최대 깊이는 Category 생성 모델에서 2단계로 제한한다. 이후 관리자 이동·수정 기능에서도 최대 깊이와 순환을 검증해야 한다. Post의 최하위 판정은 비활성 하위도 포함한 저장 구조를 기준으로 하며, 참조 중인 최상위 Category에 하위를 추가할 때는 기존 Post의 최하위 분류 규칙을 함께 유지해야 한다. Post는 최하위 Category만 새로 지정할 수 있으며, 기존 연결이 비활성화되어도 공개 분류 조회에서 사용 중인 Post를 계속 탐색한다.
 
 ### 4.2 `tag`
 
@@ -169,6 +169,8 @@ Post 기술 태그와 Project 기술 스택에서 공유하는 관리자 관리 
 ### 5.1 `board`
 
 회원 소유의 개인 게시판 트리를 저장한다. 서비스 공통 Category와 별도 테이블로 관리한다.
+
+Board 테이블과 API는 후속 기능의 목표 스키마다. 현재 Flyway에는 Board 테이블이 없고, Post에도 `board_id`가 없다.
 
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
 |---|---|---:|---|
@@ -199,28 +201,36 @@ Post 기술 태그와 Project 기술 스택에서 공유하는 관리자 관리 
 |---|---|---:|---|
 | `id` | BIGINT | N | PK, TSID |
 | `author_member_id` | BIGINT | N | FK → `member.id` |
+| `post_number` | BIGINT | N | 작성자별 공개 주소 번호, 1부터 증가; 작성자와 복합 UNIQUE, 0보다 큼 |
 | `category_id` | BIGINT | Y | FK → `category.id`; 최하위 분류만 허용 |
-| `board_id` | BIGINT | Y | 복합 FK의 일부 → `board.id`; Board 소유자는 Post 작성자와 같아야 함 |
-| `project_id` | BIGINT | Y | 복합 FK의 일부 → `project.id`; NULL이면 단독 Post, 값이 있으면 작성자 본인의 Project 하나에 연결 |
 | `title` | VARCHAR(200) | N | 제목 |
+| `slug` | VARCHAR(200) | Y | 작성자 블로그 주소 키; 작성자와 복합 UNIQUE |
+| `display_order` | INTEGER | N | 작성자 미삭제 Post 목록 내 위치, 0 이상 |
 | `summary` | TEXT | Y | 목록/검색용 요약 또는 작성자 지정 설명; `CHECK (summary IS NULL OR char_length(summary) <= 500)` |
-| `thumbnail_key` | VARCHAR(512) | Y | WebP 썸네일의 외부 파일 저장소 키 |
 | `visibility_status` | VARCHAR(20) | N | CHECK: `PUBLIC`, `HIDDEN`, `DELETED` |
 | `is_blocked` | BOOLEAN | N | DEFAULT FALSE; 관리자 차단 여부. visibility_status와 독립 |
 | `blocked_at` | TIMESTAMPTZ | Y | 현재 차단을 설정한 시각 |
-| `blocked_by_admin_id` | BIGINT | Y | FK → admin_account.id; 현재 차단을 설정한 관리자 |
+| `blocked_by_admin_id` | BIGINT | Y | 현재 차단을 설정한 관리자 ID; 관리자 FK·운영 기능은 아직 미구현 |
 | `published_at` | TIMESTAMPTZ | Y | 최초 공개 시각 |
 | `deleted_at` | TIMESTAMPTZ | Y | `DELETED` 전환 시각 |
 | `created_at` | TIMESTAMPTZ | N | 생성 시각 |
 | `updated_at` | TIMESTAMPTZ | N | 수정 시각 |
 
-- 복합 FK (`board_id`, `author_member_id`) → `board(id`, `owner_member_id`)로 타인 게시판 배치를 차단한다.
-- 복합 FK (`project_id`, `author_member_id`) → `project(id`, `owner_member_id`)로 작성자 본인의 Project에만 연결되게 한다. 이를 위해 `project(id, owner_member_id)`에 UNIQUE 키를 둔다.
+- Post 테이블과 본문·Tag 연결은 V5에서 생성하고 V6에서 `slug`, `display_order`, `post_number`를 추가한다. 내부 `id`는 TSID이며 공개 번호와 별개다.
+- 생성은 작성자 Member 행을 잠근 뒤 해당 작성자의 기존 최대 post_number에 1을 더한다. 논리 삭제된 Post도 번호 할당 기준에 포함하므로 번호는 재사용하지 않는다. DB는 CHECK (`post_number > 0`)와 UNIQUE (`author_member_id`, `post_number`)를 적용한다.
+- `slug`는 null 또는 작성자별 고유 값이며 UNIQUE (`author_member_id`, `slug`)로 제한한다. 애플리케이션은 최대 200자의 소문자 영문·숫자·하이픈만 허용하고 숫자 전용 값과 `search`를 거부한다. 중복이면 `-2`, `-3` 접미사를 붙이며 논리 삭제 후에도 기존 slug를 예약한다.
+- `display_order`는 작성자의 DELETED가 아닌 Post 목록에서 0부터 시작한다. 생성 기본값은 0이며 이동 시 재정렬하고 논리 삭제 뒤 남은 항목을 압축한다. 복합 UNIQUE는 두지 않는다.
+- 생성은 Member 행을 잠가 slug 및 번호 할당을 직렬화한다. 수정·삭제는 프로필 상태를 확인한 뒤 Member 행과 대상 Post 행을 잠그고 소유권을 검증한다.
 - `category_id`가 설정되면 Category가 최하위인지 애플리케이션에서 검증한다.
+- 기존 Post가 사용 중인 비활성 Category 연결은 보존하고 공개 조회에서 계속 포함한다. 부모 Category 조회는 해당 하위 Category의 공개 Post를 포함한다.
 - CHECK 제약으로 is_blocked = TRUE이면 blocked_at과 blocked_by_admin_id가 모두 존재하고, FALSE이면 둘 다 NULL이 되도록 한다. 차단 해제 시 현재 차단 메타데이터를 비운다.
-- 공개 조회와 검색은 visibility_status = PUBLIC AND is_blocked = FALSE인 Post만 대상으로 한다.
-- is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER의 차단·차단 해제 유스케이스만 변경한다.
+- 공개 조회는 visibility_status = PUBLIC AND is_blocked = FALSE인 Post만 대상으로 한다. Post 검색은 미구현이다.
+- is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER 차단·차단 해제 기능은 미구현이다.
 - Post 본문과 코드 블록은 `post_block`에 순서대로 저장한다.
+- Board·Project 참조 FK와 썸네일 키는 현재 Post 테이블에 없다. API는 해당 필드 non-null 입력을 거부하고 응답에서 null을 반환한다. Board·Project·미디어 저장 연결은 후속 범위다.
+- 후속 Board 연결은 복합 FK (`board_id`, `author_member_id`) → `board(id, owner_member_id)`로 타인 게시판 배치를 차단한다. Project 연결도 복합 FK (`project_id`, `author_member_id`) → `project(id, owner_member_id)`로 본인 Project에만 연결하며 대상 테이블에 복합 UNIQUE를 둔다. 관리자 계정 구현 시 `blocked_by_admin_id`의 실제 FK도 추가한다.
+- Post 쓰기와 순서 변경은 ACTIVE이며 프로필 설정을 완료한 작성자만 수행한다.
+- 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. 단일 Post 물리 삭제 API는 없으며, 물리 파기 시 post_block·post_tag의 Post FK CASCADE에 따라 하위 행도 함께 정리된다. 계정 탈퇴에 따른 Post 물리 파기와 이 시점의 주소 예약 정리는 계정 데이터 보존·파기 절차에서 다룬다.
 
 ### 6.2 `post_block`
 
@@ -261,6 +271,8 @@ Post와 기술 Tag의 다대다 연결 테이블이다.
 
 한 명의 회원이 소유하는 개인 포트폴리오 Project 콘텐츠를 저장한다.
 
+Project 스키마는 후속 기능의 목표다. 현재 Flyway에는 Project 테이블이 없으며 Post와 Project를 연결하는 FK도 없다.
+
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
 |---|---|---:|---|
 | `id` | BIGINT | N | PK, TSID |
@@ -282,7 +294,7 @@ Post와 기술 Tag의 다대다 연결 테이블이다.
 | `created_at` | TIMESTAMPTZ | N | 생성 시각 |
 | `updated_at` | TIMESTAMPTZ | N | 수정 시각 |
 
-- UNIQUE (`id`, `owner_member_id`)는 Post와의 선택적 동일 작성자 연결을 위한 복합 FK에서 사용한다.
+- UNIQUE (`id`, `owner_member_id`)는 향후 Post와의 선택적 동일 작성자 연결을 위한 복합 FK에서 사용한다.
 - Project의 진행 상태와 공개 상태는 서로 다른 값이며 하나의 상태 컬럼으로 합치지 않는다.
 - CHECK 제약으로 is_blocked = TRUE이면 blocked_at과 blocked_by_admin_id가 모두 존재하고, FALSE이면 둘 다 NULL이 되도록 한다. 차단 해제 시 현재 차단 메타데이터를 비운다.
 - 공개 조회와 검색은 visibility_status = PUBLIC AND is_blocked = FALSE인 Project만 대상으로 한다.

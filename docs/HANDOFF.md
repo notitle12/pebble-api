@@ -1,9 +1,10 @@
 # 다음 작업 인계
 
 - 기준 브랜치: dev. AGENTS.md와 작업에 필요한 문서 절만 확인한다.
-- 이슈 #26: Naver 별명 기반 기본 닉네임 중복에 숫자 접미사를 부여하고 회원 최초 블로그명·고정 handle 설정 및 표시 이름의 독립적인 7일 쿨타임을 구현한다. POST/PATCH `/api/v1/members/me/profile`, 기존 me/로그인 응답의 profileCompleted를 사용한다. 블로그명·닉네임·handle은 각각 고유하며 Naver 식별자는 주소에 쓰지 않는다. 기존 중복 닉네임 마이그레이션은 최초 값을 보존한다. 후속 Post #25는 프로필 완료를 확인하고 작성자 handle별 slug 자동 접미사 및 1부터 증가하는 불변 글 번호를 연결한다. Post 작업은 로컬 `codex/feature/25-post-crud`의 `23eb35b`에 보존되어 있고 아직 병합하지 않았다. Member V4 이후 Post 마이그레이션 번호를 조정해야 한다.
-- 이슈 #23: Category·Tag 모델·Flyway 저장 기반과 Guest GET `/api/v1/categories`·`/api/v1/tags`를 구현한다. Category는 주제·최대 2단계, 언어·프레임워크는 Tag다. 상위 주제 5개·기술 Tag 8개를 초기 등록하며 활성 하위의 비활성 상위는 INACTIVE 그룹으로 보존한다. 관리자 편집·Post/Project 참조는 후속 범위다. 콘텐츠 구현 시 사용 중인 비활성 분류의 공개 탐색과 저장 구조 기준의 최하위 선택 검증을 반드시 연결한다.
-- 이슈 #21: `GET /api/v1/members/me`로 JWT 주체의 본인 계정 정보를 조회한다. member Application이 DB 존재 여부와 ACTIVE 상태를 확인하고, 허용 Origin의 GET·Authorization preflight를 지원한다. 회원 수정·탈퇴와 분류·Post 기능은 후속 범위다.
+- 완료 이슈 #26: Naver 별명 기반 기본 닉네임 접미사, 회원 최초 블로그명·고정 handle 설정, 표시 이름별 7일 쿨타임 및 `profileCompleted` 응답을 구현했다. Member V4는 PR #27로 병합되었고 137개 테스트 통과를 확인했다. 블로그명·닉네임·handle은 각각 고유하며 Naver 식별자는 공개 주소에 쓰지 않는다.
+- 이슈 #25: Post CRUD·공개/본인 목록·분류 연결·본문 교체·작성자별 순서 이동을 구현했다. Post 쓰기는 ACTIVE이며 프로필 설정을 마친 USER만 가능하다. 공개 주소는 `/api/v1/blogs/{handle}/posts/{postKey}`이며 postKey는 작성자별 번호 또는 slug다. 번호는 1부터 증가하고 논리 삭제 뒤 재사용하지 않는다. slug는 작성자별로 고유하며 중복 시 `-2`, `-3`을 붙이고 논리 삭제 뒤에도 예약한다. 본인 블로그 기본 정렬은 displayOrder 오름차순, 전체 공개 목록은 publishedAt 내림차순이다. 저장 migration은 V5 기본 Post 테이블, V6 slug·order·post_number다. `./gradlew clean test bootJar` 로컬 테스트 182개와 배포 JAR 빌드가 통과했고 실패·오류·건너뜀은 0개다. 상위 Category 필터의 하위 포함과 긴 slug 중복 접미사의 하이픈도 검증했다. CI·dev 통합 결과는 이슈에 연결된 PR 기록을 확인한다. Board·Project·미디어·좋아요·검색·관리자 Post 운영은 후속 범위다. 실제 .env·개인 YAML·기존 로그인 DB는 읽거나 변경하지 않는다.
+- 이슈 #23: Category·Tag 모델·Flyway 저장 기반과 Guest GET `/api/v1/categories`·`/api/v1/tags`를 구현했다. Category는 주제·최대 2단계, 언어·프레임워크는 Tag다. 상위 주제 5개·기술 Tag 8개를 초기 등록하며 활성 하위의 비활성 상위는 INACTIVE 그룹으로 보존한다. Post는 최하위 Category와 Tag를 참조하고, 사용 중인 비활성 분류는 공개 탐색에서 계속 확인할 수 있다. 관리자 편집과 Project 참조는 후속 범위다.
+- 이슈 #21: `GET /api/v1/members/me`로 JWT 주체의 본인 계정 정보를 조회한다. member Application이 DB 존재 여부와 ACTIVE 상태를 확인하고, 허용 Origin의 GET·Authorization preflight를 지원한다. 후속 프로필 설정은 #26, 분류는 #23, Post는 #25 항목의 현재 상태를 따른다.
 - 완료: 회원·Naver 식별자 저장, Naver 로그인, RS256 Access JWT·Redis 초기 Refresh 세션 발급.
 - 이슈 #15: 가이드라인 복원, 공통 오류 규격, JWT 필수 claim 검증, DTO·생성자 정비.
 - 이슈 #17: 일반 회원 Refresh 회전·재사용 탐지·로그아웃, 필수 Origin 방어, pepper 버전·기존 세션 호환 구현. 단일 Redis Lua로 처리하며 동시 요청·응답 유실 재시도는 Family 폐기 후 재로그인한다.
