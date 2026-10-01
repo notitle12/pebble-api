@@ -41,7 +41,7 @@ JSON 본문을 반환하는 성공 응답은 data 래퍼를 사용한다.
 - 조회와 수정은 200 OK를 반환한다.
 - 일반 삭제와 성공한 로그아웃은 204 No Content를 반환하며 본문은 없다. 회원 탈퇴 예약은 취소 가능 기간과 삭제 예정 시각을 안내하기 위해 202 Accepted와 data 본문을 반환한다.
 - OAuth 공급자 인증 코드 처리 응답 본문에는 Access Token을 반환하고 Refresh Token은 HttpOnly Cookie로 설정한다.
-- 외부 OAuth 인증 시작은 클라이언트가 Naver 인증 화면으로 이동한다. 등록된 callback에서 받은 authorization code를 로그인 API에 전달한다.
+- 외부 OAuth 인증 시작은 서버에서 발급받은 URL로 클라이언트가 이동한다. 등록된 callback에서 받은 authorization code와 state를 로그인 API에 전달한다.
 
 ### 2.3 오류 응답
 
@@ -80,6 +80,7 @@ JSON 본문을 반환하는 성공 응답은 data 래퍼를 사용한다.
 | 415 | 허용되지 않는 요청 미디어 형식 |
 | 429 | 보안 정책의 요청 제한을 초과함 |
 | 500 | 예기치 않은 서버 오류 |
+| 502 | 외부 인증 공급자가 요청을 처리하지 못함 |
 
 대표 오류 code:
 
@@ -89,6 +90,7 @@ JSON 본문을 반환하는 성공 응답은 data 래퍼를 사용한다.
 | INVALID_REQUEST | 400 | 요청 본문 또는 조합이 잘못됨 |
 | AUTHENTICATION_REQUIRED | 401 | 로그인 필요 |
 | INVALID_CREDENTIALS | 401 | 로그인 정보가 유효하지 않음 |
+| INVALID_OAUTH_STATE | 401 | OAuth 로그인 state가 누락·만료·불일치함 |
 | INVALID_TOKEN | 401 | 토큰이 유효하지 않거나 만료됨 |
 | ACCOUNT_SUSPENDED | 403 | 정지된 USER 계정 |
 | ACCOUNT_WITHDRAWAL_PENDING | 403 | 탈퇴 대기 중인 USER 계정 |
@@ -107,6 +109,7 @@ JSON 본문을 반환하는 성공 응답은 data 래퍼를 사용한다.
 | MEDIA_TOO_LARGE | 413 | 미디어 크기 또는 픽셀 한도 초과 |
 | UNSUPPORTED_MEDIA_TYPE | 415 | 지원하지 않는 실제 이미지 형식 |
 | RATE_LIMITED | 429 | 요청 제한 초과 |
+| OAUTH_PROVIDER_UNAVAILABLE | 502 | OAuth 공급자 오류 또는 응답 오류 |
 
 비공개, 차단 또는 삭제된 콘텐츠의 존재 여부를 일반 사용자에게 노출하지 않는다. 권한이 없는 사용자의 리소스 조회는 403 대신 404를 반환한다.
 
@@ -200,7 +203,8 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 
 | Method | Path | 접근 | 설명 |
 |---|---|---|---|
-| POST | /api/v1/auth/naver/login | Guest | Naver authorization code로 USER 로그인·가입 |
+| POST | /api/v1/auth/naver/authorization | Guest | Naver 로그인 URL과 일회용 state 발급 |
+| POST | /api/v1/auth/naver/login | Guest | Naver authorization code와 state로 USER 로그인·가입 |
 | POST | /api/v1/auth/naver/withdrawal/cancel | Guest | Naver 재인증으로 7일 이내 탈퇴 예약 취소 |
 | POST | /api/v1/auth/token/refresh | Refresh Cookie | USER Access Token 갱신 및 Refresh Cookie 회전 |
 | POST | /api/v1/auth/logout | Refresh Cookie | USER Refresh Token 세션 폐기 및 쿠키 삭제 |
@@ -320,13 +324,22 @@ MVP에는 관리자의 콘텐츠 작성자 변경, DELETED 콘텐츠 복원, 신
 
 ### 6.1 USER 인증
 
+Naver 로그인 시작 요청은 본문 없이 `POST /api/v1/auth/naver/authorization`을 호출한다. 응답은 `authorizationUrl`을 반환하고, 서버는 5분 유효한 일회용 `naver_oauth_state` HttpOnly 쿠키를 설정한다. 클라이언트는 URL로 이동한 뒤 callback에서 받은 code와 state를 로그인 요청에 보낸다.
+
+로그인 시작과 로그인 요청 모두 브라우저 쿠키를 포함해야 한다. 같은 사이트 내에서 출처가 다른 프런트엔드를 사용하는 경우 `credentials: include`로 요청하고, API의 허용 CORS Origin을 정확히 설정한다.
+
 Naver 로그인 요청:
 
 ~~~json
 {
-  "authorizationCode": "Naver에서 반환된 일회용 인증 코드"
+  "authorizationCode": "Naver에서 반환된 일회용 인증 코드",
+  "state": "Naver에서 반환된 일회용 state 값"
 }
 ~~~
+
+서버는 요청의 state, `naver_oauth_state` 쿠키, Redis에 보관된 일회용 state를 대조하고 성공적으로 확인한 state를 한 번만 소비한다. 검증 실패 시 Naver token API를 호출하지 않는다.
+
+최초 가입 시 Naver 닉네임과 프로필 이미지로 회원을 초기화한다. 선택 정보인 닉네임이 없으면 `pebble`을 기본값으로 사용하고, 프로필 이미지가 없으면 NULL로 저장한다. 재로그인에서는 저장된 회원 프로필을 유지한다.
 
 성공 응답 data:
 
@@ -373,7 +386,7 @@ Naver 로그인 요청:
 
 `DELETE /members/me`는 Refresh Token Family를 즉시 폐기하고 Refresh Cookie를 만료시킨 뒤 회원을 `WITHDRAWAL_PENDING`으로 전환한다. 응답은 202이며 `withdrawalScheduledAt`에 삭제 예정 시각을 반환한다. 탈퇴 예약 뒤에는 기존 Access JWT의 만료 여부와 관계없이 보호된 USER 요청을 거부하고 회원의 콘텐츠·댓글·좋아요·미디어를 일반 사용자에게 숨긴다. Naver authorization code를 다시 검증하는 `POST /auth/naver/withdrawal/cancel`로 예약 후 7일 이내 취소할 수 있다. 취소는 계정을 ACTIVE로 돌리고 탈퇴 기간에 발급된 세션은 복구하지 않으므로 회원은 다시 로그인한다. 예약 시각에 도달하면 취소할 수 없으며 회원 레코드, OAuth 연결, 사용자 콘텐츠와 저장 미디어를 운영 데이터베이스 및 R2에서 물리 삭제한다. 법령상 보관하는 관리자 접속기록은 회원 콘텐츠와 분리해 SECURITY.md 정책에 따라 보관한다.
 
-일반 Naver 로그인 시 탈퇴 대기 회원이 확인되면 `WITHDRAWAL_PENDING` 오류를 반환하며, 로그인으로 탈퇴 예약을 자동 취소하지 않는다. 취소 endpoint 요청은 `{authorizationCode}`를 받는다. 성공 응답은 200과 `{ "data": { "status": "ACTIVE" } }`를 반환하며 토큰을 발급하지 않는다.
+일반 Naver 로그인 시 탈퇴 대기 회원이 확인되면 `WITHDRAWAL_PENDING` 오류를 반환하며, 로그인으로 탈퇴 예약을 자동 취소하지 않는다. 취소 endpoint 요청은 `{authorizationCode, state}`를 받으며 로그인과 같은 일회용 state를 검증한다. 성공 응답은 200과 `{ "data": { "status": "ACTIVE" } }`를 반환하며 토큰을 발급하지 않는다.
 
 ### 6.3 Post
 
