@@ -37,7 +37,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts").hasRole("USER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/members/me/profile").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/members/me/profile").hasRole("USER")
@@ -45,6 +45,11 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/{postId:[0-9]+}",
                                 "/api/v1/blogs/{handle}/posts", "/api/v1/blogs/{handle}/posts/{postKey}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/{memberId:[0-9]+}/posts").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/members/{memberId:[0-9]+}/boards",
+                                "/api/v1/members/{memberId:[0-9]+}/boards/{boardId:[0-9]+}/posts").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/boards").hasRole("USER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/posts").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
@@ -108,6 +113,15 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/posts/search", getCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts", getCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts/{postKey}", getCors);
+        source.registerCorsConfiguration("/api/v1/members/me/boards", getCors);
+        source.registerCorsConfiguration("/api/v1/members/{memberId:[0-9]+}/boards", getCors);
+        source.registerCorsConfiguration("/api/v1/members/{memberId:[0-9]+}/boards/{boardId:[0-9]+}/posts", getCors);
+        CorsConfiguration boardCollectionCors = new CorsConfiguration(cors);
+        boardCollectionCors.setAllowedMethods(List.of("POST"));
+        source.registerCorsConfiguration("/api/v1/boards", boardCollectionCors);
+        CorsConfiguration boardDetailCors = new CorsConfiguration(cors);
+        boardDetailCors.setAllowedMethods(List.of("PATCH", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/boards/{boardId:[0-9]+}", boardDetailCors);
         return source;
     }
 }

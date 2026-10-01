@@ -108,6 +108,14 @@ public class PostController {
                 pageable(query, "displayOrder"))));
     }
 
+    @GetMapping("/api/v1/members/{memberId:[0-9]+}/boards/{boardId:[0-9]+}/posts")
+    public ApiResponse<PostPage> board(@PathVariable String memberId, @PathVariable String boardId,
+                                      @RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size", "sort"));
+        return ApiResponse.of(PostPage.from(posts.listBoard(PostWriteRequest.id(memberId, "memberId"),
+                PostWriteRequest.id(boardId, "boardId"), pageable(query, "displayOrder"))));
+    }
+
     private long memberId(Jwt jwt) {
         return Long.parseLong(jwt.getSubject().substring("member:".length()));
     }
