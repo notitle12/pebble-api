@@ -1,6 +1,7 @@
 # 다음 작업 인계
 
 - 기준 브랜치: dev. AGENTS.md와 작업에 필요한 문서 절만 확인한다.
+- 이슈 #26: Naver 별명 기반 기본 닉네임 중복에 숫자 접미사를 부여하고 회원 최초 블로그명·고정 handle 설정 및 표시 이름의 독립적인 7일 쿨타임을 구현한다. POST/PATCH `/api/v1/members/me/profile`, 기존 me/로그인 응답의 profileCompleted를 사용한다. 블로그명·닉네임·handle은 각각 고유하며 Naver 식별자는 주소에 쓰지 않는다. 기존 중복 닉네임 마이그레이션은 최초 값을 보존한다. 후속 Post #25는 프로필 완료를 확인하고 작성자 handle별 slug 자동 접미사 및 1부터 증가하는 불변 글 번호를 연결한다. Post 작업은 로컬 `feature/25-post-crud`의 `23eb35b`에 보존되어 있고 아직 병합하지 않았다. Member V4 이후 Post 마이그레이션 번호를 조정해야 한다.
 - 이슈 #23: Category·Tag 모델·Flyway 저장 기반과 Guest GET `/api/v1/categories`·`/api/v1/tags`를 구현한다. Category는 주제·최대 2단계, 언어·프레임워크는 Tag다. 상위 주제 5개·기술 Tag 8개를 초기 등록하며 활성 하위의 비활성 상위는 INACTIVE 그룹으로 보존한다. 관리자 편집·Post/Project 참조는 후속 범위다. 콘텐츠 구현 시 사용 중인 비활성 분류의 공개 탐색과 저장 구조 기준의 최하위 선택 검증을 반드시 연결한다.
 - 이슈 #21: `GET /api/v1/members/me`로 JWT 주체의 본인 계정 정보를 조회한다. member Application이 DB 존재 여부와 ACTIVE 상태를 확인하고, 허용 Origin의 GET·Authorization preflight를 지원한다. 회원 수정·탈퇴와 분류·Post 기능은 후속 범위다.
 - 완료: 회원·Naver 식별자 저장, Naver 로그인, RS256 Access JWT·Redis 초기 Refresh 세션 발급.

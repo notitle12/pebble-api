@@ -82,7 +82,7 @@ public class NaverAuthController {
                 member.getNickname(),
                 member.getProfileImageUrl(),
                 member.getStatus().name(),
-                "USER");
+                "USER", member.getBlogName(), member.getHandle(), member.isProfileCompleted());
     }
 
     public record AuthorizationResponse(String authorizationUrl) {
