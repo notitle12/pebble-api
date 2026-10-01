@@ -19,6 +19,7 @@ import com.pebble.api.post.infrastructure.persistence.PostBlockRepository;
 import com.pebble.api.post.infrastructure.persistence.PostTagRepository;
 import com.pebble.api.tag.application.TagQueryService;
 import com.pebble.api.tag.domain.Tag;
+import com.pebble.api.project.application.ProjectQueryService;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.JoinType;
 import java.util.ArrayList;
@@ -46,11 +47,13 @@ public class PostService {
     private final CategoryQueryService categories;
     private final TagQueryService tags;
     private final BoardQueryService boards;
+    private final ProjectQueryService projects;
 
     @Transactional
     public PostView create(long memberId, PostChanges input) {
         Member author = members.findProfileCompletedForWrite(memberId);
         if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);
+        if (input.projectId() != null) projects.resolveForPost(input.projectId(), memberId);
         Category category = input.categoryId() == null ? null : categories.resolveForPost(input.categoryId(), null);
         List<Tag> selected = tags.resolveForPost(input.tagIds(), Set.of());
         List<Post> ordered = posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, PostVisibility.DELETED);
@@ -61,6 +64,7 @@ public class PostService {
         String slug = allocateSlug(memberId, input.slug());
         Post post = posts.saveAndFlush(new Post(author, category, input.title(), input.summary(), input.visibilityStatus(), slug, lastNumber + 1));
         post.changeBoard(input.boardId());
+        post.changeProject(input.projectId());
         ordered.add(position, post);
         applyOrder(ordered);
         replaceBlocks(post, input.blocks());
@@ -109,6 +113,10 @@ public class PostService {
         if (input.has("boardId")) {
             if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);
             post.changeBoard(input.boardId());
+        }
+        if (input.has("projectId")) {
+            if (input.projectId() != null) projects.resolveForPost(input.projectId(), memberId);
+            post.changeProject(input.projectId());
         }
         Category category = post.getCategory();
         if (input.has("categoryId")) {
@@ -174,6 +182,12 @@ public class PostService {
     public Page<PostView> listBoard(long ownerId, long boardId, Pageable pageable) {
         boards.requirePublic(ownerId, boardId);
         return page(posts.findAll(publicFilter(null, null, ownerId, boardId), pageable), false);
+    }
+
+    public Page<PostView> listProject(long projectId, Pageable pageable) {
+        long ownerId = projects.requirePublic(projectId);
+        Specification<Post> placement = (root, query, cb) -> cb.equal(root.get("projectId"), projectId);
+        return page(posts.findAll(publicFilter(null, null, ownerId, null).and(placement), pageable), false);
     }
 
     private Specification<Post> publicFilter(Long categoryId, Long tagId, Long authorId, Long boardId) {

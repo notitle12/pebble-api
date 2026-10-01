@@ -202,6 +202,7 @@ Board 테이블과 Post의 `board_id`는 V7에서 생성한다. Board는 회원�
 | `id` | BIGINT | N | PK, TSID |
 | `author_member_id` | BIGINT | N | FK → `member.id` |
 | `board_id` | BIGINT | Y | 복합 FK의 일부 → 같은 작성자 소유 `board.id` |
+| `project_id` | BIGINT | Y | 복합 FK의 일부 → 같은 작성자 소유 `project.id` |
 | `post_number` | BIGINT | N | 작성자별 공개 주소 번호, 1부터 증가; 작성자와 복합 UNIQUE, 0보다 큼 |
 | `category_id` | BIGINT | Y | FK → `category.id`; 최하위 분류만 허용 |
 | `title` | VARCHAR(200) | N | 제목 |
@@ -228,7 +229,7 @@ Board 테이블과 Post의 `board_id`는 V7에서 생성한다. Board는 회원�
 - 공개 조회는 visibility_status = PUBLIC AND is_blocked = FALSE인 Post만 대상으로 한다. Post 검색은 제목·본문 블록·Category와 상위 Category·Tag 이름의 기본 부분 문자열 검색을 제공한다. 본문과 Tag는 EXISTS로 검색해 일치 항목 수에 따라 글이나 집계가 중복되지 않으며 공개 조건과 검색을 적용한 뒤 페이징한다. 별도 검색 테이블·인덱스·migration은 추가하지 않는다. 데이터가 늘어나면 쿼리 비용을 측정해 검색 인덱스 필요성을 검토한다.
 - is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER 차단·차단 해제 기능은 미구현이다.
 - Post 본문과 코드 블록은 `post_block`에 순서대로 저장한다.
-- Board 연결은 V7에서 복합 FK (`board_id`, `author_member_id`) → `board(id, owner_member_id)`를 적용해 타인 게시판 배치를 차단한다. 공개 게시판 목록은 board_id와 작성자 상태를 기준으로 직접 연결된 공개 Post를 조회한다. Project 참조 FK와 썸네일 키는 아직 없다. Project 연결도 복합 FK로 본인 Project만 참조할 계획이며 대상 테이블에 복합 UNIQUE를 둔다. 관리자 계정 구현 시 `blocked_by_admin_id`의 실제 FK도 추가한다.
+- Board 연결은 V7에서 복합 FK (`board_id`, `author_member_id`) → `board(id, owner_member_id)`를 적용해 타인 게시판 배치를 차단한다. 공개 게시판 목록은 board_id와 작성자 상태를 기준으로 직접 연결된 공개 Post를 조회한다. V9는 (`project_id`, `author_member_id`) → `project(id, owner_member_id)` 복합 FK와 공개 관련 글·소유자 연결 해제 인덱스를 추가한다. 썸네일 키는 아직 없다. 관리자 계정 구현 시 `blocked_by_admin_id`의 실제 FK도 추가한다.
 - Post 쓰기와 순서 변경은 ACTIVE이며 프로필 설정을 완료한 작성자만 수행한다.
 - 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. 단일 Post 물리 삭제 API는 없으며, 물리 파기 시 post_block·post_tag의 Post FK CASCADE에 따라 하위 행도 함께 정리된다. 계정 탈퇴에 따른 Post 물리 파기와 이 시점의 주소 예약 정리는 계정 데이터 보존·파기 절차에서 다룬다.
 
@@ -271,7 +272,7 @@ Post와 기술 Tag의 다대다 연결 테이블이다.
 
 한 명의 회원이 소유하는 개인 포트폴리오 Project 콘텐츠를 저장한다.
 
-Project와 주요 기능·Tag·외부 링크 스키마는 V8에서 생성한다. Post와 Project를 연결하는 FK와 Project 미디어 테이블은 아직 없다.
+Project와 주요 기능·Tag·외부 링크 스키마는 V8에서 생성하고 Post 연결은 V9에서 추가한다. Project 미디어 테이블은 아직 없다.
 
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
 |---|---|---:|---|
@@ -300,7 +301,7 @@ Project와 주요 기능·Tag·외부 링크 스키마는 V8에서 생성한다.
 - 공개 조회와 검색은 visibility_status = PUBLIC AND is_blocked = FALSE인 Project만 대상으로 한다.
 - is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER의 차단·차단 해제 유스케이스만 변경한다.
 - Project 생성·수정·삭제는 프로필을 완료한 ACTIVE 소유자의 Member 행을 먼저 잠그고, 수정·삭제는 대상 Project 행도 잠근다. Tag·주요 기능·링크 전체 교체는 Project 변경과 같은 트랜잭션에서 처리한다.
-- 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. DELETED Project는 일반 조회와 작성자 조회에서 제외하며 복원하지 않는다.
+- 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. DELETED Project는 일반 조회와 작성자 조회에서 제외하며 복원하지 않는다. Member → Project 잠금 안에서 Post Application 계약으로 모든 연결 Post의 project_id를 null로 만들며, 글 본문·공개 상태는 보존한다. Post 생성·연결 변경도 같은 Member 잠금을 사용해 삭제된 Project 참조를 방지한다.
 - blocked_by_admin_id의 관리자 FK는 관리자 계정 기능에서 추가한다.
 - V8은 공개 최초 발행 시각·ID 정렬, 소유자 생성 시각, Tag 역방향 탐색 인덱스를 추가한다. 공개 판정은 WITHDRAWAL_PENDING 소유자의 Project도 제외한다.
 

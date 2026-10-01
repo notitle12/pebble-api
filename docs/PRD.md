@@ -206,7 +206,7 @@ USER는 자신의 Post를 관리할 수 있다.
 
 현재 Post API는 프로필 설정을 마친 ACTIVE 회원의 작성·수정·논리 삭제를 제공한다. 블로그 주소는 고정된 공개 handle과 선택 입력한 Post slug로 구성하며, slug가 없으면 작성자별 1부터 증가하는 글 번호를 사용한다. slug는 영문 소문자·숫자·단어 사이 하이픈만 허용하고 한글은 받지 않는다. 같은 작성자의 중복 입력에는 숫자 접미사를 붙인다. 생성 후 slug와 글 번호는 변경하지 않으며 논리 삭제 뒤에도 재사용하지 않는다. 본인 블로그의 미삭제 Post는 0부터 시작하는 수동 순서로 보고, 전체 공개 목록은 최초 공개 시각 내림차순으로 본다.
 
-개인 Board 관리와 Post Board 지정 및 공개 Post 기본 문자열 검색을 제공한다. Project는 기본 CRUD와 공개 목록·상세, 기술 Tag·주요 기능·외부 링크 관리를 제공한다. Post-Project 연결, Project 검색, 썸네일·미디어, 좋아요 및 관리자 콘텐츠 운영은 후속 기능이다. Post의 projectId·thumbnailUrl은 현재 null, likeCount는 0, likedByMe는 false다.
+개인 Board 관리와 Post Board·Project 지정 및 공개 Post 기본 문자열 검색을 제공한다. Project는 기본 CRUD와 공개 목록·상세·검색, 회원별 공개·본인 목록, 기술 Tag·주요 기능·외부 링크 관리를 제공한다. Project 삭제 시 연결 글은 보존하고 연결만 해제한다. 썸네일·미디어, 좋아요 및 관리자 콘텐츠 운영은 후속 기능이다. Post의 projectId는 연결 ID 또는 null이며 thumbnailUrl은 현재 null, likeCount는 0, likedByMe는 false다.
 
 향후 Post 썸네일과 Project 이미지·스크린샷은 정적 JPEG(.jpg, .jpeg), PNG, WebP 입력만 허용한다. 제공될 때 서버는 실제 파일 형식과 크기를 검증한 뒤 긴 변 2,560 px 화면 표시 이미지와 480 px 썸네일로 축소하고 WebP lossy quality 82로 변환한다. 입력은 최대 10 MiB, 20,000,000 픽셀, 가로·세로 각각 8,000 px로 제한한다. EXIF 등 불필요한 메타데이터를 제거하고 WebP 파생본만 저장하며 원본은 보관하지 않는다. 작은 글자나 얇은 선이 많은 PNG는 변환 후 경계가 다소 부드러워지거나 압축 흔적이 보일 수 있다. 비공개 R2 이미지 URL은 권한 확인 후 15분간 유효하다. Post 썸네일 API는 아직 제공하지 않으며 상세 계약은 `API.md`를 따른다.
 

@@ -238,7 +238,7 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 (후속, 미구현) |
 | DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 (후속, 미구현) |
 
-Board 관리와 Post의 Board 지정 및 공개 Post 검색은 구현되어 있다. Project 연결, 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았으며 위 썸네일 행은 후속 계획 계약을 보존한다.
+Board 관리와 Post의 Board·Project 지정 및 공개 Post 검색은 구현되어 있다. 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았으며 위 썸네일 행은 후속 계획 계약을 보존한다.
 
 ### 5.3 Project
 
@@ -246,6 +246,7 @@ Board 관리와 Post의 Board 지정 및 공개 Post 검색은 구현되어 있�
 |---|---|---|---|
 | GET | /api/v1/projects | Guest | 공개 Project 목록 |
 | GET | /api/v1/projects/search | Guest | 공개 Project 검색 |
+| GET | /api/v1/projects/{projectId}/posts | Guest | 공개 Project에 직접 연결된 공개 Post 목록 |
 | GET | /api/v1/projects/{projectId} | Guest, 작성자, MANAGER, MASTER | 공개 Project 또는 권한 있는 상세 조회 |
 | POST | /api/v1/projects | ACTIVE, 프로필 완료 USER | Project 생성 |
 | PATCH | /api/v1/projects/{projectId} | ACTIVE, 프로필 완료 작성자 | 본인 Project 수정 |
@@ -254,7 +255,7 @@ Board 관리와 Post의 Board 지정 및 공개 Post 검색은 구현되어 있�
 | PATCH | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | 미디어 설명·순서 수정 |
 | DELETE | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | Project 미디어 제거 |
 
-Project 기본 CRUD와 공개 목록·상세는 제공한다. 검색·미디어 API는 후속 기능이며 해당 표 행은 계획된 계약을 보존한다.
+Project 기본 CRUD·공개 목록·상세·검색, 회원별 공개 목록과 본인 목록, Post 연결을 제공한다. 미디어 API는 후속 기능이며 해당 표 행은 계획된 계약을 보존한다.
 
 ### 5.4 Board
 
@@ -464,7 +465,7 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 - 시스템은 작성자별 `postNumber`를 1부터 증가시키며 논리 삭제 뒤에도 재사용하지 않는다. 내부 `id`는 TSID다.
 - `categoryId`는 null 또는 최하위 Category 하나다. 신규 연결은 ACTIVE Category만 허용한다. 기존 Post가 사용 중인 뒤 비활성화된 Category는 공개 조회와 분류 탐색에서 계속 연결 결과를 제공한다. 부모 Category 조회는 해당 하위 Category의 공개 Post를 포함한다.
 - tagIds는 중복 없는 ID 배열이며 신규 연결은 ACTIVE Tag만 허용한다.
-- `boardId`는 본인 소유의 미삭제 Board ID 문자열 또는 null이다. 생성 시 생략하면 미분류, PATCH 시 생략하면 기존 연결을 유지하고 null은 연결을 해제한다. 타인 소유·삭제·존재하지 않는 Board는 404다. `projectId`는 생략 또는 null만 허용하며 non-null 값은 후속 기능이므로 400이다.
+- `boardId`는 본인 소유의 미삭제 Board ID 문자열 또는 null이다. 생성 시 생략하면 미분류, PATCH 시 생략하면 기존 연결을 유지하고 null은 연결을 해제한다. 타인 소유·삭제·존재하지 않는 Board는 404다. `projectId`도 같은 생략·null 규칙을 따르는 본인 소유의 미삭제 Project ID 문자열이다. HIDDEN·차단 Project에도 연결할 수 있으며 타인 소유·삭제·존재하지 않는 Project는 404다. Project 공개 상태는 Post 공개 상태를 바꾸지 않고 응답에는 연결 ID만 제공한다.
 - visibilityStatus는 PUBLIC 또는 HIDDEN이다. DELETED는 DELETE 동작으로만 설정한다.
 - isBlocked, blockedAt, blockedByAdminId는 응답 전용이며 요청에 포함하면 400이다.
 - 생성 시 title, blocks, visibilityStatus는 필수다. PATCH에서 blocks와 tagIds는 전체 교체이며, categoryId, boardId, summary는 null로 지정해 값·연결을 제거할 수 있다.
@@ -517,7 +518,7 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
 
 `urlKey`는 slug가 있으면 slug, 없으면 `postNumber` 문자열이다. `GET /api/v1/blogs/{handle}/posts/{postKey}`에서 숫자 키는 작성자별 번호, 그 외 키는 slug로 해석한다. 본인 블로그 기본 목록은 displayOrder 오름차순이고 공개 전체 목록 기본 순서는 publishedAt 내림차순이다. 공개 주소 경로는 공개 handle과 postNumber 또는 slug를 사용하며 Naver 식별자와 내부 TSID를 경로에 사용하지 않는다. 응답의 `id`는 TSID 문자열이다.
 
-Post 응답의 `boardId`는 연결 Board ID 문자열 또는 null이다. `projectId`, `thumbnailUrl`은 현재 항상 null이고 `likeCount`는 0, `likedByMe`는 false다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
+Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 현재 항상 null이고 `likeCount`는 0, `likedByMe`는 false다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
 
 ### 6.4 Project
 
@@ -603,7 +604,7 @@ Category 생성 요청은 `{parentId, name, slug, displayOrder}`이며 Tag 생�
 
 Board 생성 요청은 `{name, parentId, displayOrder}`다. name은 공백이 아닌 문자열이며 최대 50 유니코드 코드 포인트다. parentId는 양의 10진 문자열 또는 null이고, displayOrder는 0 이상의 정수다. 생성 시 name은 필수이며 parentId 기본값은 null, displayOrder 기본값은 0이다. 수정은 필드별 부분 변경이며 누락은 기존 값 유지, parentId의 명시적 null은 루트 이동이다. displayOrder는 형제 정렬 키이며 항목을 이동시키거나 다른 항목의 순서를 자동으로 밀지 않는다.
 
-부모 변경 시 같은 소유자 Board인지, 최대 3단계와 순환 참조를 위반하지 않는지, 같은 부모 아래에 대소문자까지 동일한 이름이 이미 있는지 검증한다. 이름 중복은 400 VALIDATION_ERROR다. 삭제되지 않은 Board의 이름만 중복 검증에 참여하므로 삭제한 이름은 재사용할 수 있다. 부모 또는 Board를 찾을 수 없거나 다른 소유자의 Board이면 404다. 하위 미삭제 Board가 남은 삭제 요청은 409 RESOURCE_HAS_CHILDREN이다. 삭제는 Board를 논리 삭제하고 같은 트랜잭션에서 연결 Post의 boardId를 null로 만든다. ACTIVE USER는 프로필 완료 없이 자신의 Board를 관리할 수 있다. 공개 Board 트리는 빈 Board도 포함하며 WITHDRAWAL_PENDING 소유자는 404다. SUSPENDED 소유자의 공개 데이터는 유지한다. Board별 Post 목록은 PUBLIC·비차단·미삭제 Post만 포함한다. Project API와 Post의 Project 연결은 아직 제공하지 않는다. Post 작성·수정은 기존과 같이 프로필 완료가 필요하다.
+부모 변경 시 같은 소유자 Board인지, 최대 3단계와 순환 참조를 위반하지 않는지, 같은 부모 아래에 대소문자까지 동일한 이름이 이미 있는지 검증한다. 이름 중복은 400 VALIDATION_ERROR다. 삭제되지 않은 Board의 이름만 중복 검증에 참여하므로 삭제한 이름은 재사용할 수 있다. 부모 또는 Board를 찾을 수 없거나 다른 소유자의 Board이면 404다. 하위 미삭제 Board가 남은 삭제 요청은 409 RESOURCE_HAS_CHILDREN이다. 삭제는 Board를 논리 삭제하고 같은 트랜잭션에서 연결 Post의 boardId를 null로 만든다. ACTIVE USER는 프로필 완료 없이 자신의 Board를 관리할 수 있다. 공개 Board 트리는 빈 Board도 포함하며 WITHDRAWAL_PENDING 소유자는 404다. SUSPENDED 소유자의 공개 데이터는 유지한다. Board별 Post 목록은 PUBLIC·비차단·미삭제 Post만 포함한다. Post 작성·수정은 기존과 같이 프로필 완료가 필요하다.
 
 ### 6.7 댓글과 좋아요
 
@@ -667,7 +668,7 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 | GET /admin/post-comments | postId, authorId, visibility, deleted |
 | GET /admin/project-comments | projectId, authorId, visibility, deleted |
 
-- q는 앞뒤 공백을 제거한 비어 있지 않은 검색어다. Post 검색에서는 최대 200 유니코드 코드 포인트를 허용하며 누락·공백 전용·길이 초과·NUL·잘못된 유니코드는 400 VALIDATION_ERROR다.
+- q는 앞뒤 공백을 제거한 비어 있지 않은 검색어다. Post·Project 검색에서는 최대 200 유니코드 코드 포인트를 허용하며 누락·공백 전용·길이 초과·NUL·잘못된 유니코드는 400 VALIDATION_ERROR다.
 - 알 수 없는 query parameter와 같은 parameter의 중복 전달은 400이다. 각 목록의 필터와 sort 허용값은 endpoint 계약에 따른다.
 - 목록 endpoint는 공통으로 page(기본 0), size(기본 20, 최대 100), sort를 지원한다. GET /posts 기본 정렬은 publishedAt 내림차순이고 허용 sort 필드는 publishedAt, createdAt이다. 블로그 목록은 displayOrder 오름차순이며 허용 필드는 displayOrder, publishedAt, createdAt이다. 정렬 방향은 asc 또는 desc다.
 - GET /projects의 기본 정렬은 publishedAt 내림차순이고 publishedAt, createdAt 정렬을 허용한다. tagId와 lifecycleStatus는 함께 사용할 수 있다.
@@ -675,7 +676,9 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 - 검색은 PostPage 목록 응답을 사용하며 본문 blocks와 소유자 전용 isBlocked는 포함하지 않는다. 공개 필터와 검색 조건을 적용한 뒤 페이징한다. GET /posts/search는 GET /posts와 같은 page·size·sort 계약을 따른다. Board·Project 필터는 현재 Post 목록과 검색에서 지원하지 않는다.
 - Board별 Post 목록은 지정 Board의 직접 연결만 조회하며 하위 Board의 글을 합치지 않는다.
 - 본인 Post 목록의 visibilityStatus는 PUBLIC 또는 HIDDEN이며 DELETED는 400이다.
-- Project 검색 대상은 이름, 소개, 상세 설명, 기술 스택이다. Project 검색 API도 후속 기능으로 현재 제공하지 않는다.
+- Project 검색 대상은 name, summary, description, Tag.name이다. 대소문자 구분 없는 부분 문자열 OR 검색이며 %, _, 역슬래시는 문자 그대로 찾는다. 검색어와 tagId·lifecycleStatus 필터는 AND로 적용하고 중복 없이 ProjectPage를 반환한다. 검색·회원별 공개·본인 Project 목록은 공개 전체 목록과 같은 page·size·sort 계약을 따른다.
+- 본인 Project 목록은 ACTIVE USER만 조회하며 PUBLIC/HIDDEN 및 차단 콘텐츠를 포함하고 isBlocked를 제공한다. visibilityStatus는 PUBLIC/HIDDEN만 허용한다. 회원별 공개 목록은 존재하지 않거나 WITHDRAWAL_PENDING 회원에 404를 반환한다.
+- GET /projects/{projectId}/posts는 PUBLIC·미차단·비탈퇴 소유자 Project에 직접 연결된 공개 Post만 PostPage로 반환한다. Project 공개 조건을 만족하지 않으면 소유자 요청에도 404다. page·size·sort만 허용하며 기본 publishedAt 내림차순, 허용 정렬 publishedAt·createdAt와 같은 방향 ID 순서다. Project 논리 삭제는 모든 Post(숨김·차단·삭제 포함)의 연결을 같은 트랜잭션에서 해제하며 글과 공개 상태를 보존한다.
 - Guest 검색은 PUBLIC이고 차단되지 않은 콘텐츠만 대상으로 한다.
 - 검색은 MVP의 기본 문자열 검색을 제공한다. 자동 완성, 검색어 추천, 개인화, 전문 검색 엔진은 제공하지 않는다.
 - USER 요청의 visibilityStatus 필터는 본인 콘텐츠 목록에서만 사용할 수 있다. 공개 사용자 목록의 필터는 PUBLIC/차단 제외를 우회하지 않는다.

@@ -34,6 +34,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @AutoConfigureMockMvc
 class ProjectTransactionTest extends AuthenticationTestSupport {
     @Autowired ProjectService service;
+    @Autowired com.pebble.api.post.application.PostService posts;
     @Autowired MemberRepository members;
     @Autowired MemberProfileService profiles;
     @Autowired ObjectMapper mapper;
@@ -45,6 +46,7 @@ class ProjectTransactionTest extends AuthenticationTestSupport {
     @AfterEach
     void removeOnlyCommittedTestFixtures() {
         transactions.executeWithoutResult(status -> owners.forEach(owner -> {
+            jdbc.update("delete from post where author_member_id=?", owner);
             jdbc.update("delete from project where owner_member_id=?", owner);
             jdbc.update("delete from member where id=?", owner);
         }));
@@ -120,6 +122,64 @@ class ProjectTransactionTest extends AuthenticationTestSupport {
                 {"name":"original","visibilityStatus":"PUBLIC","lifecycleStatus":"IN_PROGRESS",
                  "features":[{"title":"original feature","description":"original"}]}
                 """), true)).project().getId();
+    }
+
+    @Test
+    void projectDeletionWaitsForPostPlacementThenDetachesIt() throws Exception {
+        long owner = owner();
+        long project = create(owner);
+        var input = com.pebble.api.post.presentation.dto.PostWriteRequest.parse(mapper.readTree(
+                "{\"title\":\"linked\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}],\"visibilityStatus\":\"PUBLIC\",\"projectId\":\"" + project + "\"}"), true);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch attempted = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var placement = executor.submit(() -> transactions.execute(status -> {
+                long id = posts.create(owner, input).post().getId();
+                locked.countDown();
+                await(release);
+                return id;
+            }));
+            try {
+                assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+                var deletion = executor.submit(() -> { attempted.countDown(); service.delete(project, owner); });
+                assertThat(attempted.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThatThrownBy(() -> deletion.get(200, TimeUnit.MILLISECONDS)).isInstanceOf(java.util.concurrent.TimeoutException.class);
+                release.countDown();
+                long post = placement.get(10, TimeUnit.SECONDS);
+                deletion.get(10, TimeUnit.SECONDS);
+                assertThat(jdbc.queryForObject("select project_id from post where id=?", Long.class, post)).isNull();
+                assertThat(jdbc.queryForObject("select visibility_status from post where id=?", String.class, post)).isEqualTo("PUBLIC");
+            } finally { release.countDown(); }
+        }
+    }
+
+    @Test
+    void postPlacementWaitsForProjectDeletionThenRejectsDeletedProject() throws Exception {
+        long owner = owner();
+        long project = create(owner);
+        var input = com.pebble.api.post.presentation.dto.PostWriteRequest.parse(mapper.readTree(
+                "{\"title\":\"linked\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}],\"visibilityStatus\":\"PUBLIC\",\"projectId\":\"" + project + "\"}"), true);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch attempted = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var deletion = executor.submit(() -> transactions.executeWithoutResult(status -> {
+                service.delete(project, owner);
+                locked.countDown();
+                await(release);
+            }));
+            try {
+                assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+                var placement = executor.submit(() -> { attempted.countDown(); return posts.create(owner, input); });
+                assertThat(attempted.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThatThrownBy(() -> placement.get(200, TimeUnit.MILLISECONDS)).isInstanceOf(java.util.concurrent.TimeoutException.class);
+                release.countDown();
+                deletion.get(10, TimeUnit.SECONDS);
+                assertThatThrownBy(() -> placement.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(ApplicationException.class);
+                assertThat(jdbc.queryForObject("select count(*) from post where author_member_id=?", Long.class, owner)).isZero();
+            } finally { release.countDown(); }
+        }
     }
 
     private ProjectChanges input(String json) throws Exception { return ProjectWriteRequest.parse(mapper.readTree(json), false); }

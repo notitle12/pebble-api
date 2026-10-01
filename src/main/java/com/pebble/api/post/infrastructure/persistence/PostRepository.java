@@ -53,6 +53,10 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     @Query("update Post p set p.boardId = null, p.updatedAt = :now where p.author.id = :memberId and p.boardId = :boardId")
     int detachBoard(@Param("memberId") long memberId, @Param("boardId") long boardId, @Param("now") Instant now);
 
+    @Modifying(flushAutomatically = true)
+    @Query("update Post p set p.projectId = null, p.updatedAt = :now where p.author.id = :memberId and p.projectId = :projectId")
+    int detachProject(@Param("memberId") long memberId, @Param("projectId") long projectId, @Param("now") Instant now);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Post p where p.id = :id")
     Optional<Post> findByIdForUpdate(@Param("id") Long id);
