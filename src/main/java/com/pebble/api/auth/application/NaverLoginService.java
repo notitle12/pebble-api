@@ -16,9 +16,11 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class NaverLoginService {
 
     private final NaverOAuthGateway naverOAuthGateway;
@@ -28,23 +30,6 @@ public class NaverLoginService {
     private final AccessTokenService accessTokenService;
     private final UserRefreshTokenService refreshTokenService;
     private final Clock clock;
-
-    public NaverLoginService(
-            NaverOAuthGateway naverOAuthGateway,
-            OAuthStateStore stateStore,
-            NaverOAuthProperties naverProperties,
-            OAuthMemberService memberService,
-            AccessTokenService accessTokenService,
-            UserRefreshTokenService refreshTokenService,
-            Clock clock) {
-        this.naverOAuthGateway = naverOAuthGateway;
-        this.stateStore = stateStore;
-        this.naverProperties = naverProperties;
-        this.memberService = memberService;
-        this.accessTokenService = accessTokenService;
-        this.refreshTokenService = refreshTokenService;
-        this.clock = clock;
-    }
 
     public AuthorizationGrant beginAuthorization() {
         String state = stateStore.issue();
@@ -72,19 +57,8 @@ public class NaverLoginService {
         Instant now = clock.instant();
         String accessToken = accessTokenService.issueForMember(member.getId(), now);
         IssuedRefreshToken refreshToken = refreshTokenService.issue(member.getId(), now);
-        return new LoginGrant(
-                new LoginResponse(
-                        accessToken,
-                        "Bearer",
-                        AccessTokenService.EXPIRES_IN_SECONDS,
-                        new MemberResponse(
-                                Long.toString(member.getId()),
-                                member.getNickname(),
-                                member.getProfileImageUrl(),
-                                member.getStatus().name(),
-                                "USER")),
-                refreshToken.value(),
-                Duration.between(now, refreshToken.idleExpiresAt()));
+        return new LoginGrant(accessToken, refreshToken.value(),
+                Duration.between(now, refreshToken.idleExpiresAt()), member);
     }
 
     private boolean isBlank(String value) {
@@ -94,16 +68,6 @@ public class NaverLoginService {
     public record AuthorizationGrant(String authorizationUrl, String state, Duration stateTtl) {
     }
 
-    public record LoginGrant(LoginResponse response, String refreshToken, Duration refreshCookieTtl) {
-    }
-
-    public record LoginResponse(
-            String accessToken,
-            String tokenType,
-            long accessTokenExpiresIn,
-            MemberResponse member) {
-    }
-
-    public record MemberResponse(String id, String nickname, String profileImageUrl, String status, String role) {
+    public record LoginGrant(String accessToken, String refreshToken, Duration refreshCookieTtl, Member member) {
     }
 }
