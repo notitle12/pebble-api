@@ -36,6 +36,15 @@ public class MemberQueryService {
         return member;
     }
 
+    public Member findPublicById(long id) {
+        Member member = memberRepository.findById(id)
+                .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND));
+        if (member.getStatus() == MemberStatus.WITHDRAWAL_PENDING) {
+            throw new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
+        }
+        return member;
+    }
+
     public Member findPublicBlog(String handle) {
         Member member = memberRepository.findByHandle(handle)
                 .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND));
