@@ -70,6 +70,10 @@
 
 현재 `GET /api/v1/members/me`는 검증된 USER JWT의 role을 `ROLE_USER`로 변환해 HTTP 접근을 허용하고, member Application이 본인 계정을 조회해 현재 DB 상태가 ACTIVE인지 확인한다. 정지·탈퇴 대기 상태는 각각 `ACCOUNT_SUSPENDED`·`ACCOUNT_WITHDRAWAL_PENDING` 403으로 거부한다. 토큰에 포함된 회원 ID 외에 요청으로 조회 대상을 지정할 수 없으며, Refresh Cookie는 이 조회의 인증 수단이 아니다. JWT 서명·claim 검증과 Redis 세션 정책은 그대로 유지한다.
 
+회원 최초 설정 `POST /api/v1/members/me/profile`과 표시 이름 변경 `PATCH`는 정확한 USER Bearer 경로로만 허용한다. member Application이 DB ACTIVE 상태·본인 계정·최초 완료 여부·필드별 쿨타임을 확인하며 회원 행 배타 잠금으로 동시 설정/변경을 직렬화한다. 공개 handle은 Naver 식별자나 내부 TSID와 구분하고 최초 확정 후 변경하지 않는다. 아직 설정하지 않은 회원의 콘텐츠 작성 제한은 해당 콘텐츠 Application이 member의 완료 상태 검증을 호출해야 한다.
+
+프로필 쓰기는 Cookie/HTTP 세션/Basic 인증을 제공하지 않는다. Spring Resource Server의 Bearer 요청 CSRF 처리와 JWT 검증을 사용하며 전역 CSRF disable 또는 Cookie Origin 검사 제외를 추가하지 않는다. Refresh Cookie 단독 쓰기는 거부하고 refresh/logout은 Bearer 헤더가 있어도 기존 필수 Origin 검사를 유지한다. CORS는 프로필 경로의 POST/PATCH에만 확장한다.
+
 ## 4. 주체와 권한
 
 현재 외부 역할 이름의 기준은 `API.md`다.

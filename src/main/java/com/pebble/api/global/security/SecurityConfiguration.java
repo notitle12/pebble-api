@@ -39,6 +39,8 @@ public class SecurityConfiguration {
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/members/me/profile").hasRole("USER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/members/me/profile").hasRole("USER")
                         .anyRequest().denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
                 .oauth2ResourceServer(resourceServer -> resourceServer
@@ -85,6 +87,9 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/members/me", getCors);
         source.registerCorsConfiguration("/api/v1/categories", getCors);
         source.registerCorsConfiguration("/api/v1/tags", getCors);
+        CorsConfiguration profileCors = new CorsConfiguration(cors);
+        profileCors.setAllowedMethods(List.of("POST", "PATCH"));
+        source.registerCorsConfiguration("/api/v1/members/me/profile", profileCors);
         return source;
     }
 }

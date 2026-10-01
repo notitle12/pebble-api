@@ -24,6 +24,21 @@ public class Member {
     @Column(nullable = false, length = 30)
     private String nickname;
 
+    @Column(name = "blog_name", length = 100, unique = true)
+    private String blogName;
+
+    @Column(length = 30, unique = true)
+    private String handle;
+
+    @Column(name = "profile_completed_at")
+    private Instant profileCompletedAt;
+
+    @Column(name = "nickname_changed_at")
+    private Instant nicknameChangedAt;
+
+    @Column(name = "blog_name_changed_at")
+    private Instant blogNameChangedAt;
+
     @Column(name = "profile_image_url", length = 2048)
     private String profileImageUrl;
 
@@ -64,6 +79,7 @@ public class Member {
         if (createdAt == null) {
             createdAt = now;
         }
+        if (nicknameChangedAt == null) nicknameChangedAt = now;
         if (updatedAt == null) {
             updatedAt = now;
         }
@@ -77,6 +93,33 @@ public class Member {
     public Long getId() {
         return id;
     }
+
+    public void completeProfile(String blogName, String handle, String nickname, Instant now) {
+        if (profileCompletedAt != null) throw new IllegalStateException("Profile is already completed");
+        this.blogName = blogName;
+        this.handle = handle;
+        this.nickname = nickname;
+        this.profileCompletedAt = now;
+        this.nicknameChangedAt = now;
+        this.blogNameChangedAt = now;
+    }
+
+    public void changeNickname(String nickname, Instant now) {
+        this.nickname = nickname;
+        this.nicknameChangedAt = now;
+    }
+
+    public void changeBlogName(String blogName, Instant now) {
+        this.blogName = blogName;
+        this.blogNameChangedAt = now;
+    }
+
+    public String getBlogName() { return blogName; }
+    public String getHandle() { return handle; }
+    public Instant getProfileCompletedAt() { return profileCompletedAt; }
+    public Instant getNicknameChangedAt() { return nicknameChangedAt; }
+    public Instant getBlogNameChangedAt() { return blogNameChangedAt; }
+    public boolean isProfileCompleted() { return profileCompletedAt != null; }
 
     public String getNickname() {
         return nickname;
