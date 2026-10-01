@@ -42,6 +42,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/members/me/profile").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/members/me/profile").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts/search").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/projects", "/api/v1/projects/{projectId:[0-9]+}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/{postId:[0-9]+}",
                                 "/api/v1/blogs/{handle}/posts", "/api/v1/blogs/{handle}/posts/{postKey}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/{memberId:[0-9]+}/posts").permitAll()
@@ -53,6 +54,9 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/posts").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/projects").hasRole("USER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/projects/{projectId:[0-9]+}").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/projects/{projectId:[0-9]+}").hasRole("USER")
                         .anyRequest().denyAll())
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
                 .oauth2ResourceServer(resourceServer -> resourceServer
@@ -111,6 +115,12 @@ public class SecurityConfiguration {
         postDetailCors.setAllowedMethods(List.of("GET", "PATCH", "DELETE"));
         source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}", postDetailCors);
         source.registerCorsConfiguration("/api/v1/posts/search", getCors);
+        CorsConfiguration projectCollectionCors = new CorsConfiguration(cors);
+        projectCollectionCors.setAllowedMethods(List.of("GET", "POST"));
+        source.registerCorsConfiguration("/api/v1/projects", projectCollectionCors);
+        CorsConfiguration projectDetailCors = new CorsConfiguration(cors);
+        projectDetailCors.setAllowedMethods(List.of("GET", "PATCH", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}", projectDetailCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts", getCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts/{postKey}", getCors);
         source.registerCorsConfiguration("/api/v1/members/me/boards", getCors);
