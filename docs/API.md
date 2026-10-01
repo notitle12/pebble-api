@@ -525,7 +525,13 @@ Project 상세에는 미디어 배열, 주요 기능, 링크, 기술 태그, 좋
 
 Category 응답 항목: `{id, parentId, name, slug, displayOrder, status, children}`. name 최대 50자, slug 최대 100자다. 최대 깊이는 2단계이며 Post에는 최하위 Category만 지정한다.
 
+`GET /categories`의 data는 최상위 Category 배열이고 각 children은 하위 Category 배열이다. `GET /tags`의 data는 Tag 배열이다. 빈 결과는 `[]`이며 ID·parentId는 문자열, 최상위 parentId는 null, 하위가 없는 children은 `[]`로 반환한다. Category 형제와 Tag 목록은 displayOrder 오름차순, 같은 순서는 숫자 ID 오름차순으로 정렬한다.
+
 Tag 응답 항목: `{id, name, slug, displayOrder, status}`. name 최대 50자, slug 최대 100자다. 비활성 항목은 기존 공개 콘텐츠에서 참조되는 경우 탐색 결과에 표시될 수 있다.
+
+Category 트리는 활성 하위의 경로를 보존하기 위해 비활성 상위를 `INACTIVE` 상태인 그룹으로 포함할 수 있다. 이 그룹은 신규 선택 대상이 아니다. 사용 중이지 않은 비활성 하위와 Tag는 제외한다. 신규 Post 연결은 ACTIVE이고 저장된 하위 Category가 없는 항목만 허용하며, 공개 children이 비었다는 이유만으로 최하위라고 판단하지 않는다.
+
+초기 데이터는 상위 주제 Backend·Frontend·Database·DevOps·Architecture와 기술 Tag Java·Spring Boot·JPA·JavaScript·React·HTML·CSS·PostgreSQL이다. 하위 주제는 관리자 관리 API에서 필요에 따라 구성한다. 현재 분류 기반 단계에는 Post·Project 참조가 없으므로 활성 항목과 활성 하위의 상위 그룹을 조회한다. 콘텐츠 구현 시 공개 콘텐츠에서 사용 중인 비활성 항목의 탐색을 함께 연결한다.
 
 Category 생성 요청은 `{parentId, name, slug, displayOrder}`이며 Tag 생성 요청은 `{name, slug, displayOrder}`다. 수정 요청은 각 생성 필드와 status를 부분 변경한다. status 값은 ACTIVE 또는 INACTIVE다. 참조 항목을 물리 삭제하는 API는 없다.
 

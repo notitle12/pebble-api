@@ -1,6 +1,7 @@
 # 다음 작업 인계
 
 - 기준 브랜치: dev. AGENTS.md와 작업에 필요한 문서 절만 확인한다.
+- 이슈 #23: Category·Tag 모델·Flyway 저장 기반과 Guest GET `/api/v1/categories`·`/api/v1/tags`를 구현한다. Category는 주제·최대 2단계, 언어·프레임워크는 Tag다. 상위 주제 5개·기술 Tag 8개를 초기 등록하며 활성 하위의 비활성 상위는 INACTIVE 그룹으로 보존한다. 관리자 편집·Post/Project 참조는 후속 범위다. 콘텐츠 구현 시 사용 중인 비활성 분류의 공개 탐색과 저장 구조 기준의 최하위 선택 검증을 반드시 연결한다.
 - 이슈 #21: `GET /api/v1/members/me`로 JWT 주체의 본인 계정 정보를 조회한다. member Application이 DB 존재 여부와 ACTIVE 상태를 확인하고, 허용 Origin의 GET·Authorization preflight를 지원한다. 회원 수정·탈퇴와 분류·Post 기능은 후속 범위다.
 - 완료: 회원·Naver 식별자 저장, Naver 로그인, RS256 Access JWT·Redis 초기 Refresh 세션 발급.
 - 이슈 #15: 가이드라인 복원, 공통 오류 규격, JWT 필수 claim 검증, DTO·생성자 정비.
