@@ -80,10 +80,13 @@ class ProjectManagementIntegrationTest extends AuthenticationTestSupport {
     void blockIsIdempotentAndDeletedProjectsCannotBeBlocked() throws Exception {
         long owner = owner();
         long id = create(owner, "PUBLIC", "managed", null, null, List.of());
-        var first = projects.setBlockedForManagement(id, 1L, true).project();
+        projects.setBlockedForManagement(id, 1L, true);
+        // PostgreSQL에 저장된 마이크로초 정밀도를 기준으로 실제 상태 보존을 비교한다.
+        var first = projects.detailForManagement(id).project();
         var repeated = projects.setBlockedForManagement(id, 2L, true).project();
         assertThat(repeated.getBlockedAt()).isEqualTo(first.getBlockedAt());
         assertThat(repeated.getBlockedByAdminId()).isEqualTo(1L);
+        assertThat(repeated.getUpdatedAt()).isEqualTo(first.getUpdatedAt());
         projects.setBlockedForManagement(id, 1L, false);
         assertThat(jdbc.queryForObject("select is_blocked from project where id=?", Boolean.class, id)).isFalse();
         projects.deleteForManagement(id);
