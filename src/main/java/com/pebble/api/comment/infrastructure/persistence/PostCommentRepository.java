@@ -31,4 +31,3 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
     Page<PostComment> findVisible(@Param("contentId") long contentId, @Param("requesterId") Long requesterId,
                                   @Param("owner") boolean owner, Pageable pageable);
 }
-

@@ -19,4 +19,3 @@ public class PostComment extends Comment {
     @Override
     public long getContentId() { return contentId; }
 }
-
