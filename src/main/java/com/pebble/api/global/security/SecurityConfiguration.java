@@ -45,6 +45,10 @@ public class SecurityConfiguration {
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout",
                                 "/api/v1/admin/auth/login", "/api/v1/admin/auth/token/refresh", "/api/v1/admin/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/admin-accounts").hasRole("MASTER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/categories", "/api/v1/admin/tags").hasAnyRole("MANAGER", "MASTER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/categories", "/api/v1/admin/tags").hasAnyRole("MANAGER", "MASTER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/categories/{id:[0-9]+}",
+                                "/api/v1/admin/tags/{id:[0-9]+}").hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/post-comments", "/api/v1/admin/project-comments")
                             .hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/post-comments/{id:[0-9]+}",
@@ -165,6 +169,14 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}/status", adminStatusCors);
         CorsConfiguration getCors = new CorsConfiguration(cors);
         getCors.setAllowedMethods(List.of("GET"));
+        CorsConfiguration adminClassificationCors = new CorsConfiguration(cors);
+        adminClassificationCors.setAllowedMethods(List.of("GET", "POST"));
+        source.registerCorsConfiguration("/api/v1/admin/categories", adminClassificationCors);
+        source.registerCorsConfiguration("/api/v1/admin/tags", adminClassificationCors);
+        CorsConfiguration adminClassificationPatchCors = new CorsConfiguration(cors);
+        adminClassificationPatchCors.setAllowedMethods(List.of("PATCH"));
+        source.registerCorsConfiguration("/api/v1/admin/categories/{id:[0-9]+}", adminClassificationPatchCors);
+        source.registerCorsConfiguration("/api/v1/admin/tags/{id:[0-9]+}", adminClassificationPatchCors);
         source.registerCorsConfiguration("/api/v1/admin/post-comments", getCors);
         source.registerCorsConfiguration("/api/v1/admin/project-comments", getCors);
         CorsConfiguration adminCommentDeleteCors = new CorsConfiguration(cors);
