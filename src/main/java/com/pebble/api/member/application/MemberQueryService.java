@@ -24,6 +24,10 @@ public class MemberQueryService {
         return requireActive(member);
     }
 
+    public boolean canReadPrivateInteractions(long id) {
+        return memberRepository.findById(id).map(member -> member.getStatus() == MemberStatus.ACTIVE).orElse(false);
+    }
+
     @Transactional
     public Member findActiveForWrite(long id) {
         return requireActive(memberRepository.findByIdForWrite(id)
