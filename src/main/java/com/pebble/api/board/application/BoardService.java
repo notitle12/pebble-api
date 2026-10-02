@@ -25,6 +25,12 @@ public class BoardService {
     private final MemberQueryService members;
     private final PostBoardService postBoards;
 
+    public void purgeForMember(long memberId) {
+        // 미삭제·논리 삭제 Board를 모두 잎부터 제거해 자기 참조 FK를 보존한다.
+        for (int depth = 0; depth < 3; depth++) boards.deleteLeavesForMember(memberId);
+        if (boards.existsByOwnerMemberId(memberId)) throw new ApplicationException(GlobalErrorCode.INTERNAL_ERROR);
+    }
+
     public Board create(long memberId, BoardChanges input) {
         members.findActiveForWrite(memberId);
         List<Board> tree = tree(memberId);

@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import java.time.Instant;
+import java.util.List;
+import org.springframework.data.domain.Pageable;
 
 public interface MemberRepository extends JpaRepository<Member, Long>, JpaSpecificationExecutor<Member> {
     boolean existsByNickname(String nickname);
@@ -22,4 +25,11 @@ public interface MemberRepository extends JpaRepository<Member, Long>, JpaSpecif
     @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("select m from Member m where m.id = :id")
     Optional<Member> findForAuthentication(@Param("id") long id);
+
+    @Query("select m.id from Member m where m.status=com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING " +
+            "and m.withdrawalScheduledAt<=:now order by m.withdrawalScheduledAt,m.id")
+    List<Long> findExpiredWithdrawalIds(@Param("now") Instant now, Pageable pageable);
+
+    @Query(value = "select * from member where id=:id for update skip locked", nativeQuery = true)
+    Optional<Member> findForWithdrawalCleanup(@Param("id") long id);
 }

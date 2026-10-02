@@ -1,6 +1,7 @@
 package com.pebble.api.member.domain;
 
 import com.pebble.api.global.id.TsidGenerator;
+import com.pebble.api.global.exception.ApplicationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,6 +11,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.Duration;
 import org.hibernate.annotations.Check;
 
 @Entity
@@ -139,6 +141,22 @@ public class Member {
             throw new IllegalStateException("Withdrawal status cannot be changed by an administrator");
         }
         this.status = status;
+    }
+
+    public void requestWithdrawal(Instant now) {
+        if (status == MemberStatus.SUSPENDED) throw new ApplicationException(MemberError.ACCOUNT_SUSPENDED);
+        if (status == MemberStatus.WITHDRAWAL_PENDING) throw new ApplicationException(MemberError.ACCOUNT_WITHDRAWAL_PENDING);
+        status = MemberStatus.WITHDRAWAL_PENDING;
+        withdrawalRequestedAt = now;
+        withdrawalScheduledAt = now.plus(Duration.ofDays(7));
+    }
+
+    public void cancelWithdrawal(Instant now) {
+        if (status != MemberStatus.WITHDRAWAL_PENDING) throw new ApplicationException(MemberError.WITHDRAWAL_NOT_PENDING);
+        if (!now.isBefore(withdrawalScheduledAt)) throw new ApplicationException(MemberError.WITHDRAWAL_EXPIRED);
+        status = MemberStatus.ACTIVE;
+        withdrawalRequestedAt = null;
+        withdrawalScheduledAt = null;
     }
 
     public Instant getWithdrawalRequestedAt() {

@@ -6,6 +6,13 @@ import com.pebble.api.auth.application.AccessTokenService;
 import com.pebble.api.auth.application.NaverLoginService;
 import com.pebble.api.auth.presentation.dto.NaverLoginResponse;
 import com.pebble.api.auth.presentation.dto.NaverLoginResponse.MemberResponse;
+import com.pebble.api.auth.presentation.dto.NaverWithdrawalRequest;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pebble.api.global.exception.ApplicationException;
+import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
 import com.pebble.api.member.domain.Member;
 import jakarta.validation.Valid;
@@ -19,6 +26,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,6 +40,7 @@ public class NaverAuthController {
     private static final String COOKIE_PATH = "/api/v1/auth";
 
     private final NaverLoginService naverLoginService;
+    private final ObjectMapper mapper;
 
     @PostMapping("/authorization")
     public ResponseEntity<ApiResponse<AuthorizationResponse>> beginAuthorization() {
@@ -76,6 +85,32 @@ public class NaverAuthController {
                         toMemberResponse(grant.member()))));
     }
 
+    @PostMapping(value = "/withdrawal/cancel", consumes = "application/json")
+    public ResponseEntity<ApiResponse<WithdrawalCancellationResponse>> cancelWithdrawal(
+            @RequestBody String json,
+            @CookieValue(name = STATE_COOKIE, required = false) String cookieState,
+            HttpServletRequest request) {
+        if (!request.getParameterMap().isEmpty()) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        NaverWithdrawalRequest body;
+        try {
+            JsonNode tree = mapper.reader().with(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+                    .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(json);
+            body = NaverWithdrawalRequest.parse(tree);
+        } catch (JsonProcessingException exception) {
+            throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        }
+        naverLoginService.cancelWithdrawal(body.authorizationCode(), body.state(), cookieState);
+        ResponseCookie expiredStateCookie = ResponseCookie.from(STATE_COOKIE, "")
+                .httpOnly(true).secure(true).sameSite("Lax")
+                .path(COOKIE_PATH + "/naver").maxAge(Duration.ZERO).build();
+        ResponseCookie expiredRefreshCookie = ResponseCookie.from(REFRESH_COOKIE, "")
+                .httpOnly(true).secure(true).sameSite("Lax")
+                .path(COOKIE_PATH).maxAge(Duration.ZERO).build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, expiredStateCookie.toString(), expiredRefreshCookie.toString())
+                .body(ApiResponse.of(new WithdrawalCancellationResponse("ACTIVE")));
+    }
+
     private MemberResponse toMemberResponse(Member member) {
         return new MemberResponse(
                 Long.toString(member.getId()),
@@ -86,6 +121,9 @@ public class NaverAuthController {
     }
 
     public record AuthorizationResponse(String authorizationUrl) {
+    }
+
+    public record WithdrawalCancellationResponse(String status) {
     }
 
     public record NaverLoginRequest(
