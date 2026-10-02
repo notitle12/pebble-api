@@ -116,6 +116,11 @@ public class Project {
         this.blockedByAdminId = blocked ? adminId : null;
     }
 
+    public void touchMedia() {
+        ensureNotDeleted();
+        updatedAt = Instant.now();
+    }
+
     private void ensureNotDeleted() {
         if (visibility == ProjectVisibility.DELETED) throw new IllegalStateException("Deleted project cannot be changed");
     }

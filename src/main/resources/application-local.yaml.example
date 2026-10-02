@@ -26,6 +26,18 @@ spring:
         enabled: ${REDIS_SSL_ENABLED:false}
 
 pebble:
+  # R2는 명시적으로 활성화한 경우에만 접속한다.
+  # 비밀은 환경변수로 주입한다. 실제 .env는 Spring Boot가 자동으로 읽지 않는다.
+  media:
+    r2:
+      enabled: ${R2_ENABLED:false}
+      # 버킷 경로가 없는 계정 S3 endpoint이며 공개 이미지 URL과 다르다.
+      endpoint: ${R2_ENDPOINT:}
+      bucket-name: ${R2_BUCKET_NAME:pebble-media}
+      region: ${R2_REGION:auto}
+      # R2 발급 화면의 S3 자격 증명이며 API Token 원문은 사용하지 않는다.
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}
   admin:
     bootstrap:
       enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}

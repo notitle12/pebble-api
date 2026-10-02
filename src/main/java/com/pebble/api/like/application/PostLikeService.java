@@ -50,7 +50,7 @@ public class PostLikeService {
     }
 
     private PostView withSummary(PostView view, LikeSummary summary) {
-        return new PostView(view.post(), view.blocks(), view.tags(), view.owner(), summary.count(), summary.likedByMe());
+        return new PostView(view.post(), view.blocks(), view.tags(), view.owner(), summary.count(), summary.likedByMe(), view.thumbnailUrl());
     }
 
     private boolean isPublic(Post content) {

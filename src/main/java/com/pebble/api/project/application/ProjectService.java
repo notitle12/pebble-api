@@ -49,6 +49,8 @@ public class ProjectService {
     private final TagQueryService tags;
     private final EntityManager entityManager;
     private final PostProjectService postProjects;
+    private final com.pebble.api.project.infrastructure.persistence.ProjectMediaRepository media;
+    private final org.springframework.beans.factory.ObjectProvider<com.pebble.api.global.media.R2ObjectStorage> mediaStorage;
 
     @Transactional
     public void purgeForMember(long memberId) {
@@ -135,6 +137,7 @@ public class ProjectService {
         if (!project.getOwner().getId().equals(ownerId)) throw notFound();
         if (project.getVisibility() == ProjectVisibility.DELETED) return;
         postProjects.detachForManagement(ownerId, projectId);
+        media.deleteForProject(projectId);
         project.delete();
         projects.flush();
     }
@@ -214,6 +217,7 @@ public class ProjectService {
         members.findProfileCompletedForWrite(memberId);
         Project project = ownedForUpdate(projectId, memberId);
         postProjects.detach(memberId, projectId);
+        media.deleteForProject(projectId);
         project.delete();
         projects.flush();
     }
@@ -257,7 +261,7 @@ public class ProjectService {
         initializeOwner(project);
         return new ProjectView(project, features.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
                 links.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
-                projectTags.findForProjects(List.of(project.getId())).stream().map(ProjectTag::getTag).toList(), true, owner);
+                projectTags.findForProjects(List.of(project.getId())).stream().map(ProjectTag::getTag).toList(), true, owner, 0, false, mediaViews(project));
     }
 
     private Page<ProjectView> page(Page<Project> page, boolean owner) {
@@ -274,6 +278,14 @@ public class ProjectService {
         });
     }
 
+    private List<ProjectMediaView> mediaViews(Project project) {
+        var client = mediaStorage.getIfAvailable();
+        boolean visible = client != null && isPublic(project);
+        return media.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()).stream()
+                .map(item -> ProjectMediaView.from(item, visible ? client.signedUrl(item.getStorageKey()) : null,
+                        visible ? client.signedUrl(item.getThumbnailStorageKey()) : null)).toList();
+    }
+
     private void initializeOwner(Project project) { project.getOwner().getNickname(); }
     private boolean isPublic(Project project) {
         return project.getVisibility() == ProjectVisibility.PUBLIC && !project.isBlocked()
@@ -282,7 +294,11 @@ public class ProjectService {
     private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }
 
     public record ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
-                              boolean detail, boolean owner, long likeCount, boolean likedByMe) {
+                              boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media) {
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
+                           boolean detail, boolean owner, long likeCount, boolean likedByMe) {
+            this(project, features, links, tags, detail, owner, likeCount, likedByMe, detail ? List.of() : null);
+        }
         public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
                            boolean detail, boolean owner) {
             this(project, features, links, tags, detail, owner, 0, false);

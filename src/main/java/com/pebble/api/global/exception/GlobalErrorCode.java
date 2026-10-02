@@ -7,6 +7,10 @@ import org.springframework.http.HttpStatus;
 public enum GlobalErrorCode implements ErrorCode {
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "요청 값을 확인해 주세요."),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 본문을 확인해 주세요."),
+    INVALID_MEDIA(HttpStatus.BAD_REQUEST, "이미지를 처리할 수 없습니다."),
+    MEDIA_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "이미지 크기 한도를 초과했습니다."),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 이미지 형식입니다."),
+    STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "이미지 저장소를 사용할 수 없습니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "요청을 처리하지 못했습니다."),
     AUTHENTICATION_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "토큰이 유효하지 않습니다."),

@@ -80,7 +80,7 @@ Post의 POST·PATCH·DELETE는 인증된 USER Bearer 요청만 허용한다. Pos
 
 댓글은 Post·Project 숫자 ID 하위 /comments의 GET·POST, 숫자 댓글 ID 상세 GET·PATCH·DELETE를 제공한다. 쓰기는 USER Bearer와 ACTIVE 계정을 요구하고 프로필 완료는 요구하지 않는다. Member → 대상 콘텐츠 → 댓글 잠금 안에서 생성의 공개 조건과 본인 수정·삭제 권한을 검증한다. 공개 GET은 PUBLIC 댓글만 제공하며 ACTIVE 댓글 작성자의 본인 SECRET과 콘텐츠 소유자의 관리 조회만 추가 허용한다. HIDDEN·차단 대상의 목록은 ACTIVE 콘텐츠 소유자만, SECRET 단일 조회는 ACTIVE 댓글 작성자도 가능하다. 부모 삭제·탈퇴 대기 소유자와 탈퇴 대기 댓글 작성자는 일반 경로에서 숨기며 권한 없는 댓글 ID는 404다. 삭제는 본문을 제거한다. 관리자 댓글 목록 GET과 숫자 댓글 ID DELETE는 현재 ACTIVE MANAGER/MASTER Bearer와 온라인 sid 검증을 요구한다. 일반 경로와 분리해 부모·회원 상태와 무관한 SECRET·삭제 메타데이터 조회를 허용하며 삭제 본문은 응답에서 제외한다. 운영 삭제는 관리자 읽기 잠금 → 댓글 단독 쓰기 잠금으로 작성자 수정과 직렬화하며 본문을 제거한다. 작성·수정·복원·상세 GET은 계속 거부하고 조회·삭제 결과와 내부 ID만 기존 전용 감사 파일에 기록한다. CORS는 정확한 운영 목록 GET과 숫자 댓글 ID DELETE만 추가한다. 일반 댓글 CORS는 허용 Origin의 목록 GET/POST·상세 GET/PATCH/DELETE에 한정하며 새 CSRF 예외는 추가하지 않는다.
 
-Project의 POST·PATCH·DELETE도 인증된 USER Bearer 요청만 허용하며 Project Application이 ACTIVE·프로필 완료·소유권을 검증한다. Member 행을 먼저 잠그고 수정·삭제 시 Project 행을 잠가 하위 배열 교체와 상태 전이를 직렬화한다. Post 연결 변경도 같은 Member 잠금을 사용하며 Project Application 조회 계약으로 본인 소유·미삭제를 검증한다. 삭제 시 Post Application이 같은 트랜잭션에서 모든 연결을 해제한다. 공개 GET·검색·회원별 목록은 PUBLIC·미차단·미삭제이며 소유자가 WITHDRAWAL_PENDING이 아닌 콘텐츠만 반환한다. 작성자 상세·본인 목록의 HIDDEN·차단 조회에는 ACTIVE 검증을 적용하고 본인 목록은 USER만 허용한다. 숫자 ID Project의 관련 Post 목록은 부모의 공개 조건과 Post의 공개 조건을 모두 검증한다. 미디어 경로는 아직 허용하지 않으며 CSRF 예외를 추가하지 않는다. CORS는 허용 Origin에 Project 목록 GET/POST, 숫자 ID 상세 GET/PATCH/DELETE, 검색·본인/회원별 목록·관련 Post 목록 GET을 등록한다.
+Project의 POST·PATCH·DELETE도 인증된 USER Bearer 요청만 허용하며 Project Application이 ACTIVE·프로필 완료·소유권을 검증한다. Member 행을 먼저 잠그고 수정·삭제 시 Project 행을 잠가 하위 배열 교체와 상태 전이를 직렬화한다. Post 연결 변경도 같은 Member 잠금을 사용하며 Project Application 조회 계약으로 본인 소유·미삭제를 검증한다. 삭제 시 Post Application이 같은 트랜잭션에서 모든 연결을 해제한다. 공개 GET·검색·회원별 목록은 PUBLIC·미차단·미삭제이며 소유자가 WITHDRAWAL_PENDING이 아닌 콘텐츠만 반환한다. 작성자 상세·본인 목록의 HIDDEN·차단 조회에는 ACTIVE 검증을 적용하고 본인 목록은 USER만 허용한다. 숫자 ID Project의 관련 Post 목록은 부모의 공개 조건과 Post의 공개 조건을 모두 검증한다. 미디어 쓰기도 정확한 Post thumbnail PUT/DELETE와 Project media POST·숫자 mediaId PATCH/DELETE만 USER Bearer로 허용한다. Application이 현재 ACTIVE·프로필 완료·소유권을 확인한다. 새 CSRF 예외는 추가하지 않는다. CORS는 허용 Origin에 Project 목록 GET/POST, 숫자 ID 상세 GET/PATCH/DELETE, 검색·본인/회원별 목록·관련 Post 목록 GET을 등록한다.
 
 프로필과 Post 쓰기는 Cookie/HTTP 세션/Basic 인증을 제공하지 않는다. Spring Resource Server의 Bearer 요청 CSRF 처리와 JWT 검증을 사용하며 전역 CSRF disable 또는 Cookie Origin 검사 제외를 추가하지 않는다. Refresh Cookie 단독 쓰기는 거부하고 refresh/logout은 Bearer 헤더가 있어도 기존 필수 Origin 검사를 유지한다. CORS는 프로필 POST/PATCH, Post 목록 POST/GET 및 상세 GET/PATCH/DELETE, 공개 블로그와 회원 Post GET에만 허용 Origin을 등록한다.
 
@@ -294,3 +294,11 @@ Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access To
 - [Redis SET command](https://redis.io/docs/latest/commands/set/): TTL을 포함한 Redis 저장 동작
 - [개인정보의 안전성 확보조치 기준 제8조](https://www.law.go.kr/LSW/admRulSideInfoP.do?admRulSeq=2100000281400&chrClsCd=010201&dashNo=&docCls=jo&joBrNo=00&joNo=0008&urlMode=admRulScJoRltInfoR): 개인정보처리시스템 접속기록의 1년/2년 보관 및 점검
 - [개인정보 보호법 제21조](https://www.law.go.kr/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1034516739): 개인정보가 불필요해진 경우 파기 및 법령상 보존 정보의 분리 관리
+
+## 12. 미디어 저장소
+
+R2는 비공개 버킷과 해당 버킷에 한정된 Object Read & Write S3 자격 증명을 사용한다. Access Key ID·Secret Access Key는 보호된 실행 환경에만 주입하고 API Token 원문을 저장소 비밀번호로 사용하지 않는다. R2_ENABLED=true인 경우에만 클라이언트를 생성하며 HTTPS 계정 루트 endpoint, region auto와 버킷명·자격 증명을 검증한다. 키 값·SDK 예외 원문을 기록하거나 응답하지 않는다. SDK API 호출은 6초, 개별 시도는 3초로 제한한다.
+
+미디어 업로드·관리 권한은 각 콘텐츠 Feature가 소유한다. 서버 생성 UUID 키와 검증·재인코딩한 WebP만 저장하며 입력 원본·EXIF는 보존하지 않는다. PUBLIC·미차단·비탈퇴 소유자 콘텐츠에만 15분 presigned GET URL을 제공한다. HIDDEN·차단 콘텐츠의 본인/관리자 조회는 미디어 메타데이터를 반환할 수 있지만 새 URL은 반환하지 않는다. 이미 발급된 URL은 만료 전까지 사용할 수 있다.
+
+multipart는 파일 10MiB/요청 11MiB 한도이며 쓰기는 USER Bearer 경로다. Refresh Cookie는 미디어 인증 수단이 아니고 전역 CSRF를 비활성화하지 않는다. 비활성 R2 또는 저장소 작업 실패는 안전한 STORAGE_UNAVAILABLE 503으로 처리한다. DB 파기와 R2 파기는 삭제 큐로 조정하며 큐 성공 완료·적체·실패와 백업 복원 시 탈퇴 반영을 운영에서 점검한다.
