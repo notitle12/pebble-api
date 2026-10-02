@@ -389,7 +389,7 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 ### 6.2 관리자 인증과 회원
 
-현재 관리자 login·refresh·logout, MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정, MANAGER/MASTER의 회원 목록·상세·상태 설정을 제공한다. Post/Project 검수·차단·해제·강제 삭제도 제공하며 관리자 댓글·분류 편집은 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
+현재 관리자 login·refresh·logout, MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정, MANAGER/MASTER의 회원 목록·상세·상태 설정을 제공한다. Post/Project 검수·차단·해제·강제 삭제와 관리자 댓글 조회·삭제도 제공하며 분류 편집은 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
 
 관리자 쿠키는 `admin_refresh_token`, Path는 `/api/v1/admin/auth`이며 USER 쿠키와 상호 교환할 수 없다. 세 POST 모두 허용 Origin 하나를 필수로 요구하며 누락·null·미허용·중복 Origin은 403이다. query는 허용하지 않으며 refresh·logout은 요청 본문도 금지한다. 만료·재사용·폐기·계정 상태/role 불일치 refresh는 `INVALID_REFRESH_TOKEN` 401이고 재사용은 sid도 폐기한다. 로그아웃은 미확인·없는 쿠키에도 204와 쿠키 만료를 반환한다. 제한 초과는 `RATE_LIMITED` 429다. 관리자 Bearer 요청은 공개 경로에서도 현재 DB 계정 상태·role과 Redis sid를 검증하며 무효이면 `INVALID_TOKEN` 401이다. 관리자에게 USER 전용 권한을 부여하지 않는다.
 
@@ -632,7 +632,7 @@ Board 생성 요청은 `{name, parentId, displayOrder}`다. name은 공백이 �
 
 ### 6.7 댓글과 좋아요
 
-Post·Project 좋아요와 일반 회원 댓글 API를 제공한다. 관리자 인증·운영 댓글 조회·삭제와 대댓글은 후속 기능이며 관리자 관련 계약은 계획된 범위다.
+Post·Project 좋아요와 일반 회원 댓글 API, 관리자 운영 댓글 조회·삭제를 제공한다. 대댓글은 후속 기능이다.
 
 댓글 생성 요청:
 
@@ -662,9 +662,13 @@ Post·Project 좋아요와 일반 회원 댓글 API를 제공한다. 관리자 �
 
 댓글 응답 항목은 `{id, author, body, visibility, createdAt, updatedAt}`다. 관리자는 삭제된 댓글의 운영 메타데이터를 볼 수 있지만 삭제 본문을 복구할 수 없다.
 
+관리자 댓글 목록은 GET `/api/v1/admin/post-comments`와 `/api/v1/admin/project-comments`다. 현재 ACTIVE MANAGER/MASTER만 접근하며 부모·작성자 상태와 무관하게 SECRET·삭제 댓글을 포함한다. 각각 postId 또는 projectId와 authorId·visibility(PUBLIC/SECRET)·deleted(true/false) 필터를 선택할 수 있고 미지정 필터는 전체다. AdminContentPage 형식과 page 기본 0·size 기본 20/최대 100을 사용한다. sort는 createdAt,asc 또는 createdAt,desc만 허용하며 기본은 desc이고 ID를 같은 방향 보조 정렬로 사용한다. 페이지 offset은 signed INT 이하이며 ID는 선행 0 없는 양의 BIGINT 문자열이다. 알 수 없는·중복 query와 GET 본문은 400이다.
+
+운영 댓글 항목은 `{id, contentId, author, body, visibility, createdAt, updatedAt, deletedAt}`다. author는 일반 댓글과 같은 안전한 표시 정보만 제공하며 삭제 댓글은 body 필드를 생략한다. DELETE `/api/v1/admin/{post-comments|project-comments}/{commentId}`는 본문을 지우고 최초 deletedAt·updatedAt을 보존하는 멱등 204다. 없는 ID는 404, 잘못된 숫자 ID·본문·query는 400이다. 관리자 상세 GET·작성·수정·복원 경로는 제공하지 않는다. 삭제는 현재 관리자 읽기 잠금 뒤 댓글 단독 쓰기 잠금으로 작성자 수정과 직렬화하며 부모·회원 상태를 변경하거나 해당 행을 잠그지 않는다.
+
 좋아요 PUT·DELETE 요청은 본문과 query parameter가 없으며 둘 다 204 No Content를 반환한다. 중복 등록·취소는 멱등 처리한다. ACTIVE USER는 프로필 완료 없이 호출할 수 있다. 대상이 PUBLIC·미차단·미삭제·비탈퇴 소유자 조건을 만족하지 않거나 존재하지 않으면 등록·취소 모두 404다. SUSPENDED·WITHDRAWAL_PENDING 요청 회원은 403이며 Bearer 없는 쓰기는 기존 CSRF 방어에서 거부된다.
 
-Post·Project 상세와 모든 목록·검색 응답은 공개 가능한 콘텐츠의 활성 좋아요를 집계한 likeCount와 요청 USER의 likedByMe를 제공한다. 탈퇴 대기 회원의 좋아요는 집계·likedByMe에서 제외하며 정지 회원의 기존 좋아요는 유지한다. Guest·관리자는 likedByMe=false다. 소유자가 조회하는 숨김·차단 콘텐츠도 집계는 0·false다. 콘텐츠 숨김·차단·논리 삭제는 좋아요 이력을 보존하고, 재공개하면 유효한 기존 좋아요가 다시 집계된다. 취소는 논리 삭제하며 다시 등록하면 새 행을 추가한다. MANAGER와 MASTER는 좋아요를 등록·취소할 수 없다. 관리자 인증은 후속 기능이다.
+Post·Project 상세와 모든 목록·검색 응답은 공개 가능한 콘텐츠의 활성 좋아요를 집계한 likeCount와 요청 USER의 likedByMe를 제공한다. 탈퇴 대기 회원의 좋아요는 집계·likedByMe에서 제외하며 정지 회원의 기존 좋아요는 유지한다. Guest·관리자는 likedByMe=false다. 소유자가 조회하는 숨김·차단 콘텐츠도 집계는 0·false다. 콘텐츠 숨김·차단·논리 삭제는 좋아요 이력을 보존하고, 재공개하면 유효한 기존 좋아요가 다시 집계된다. 취소는 논리 삭제하며 다시 등록하면 새 행을 추가한다. MANAGER와 MASTER는 좋아요를 등록·취소할 수 없다. 관리자 인증은 6.5절을 따른다.
 
 ### 6.8 미디어
 

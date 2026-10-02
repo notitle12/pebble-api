@@ -1,6 +1,7 @@
 package com.pebble.api.comment.infrastructure.persistence;
 
 import com.pebble.api.comment.domain.ProjectComment;
+import com.pebble.api.comment.domain.CommentVisibility;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -19,6 +20,22 @@ public interface ProjectCommentRepository extends JpaRepository<ProjectComment, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from ProjectComment c join fetch c.author where c.id=:id")
     Optional<ProjectComment> findForUpdate(@Param("id") long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from ProjectComment c where c.id=:id")
+    Optional<ProjectComment> findForManagementUpdate(@Param("id") long id);
+
+    @EntityGraph(attributePaths = "author")
+    @Query("""
+            select c from ProjectComment c
+            where (:contentId is null or c.contentId=:contentId)
+              and (:authorId is null or c.author.id=:authorId)
+              and (:visibility is null or c.visibility=:visibility)
+              and (:deleted is null or (:deleted=true and c.deletedAt is not null)
+                   or (:deleted=false and c.deletedAt is null))
+            """)
+    Page<ProjectComment> findForManagement(@Param("contentId") Long contentId, @Param("authorId") Long authorId,
+            @Param("visibility") CommentVisibility visibility, @Param("deleted") Boolean deleted, Pageable pageable);
 
     @EntityGraph(attributePaths = "author")
     @Query("""
