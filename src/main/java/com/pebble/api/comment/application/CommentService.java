@@ -28,6 +28,24 @@ public class CommentService {
     private final ProjectQueryService projects;
     private final MemberQueryService members;
 
+    public Page<Comment> listForManagement(CommentTarget type, Long contentId, Long authorId,
+            CommentVisibility visibility, Boolean deleted, Pageable pageable) {
+        return type == CommentTarget.POST
+                ? postComments.findForManagement(contentId, authorId, visibility, deleted, pageable).map(comment -> (Comment) comment)
+                : projectComments.findForManagement(contentId, authorId, visibility, deleted, pageable).map(comment -> (Comment) comment);
+    }
+
+    @Transactional
+    public void deleteForManagement(CommentTarget type, long commentId) {
+        // 부모·회원 상태와 무관한 삭제는 댓글 행만 잠가 작성자 수정과 직렬화한다.
+        Comment comment = type == CommentTarget.POST
+                ? postComments.findForManagementUpdate(commentId).orElseThrow(CommentService::notFound)
+                : projectComments.findForManagementUpdate(commentId).orElseThrow(CommentService::notFound);
+        if (comment.getDeletedAt() != null) return;
+        comment.delete();
+        flush(type);
+    }
+
     @Transactional
     public Comment create(CommentTarget type, long contentId, long memberId, CommentChanges input) {
         var author = members.findActiveForWrite(memberId);
