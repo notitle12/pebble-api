@@ -25,6 +25,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.junit.jupiter.api.BeforeEach;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -39,6 +40,15 @@ class PostPersistenceTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @BeforeEach
+    void seedBlockingAdmin() {
+        jdbc.update("""
+                insert into admin_account (id, login_id, password_hash, role, status, created_at, updated_at)
+                values (1, 'test-blocking-admin', 'argon2placeholderhash', 'MANAGER', 'ACTIVE', now(), now())
+                on conflict (id) do nothing
+                """);
+    }
 
     @Test
     void persistsTsidTimestampsAndReferencesAndAcceptsMaximumContentLengths() {
