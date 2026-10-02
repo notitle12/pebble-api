@@ -389,7 +389,7 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 ### 6.2 관리자 인증과 회원
 
-현재 관리자 login·refresh·logout과 MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정을 제공한다. 회원/콘텐츠 운영 API는 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
+현재 관리자 login·refresh·logout, MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정, MANAGER/MASTER의 회원 목록·상세·상태 설정을 제공한다. 콘텐츠 운영 API는 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
 
 관리자 쿠키는 `admin_refresh_token`, Path는 `/api/v1/admin/auth`이며 USER 쿠키와 상호 교환할 수 없다. 세 POST 모두 허용 Origin 하나를 필수로 요구하며 누락·null·미허용·중복 Origin은 403이다. query는 허용하지 않으며 refresh·logout은 요청 본문도 금지한다. 만료·재사용·폐기·계정 상태/role 불일치 refresh는 `INVALID_REFRESH_TOKEN` 401이고 재사용은 sid도 폐기한다. 로그아웃은 미확인·없는 쿠키에도 204와 쿠키 만료를 반환한다. 제한 초과는 `RATE_LIMITED` 429다. 관리자 Bearer 요청은 공개 경로에서도 현재 DB 계정 상태·role과 Redis sid를 검증하며 무효이면 `INVALID_TOKEN` 401이다. 관리자에게 USER 전용 권한을 부여하지 않는다.
 
@@ -402,6 +402,12 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 `GET /admin/admin-accounts`는 MASTER/MANAGER와 ACTIVE/INACTIVE 전체 계정을 같은 안전한 DTO의 공통 페이지 응답으로 반환한다. page=0, size=20(최대 100), 기본 createdAt desc 및 ID desc이며 createdAt·updatedAt·loginId의 asc/desc를 허용하고 같은 방향의 ID를 보조 정렬한다. 지원 필터는 없으며 알 수 없거나 중복된 query·본문·범위 초과 값은 400이다. 허용된 Origin에 GET/POST, 숫자 ID status 경로에 PATCH CORS를 등록한다.
 
 `PATCH /admin/admin-accounts/{adminId}/status`는 `{status: "ACTIVE"|"INACTIVE"}`만 받고 200과 위 DTO를 반환한다. MANAGER만 대상이며 MASTER·본인·없는 계정은 `RESOURCE_NOT_FOUND` 404다. ID는 양수 BIGINT의 10진 문자열이며 선행 0·범위 초과는 400이다. 두 쓰기는 query, 미지원/중복 JSON 필드·null·추가 JSON 값을 거부한다. 같은 상태 설정도 성공하지만 해당 계정의 기존 모든 sid를 폐기하며 갱신·Access 사용을 막는다. ACTIVE로 바꿔도 이전 세션은 복구되지 않아 새 로그인해야 한다. role·비밀번호 변경과 삭제·개별 상세 조회는 제공하지 않는다.
+
+관리자 회원 운영은 검증된 MANAGER/MASTER Bearer 및 현재 DB ACTIVE 관리자 상태를 요구한다. `GET /admin/members`는 모든 회원 상태를 포함하며 선택적 status(ACTIVE/SUSPENDED/WITHDRAWAL_PENDING)와 q를 AND 적용한다. q는 앞뒤 공백 제거 후 1~200 유니코드 코드 포인트이며 NUL·잘못된 Unicode를 거부하고, nickname·blogName·handle에서 대소문자 구분 없는 부분 문자열을 찾는다. `%`, `_`, 역슬래시는 문자 그대로 검색한다. page=0, size=20(최대 100), 기본 createdAt desc와 ID desc이며 createdAt·updatedAt·nickname·blogName·handle의 asc/desc 및 같은 방향 ID 보조 정렬을 지원한다. 페이지 offset은 signed INT 범위 안이어야 한다.
+
+목록은 공통 페이지 응답을 사용하며 항목은 `{id, nickname, profileImageUrl, blogName, handle, profileCompleted, status, createdAt, updatedAt, withdrawalRequestedAt, withdrawalScheduledAt}`이다. `GET /admin/members/{memberId}`와 상태 변경의 200 응답도 같은 안전한 DTO를 반환한다. OAuth 연결·공급자 subject·인증 비밀은 포함하지 않는다. ID는 양수 BIGINT의 선행 0 없는 10진 문자열이다. 잘못된 숫자 ID·미지원/중복 query·GET 본문·잘못된 페이지/정렬/필터는 400 INVALID_REQUEST이고 미존재 회원은 404다. 숫자 외 미지원 관리자 경로는 기존 기본 거부 정책을 따른다.
+
+`PATCH /admin/members/{memberId}/status`는 `{status: "ACTIVE"|"SUSPENDED"}`만 받으며 query·중복/추가 JSON 필드·null·추가 JSON 값을 거부한다. WITHDRAWAL_PENDING 회원은 두 상태 설정 모두 WITHDRAWAL_PENDING 409이며 탈퇴 시각과 원래 상태를 보존한다. 같은 상태 설정도 성공하고 모든 기존 USER Refresh Family를 폐기하며 같은 상태인 경우 updatedAt은 바꾸지 않는다. ACTIVE 복구 뒤 기존 Family는 되살아나지 않아 새 로그인이 필요하다. USER Access JWT의 900초 만료 정책은 유지하므로 정지 동안 업무별 ACTIVE 검사로 회원 기능을 거부하고, 복구 후 만료 전 기존 Access JWT는 다시 사용할 수 있다. 정지는 기존 공개 콘텐츠·댓글·좋아요를 숨기거나 삭제하지 않는다. 허용 Origin에 정확한 목록/숫자 상세 GET·숫자 status PATCH CORS를 등록하며 쿠키 단독 인증은 제공하지 않는다.
 
 회원 상세 응답:
 
