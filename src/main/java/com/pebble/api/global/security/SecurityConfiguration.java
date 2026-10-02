@@ -45,6 +45,10 @@ public class SecurityConfiguration {
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout",
                                 "/api/v1/admin/auth/login", "/api/v1/admin/auth/token/refresh", "/api/v1/admin/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/admin-accounts").hasRole("MASTER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/post-comments", "/api/v1/admin/project-comments")
+                            .hasAnyRole("MANAGER", "MASTER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/post-comments/{id:[0-9]+}",
+                                "/api/v1/admin/project-comments/{id:[0-9]+}").hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/admin-accounts").hasRole("MASTER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/admin-accounts/{adminId:[0-9]+}/status").hasRole("MASTER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/members", "/api/v1/admin/members/{memberId:[0-9]+}")
@@ -161,6 +165,12 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}/status", adminStatusCors);
         CorsConfiguration getCors = new CorsConfiguration(cors);
         getCors.setAllowedMethods(List.of("GET"));
+        source.registerCorsConfiguration("/api/v1/admin/post-comments", getCors);
+        source.registerCorsConfiguration("/api/v1/admin/project-comments", getCors);
+        CorsConfiguration adminCommentDeleteCors = new CorsConfiguration(cors);
+        adminCommentDeleteCors.setAllowedMethods(List.of("DELETE"));
+        source.registerCorsConfiguration("/api/v1/admin/post-comments/{id:[0-9]+}", adminCommentDeleteCors);
+        source.registerCorsConfiguration("/api/v1/admin/project-comments/{id:[0-9]+}", adminCommentDeleteCors);
         source.registerCorsConfiguration("/api/v1/admin/posts", getCors);
         source.registerCorsConfiguration("/api/v1/admin/projects", getCors);
         CorsConfiguration adminContentCors = new CorsConfiguration(cors);
