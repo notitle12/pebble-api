@@ -156,6 +156,8 @@ chore: update Gradle configuration
 
 ## 4. 구현 규칙
 
+초기 MASTER는 첫 실행에만 보호된 `ADMIN_BOOTSTRAP_ENABLED=true`, `ADMIN_BOOTSTRAP_LOGIN_ID`, `ADMIN_BOOTSTRAP_PASSWORD`로 생성하고 완료 후 제거한다. 기존 MASTER는 덮어쓰지 않는다. 비밀번호는 12~128 코드 포인트이며 빈 값·제어 문자·잘못된 Unicode를 금지한다. 실제 값은 Git·명령 기록·로그에 남기지 않는다. 감사 파일은 `ADMIN_AUDIT_LOG_DIR`의 별도 접근 제한 볼륨에 보관한다. 기본 일별 366개이며 2년 조건 해당 시 `ADMIN_AUDIT_RETENTION_DAYS>=731`로 지정한다. 배포 전 로그 권한·변조 방지·보존 용량·프록시 주소/속도 제한을 확인한다.
+
 - 작업 전 관련 Issue와 `ARCHITECTURE.md`를 읽고 변경 위치와 Feature 소유자를 확인한다.
 - 기능 코드는 패키지별 Feature 구조에 둔다. 공통 계층은 실제로 여러 Feature에서 공유되는 책임에만 사용한다.
 - Post와 Project는 서로 다른 Feature로 유지한다. 한 기능의 도메인 상태를 다른 Feature가 직접 변경하지 않는다.
