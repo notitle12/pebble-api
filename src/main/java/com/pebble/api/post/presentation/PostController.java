@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
+import com.pebble.api.like.application.PostLikeService;
 import com.pebble.api.post.application.PostService;
 import com.pebble.api.post.domain.PostVisibility;
 import com.pebble.api.post.presentation.dto.PostResponse;
@@ -30,32 +31,35 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class PostController {
     private final PostService posts;
+    private final PostLikeService likes;
 
     @PostMapping(value = "/api/v1/posts", consumes = "application/json")
     public ResponseEntity<ApiResponse<PostResponse>> create(@AuthenticationPrincipal Jwt jwt, @RequestBody JsonNode request) {
-        PostResponse response = PostResponse.from(posts.create(memberId(jwt), PostWriteRequest.parse(request, true)));
+        PostResponse response = PostResponse.from(likes.decorate(
+                posts.create(memberId(jwt), PostWriteRequest.parse(request, true)), requesterId(jwt)));
         return ResponseEntity.created(org.springframework.web.util.UriComponentsBuilder.fromPath("/api/v1/blogs/{handle}/posts/{key}")
                 .buildAndExpand(response.author().handle(), response.urlKey()).encode().toUri()).body(ApiResponse.of(response));
     }
 
     @GetMapping("/api/v1/posts/{postId:[0-9]+}")
     public ApiResponse<PostResponse> detail(@PathVariable String postId, @AuthenticationPrincipal Jwt jwt) {
-        return ApiResponse.of(PostResponse.from(posts.detail(PostWriteRequest.id(postId, "postId"), jwt == null ? null : memberId(jwt))));
+        return ApiResponse.of(PostResponse.from(likes.decorate(
+                posts.detail(PostWriteRequest.id(postId, "postId"), requesterId(jwt)), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/blogs/{handle}/posts/{postKey}")
     public ApiResponse<PostResponse> publicAddress(@PathVariable String handle, @PathVariable String postKey, @AuthenticationPrincipal Jwt jwt) {
-        Long requester = jwt == null ? null : memberId(jwt);
-        return ApiResponse.of(PostResponse.from(postKey.matches("[0-9]+")
+        Long requester = requesterId(jwt);
+        return ApiResponse.of(PostResponse.from(likes.decorate(postKey.matches("[0-9]+")
                 ? posts.detailByNumber(handle, PostWriteRequest.id(postKey, "postNumber"), requester)
-                : posts.detailBySlug(handle, PostWriteRequest.normalizeSlug(postKey), requester)));
+                : posts.detailBySlug(handle, PostWriteRequest.normalizeSlug(postKey), requester), requester)));
     }
 
     @PatchMapping(value = "/api/v1/posts/{postId:[0-9]+}", consumes = "application/json")
     public ApiResponse<PostResponse> update(@PathVariable String postId, @AuthenticationPrincipal Jwt jwt,
                                             @RequestBody JsonNode request) {
-        return ApiResponse.of(PostResponse.from(posts.update(PostWriteRequest.id(postId, "postId"), memberId(jwt),
-                PostWriteRequest.parse(request, false))));
+        return ApiResponse.of(PostResponse.from(likes.decorate(posts.update(PostWriteRequest.id(postId, "postId"), memberId(jwt),
+                PostWriteRequest.parse(request, false)), requesterId(jwt))));
     }
 
     @DeleteMapping("/api/v1/posts/{postId:[0-9]+}")
@@ -65,18 +69,18 @@ public class PostController {
     }
 
     @GetMapping("/api/v1/posts")
-    public ApiResponse<PostPage> list(@RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<PostPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId", "authorId"));
-        return ApiResponse.of(PostPage.from(posts.listPublic(optionalId(query, "categoryId"), optionalId(query, "tagId"),
-                optionalId(query, "authorId"), pageable(query, "publishedAt"))));
+        return ApiResponse.of(PostPage.from(likes.decorate(posts.listPublic(optionalId(query, "categoryId"), optionalId(query, "tagId"),
+                optionalId(query, "authorId"), pageable(query, "publishedAt")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/posts/search")
-    public ApiResponse<PostPage> search(@RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<PostPage> search(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("q", "page", "size", "sort", "categoryId", "tagId", "authorId"));
-        return ApiResponse.of(PostPage.from(posts.search(PostWriteRequest.searchTerm(query.getFirst("q")),
+        return ApiResponse.of(PostPage.from(likes.decorate(posts.search(PostWriteRequest.searchTerm(query.getFirst("q")),
                 optionalId(query, "categoryId"), optionalId(query, "tagId"), optionalId(query, "authorId"),
-                pageable(query, "publishedAt"))));
+                pageable(query, "publishedAt")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/me/posts")
@@ -91,40 +95,48 @@ public class PostController {
                 throw invalid("visibilityStatus");
             }
         }
-        return ApiResponse.of(PostPage.from(posts.listMine(memberId(jwt), visibility, pageable(query, "displayOrder"))));
+        return ApiResponse.of(PostPage.from(likes.decorate(
+                posts.listMine(memberId(jwt), visibility, pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/{memberId:[0-9]+}/posts")
-    public ApiResponse<PostPage> blog(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<PostPage> blog(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query,
+                                      @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId"));
-        return ApiResponse.of(PostPage.from(posts.listPublic(optionalId(query, "categoryId"), optionalId(query, "tagId"),
-                PostWriteRequest.id(memberId, "memberId"), pageable(query, "displayOrder"))));
+        return ApiResponse.of(PostPage.from(likes.decorate(posts.listPublic(optionalId(query, "categoryId"), optionalId(query, "tagId"),
+                PostWriteRequest.id(memberId, "memberId"), pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/blogs/{handle}/posts")
-    public ApiResponse<PostPage> publicBlog(@PathVariable String handle, @RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<PostPage> publicBlog(@PathVariable String handle, @RequestParam MultiValueMap<String, String> query,
+                                            @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId"));
-        return ApiResponse.of(PostPage.from(posts.listBlog(handle, optionalId(query, "categoryId"), optionalId(query, "tagId"),
-                pageable(query, "displayOrder"))));
+        return ApiResponse.of(PostPage.from(likes.decorate(posts.listBlog(handle, optionalId(query, "categoryId"), optionalId(query, "tagId"),
+                pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/{memberId:[0-9]+}/boards/{boardId:[0-9]+}/posts")
     public ApiResponse<PostPage> board(@PathVariable String memberId, @PathVariable String boardId,
-                                      @RequestParam MultiValueMap<String, String> query) {
+                                      @RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort"));
-        return ApiResponse.of(PostPage.from(posts.listBoard(PostWriteRequest.id(memberId, "memberId"),
-                PostWriteRequest.id(boardId, "boardId"), pageable(query, "displayOrder"))));
+        return ApiResponse.of(PostPage.from(likes.decorate(posts.listBoard(PostWriteRequest.id(memberId, "memberId"),
+                PostWriteRequest.id(boardId, "boardId"), pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/projects/{projectId:[0-9]+}/posts")
-    public ApiResponse<PostPage> project(@PathVariable String projectId, @RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<PostPage> project(@PathVariable String projectId, @RequestParam MultiValueMap<String, String> query,
+                                         @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort"));
-        return ApiResponse.of(PostPage.from(posts.listProject(PostWriteRequest.id(projectId, "projectId"),
-                pageable(query, "publishedAt"))));
+        return ApiResponse.of(PostPage.from(likes.decorate(posts.listProject(PostWriteRequest.id(projectId, "projectId"),
+                pageable(query, "publishedAt")), requesterId(jwt))));
     }
 
     private long memberId(Jwt jwt) {
         return Long.parseLong(jwt.getSubject().substring("member:".length()));
+    }
+
+    private Long requesterId(Jwt jwt) {
+        return jwt != null && "USER".equals(jwt.getClaimAsString("role")) ? memberId(jwt) : null;
     }
 
     private Long optionalId(MultiValueMap<String, String> query, String field) {

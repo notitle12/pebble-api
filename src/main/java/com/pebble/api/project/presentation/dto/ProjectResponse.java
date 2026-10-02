@@ -38,7 +38,7 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                         feature.getTitle(), feature.getDescription(), feature.getDisplayOrder())).toList(),
                 view.links() == null ? null : view.links().stream().map(link -> new Link(link.getId().toString(),
                         link.getType(), link.getLabel(), link.getUrl(), link.getDisplayOrder())).toList(),
-                view.detail() ? List.of() : null, project.getVisibility(), 0, false, project.getPublishedAt(),
+                view.detail() ? List.of() : null, project.getVisibility(), view.likeCount(), view.likedByMe(), project.getPublishedAt(),
                 project.getCreatedAt(), project.getUpdatedAt(), view.owner() ? project.isBlocked() : null);
     }
 

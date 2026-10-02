@@ -19,6 +19,13 @@ public class ProjectQueryService {
     private final ProjectTagRepository projectTags;
     private final ProjectRepository projects;
 
+    @Transactional
+    public void requirePublicForWrite(long projectId) {
+        Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectQueryService::notFound);
+        if (project.getVisibility() != ProjectVisibility.PUBLIC || project.isBlocked()
+                || project.getOwner().getStatus() == MemberStatus.WITHDRAWAL_PENDING) throw notFound();
+    }
+
     public void resolveForPost(long projectId, long ownerId) {
         Project project = projects.findById(projectId).orElseThrow(ProjectQueryService::notFound);
         if (!project.getOwner().getId().equals(ownerId) || project.getVisibility() == ProjectVisibility.DELETED) throw notFound();
