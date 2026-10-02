@@ -32,10 +32,23 @@ public class UserRefreshTokenService {
                 'lastUsedAt', ARGV[4],
                 'familyCreatedAt', ARGV[4],
                 'idleExpiresAt', ARGV[5],
-                'absoluteExpiresAt', ARGV[6], 'pepperVersion', ARGV[10])
+                'absoluteExpiresAt', ARGV[6], 'pepperVersion', ARGV[10],
+                'generation', redis.call('GET', KEYS[3]) or '')
             redis.call('PEXPIREAT', KEYS[1], ARGV[7])
             redis.call('SADD', KEYS[2], ARGV[8])
             redis.call('PEXPIREAT', KEYS[2], ARGV[9])
+            if redis.call('EXISTS', KEYS[3]) == 1 then
+                local time = redis.call('TIME')
+                local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+                if redis.call('PTTL', KEYS[3]) < tonumber(ARGV[9]) - now then
+                    redis.call('PEXPIREAT', KEYS[3], ARGV[9])
+                end
+            end
+            return 1
+            """, Long.class);
+
+    private static final DefaultRedisScript<Long> REVOKE_ALL = new DefaultRedisScript<>("""
+            redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
             return 1
             """, Long.class);
 
@@ -67,8 +80,8 @@ public class UserRefreshTokenService {
         Instant idleExpiresAt = now.plus(IDLE_TTL);
         Instant absoluteExpiresAt = now.plus(ABSOLUTE_TTL);
 
-        redisTemplate.execute(STORE_TOKEN,
-                List.of(tokenKey(digest), familyKey(familyId)),
+        Long result = redisTemplate.execute(STORE_TOKEN,
+                List.of(tokenKey(digest), familyKey(familyId), generationKey(memberId)),
                 Long.toString(memberId),
                 sessionId,
                 familyId,
@@ -78,7 +91,15 @@ public class UserRefreshTokenService {
                 Long.toString(idleExpiresAt.toEpochMilli()),
                 digest,
                 Long.toString(absoluteExpiresAt.toEpochMilli()), currentVersion);
+        if (!Long.valueOf(1).equals(result)) throw new IllegalStateException("Refresh Token issue failed");
         return new IssuedRefreshToken(token, idleExpiresAt);
+    }
+
+    public void revokeAll(long memberId) {
+        // 세대가 없는 이전 저장 형식도 빈 세대로 취급한다. 복구해도 과거 Family는 되살아나지 않는다.
+        Long result = redisTemplate.execute(REVOKE_ALL, List.of(generationKey(memberId)),
+                UUID.randomUUID().toString(), Long.toString(ABSOLUTE_TTL.toMillis()));
+        if (!Long.valueOf(1).equals(result)) throw new IllegalStateException("Refresh Token revocation failed");
     }
 
     public TokenSnapshot find(String token) {
@@ -97,11 +118,15 @@ public class UserRefreshTokenService {
                 continue;
             }
             String familyId = (String) data.get("familyId");
+            long memberId = Long.parseLong((String) data.get("subjectId"));
+            String generation = redisTemplate.opsForValue().get(generationKey(memberId));
+            if (!java.util.Objects.equals(data.getOrDefault("generation", ""), generation == null ? "" : generation))
+                throw new AuthException(AuthError.INVALID_REFRESH_TOKEN);
             if (Boolean.TRUE.equals(redisTemplate.hasKey(familyKey(familyId) + ":revoked"))) {
                 throw new AuthException(AuthError.INVALID_REFRESH_TOKEN);
             }
             return new TokenSnapshot(digest, familyId,
-                    Long.parseLong((String) data.get("subjectId")),
+                    memberId,
                     (String) data.get("idleExpiresAt"), (String) data.get("absoluteExpiresAt"));
         }
         throw new AuthException(AuthError.INVALID_REFRESH_TOKEN);
@@ -144,7 +169,7 @@ public class UserRefreshTokenService {
         String digest = codec.currentDigest(token);
         Long result = redisTemplate.execute(TRANSITION,
                 List.of(tokenKey(snapshot.digest()), familyKey(snapshot.familyId()),
-                        familyKey(snapshot.familyId()) + ":revoked", tokenKey(digest)),
+                        familyKey(snapshot.familyId()) + ":revoked", tokenKey(digest), generationKey(snapshot.memberId())),
                 snapshot.familyId(), Long.toString(snapshot.memberId()), snapshot.absoluteExpiresAt(),
                 snapshot.idleExpiresAt(), Long.toString(Instant.parse(snapshot.absoluteExpiresAt()).toEpochMilli()),
                 action, Long.toString(Instant.parse(snapshot.idleExpiresAt()).toEpochMilli()),
@@ -166,6 +191,10 @@ public class UserRefreshTokenService {
 
     private String familyKey(String familyId) {
         return "pebble:auth:user:refresh-family:" + familyId;
+    }
+
+    private String generationKey(long memberId) {
+        return "pebble:auth:user:member:" + memberId + ":generation";
     }
 
     public record IssuedRefreshToken(String value, Instant idleExpiresAt) {
