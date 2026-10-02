@@ -224,5 +224,10 @@ public class ProjectService {
     private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }
 
     public record ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
-                              boolean detail, boolean owner) { }
+                              boolean detail, boolean owner, long likeCount, boolean likedByMe) {
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
+                           boolean detail, boolean owner) {
+            this(project, features, links, tags, detail, owner, 0, false);
+        }
+    }
 }

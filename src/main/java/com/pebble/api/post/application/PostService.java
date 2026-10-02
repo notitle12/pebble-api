@@ -293,6 +293,10 @@ public class PostService {
         return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
     }
 
-    public record PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner) {
+    public record PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner,
+                           long likeCount, boolean likedByMe) {
+        public PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner) {
+            this(post, blocks, tags, owner, 0, false);
+        }
     }
 }

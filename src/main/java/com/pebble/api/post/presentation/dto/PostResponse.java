@@ -31,7 +31,7 @@ public record PostResponse(String id, String postNumber, String slug, String url
                         category.getSlug(), category.getStatus()),
                 view.tags().stream().map(tag -> new Technology(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getStatus())).toList(),
                 post.getBoardId() == null ? null : post.getBoardId().toString(),
-                post.getProjectId() == null ? null : post.getProjectId().toString(), null, post.getVisibility(), 0, false, post.getPublishedAt(), post.getCreatedAt(),
+                post.getProjectId() == null ? null : post.getProjectId().toString(), null, post.getVisibility(), view.likeCount(), view.likedByMe(), post.getPublishedAt(), post.getCreatedAt(),
                 post.getUpdatedAt(), view.owner() ? post.isBlocked() : null);
     }
 
