@@ -33,5 +33,3 @@ CREATE TABLE project_comment (
 );
 CREATE INDEX idx_project_comment_content_created ON project_comment(project_id, created_at, id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_project_comment_author ON project_comment(author_member_id);
-
-

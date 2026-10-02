@@ -31,4 +31,3 @@ public interface ProjectCommentRepository extends JpaRepository<ProjectComment, 
     Page<ProjectComment> findVisible(@Param("contentId") long contentId, @Param("requesterId") Long requesterId,
                                   @Param("owner") boolean owner, Pageable pageable);
 }
-
