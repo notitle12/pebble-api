@@ -72,13 +72,13 @@
 
 회원 최초 설정 `POST /api/v1/members/me/profile`과 표시 이름 변경 `PATCH`는 정확한 USER Bearer 경로로만 허용한다. member Application이 DB ACTIVE 상태·본인 계정·최초 완료 여부·필드별 쿨타임을 확인하며 회원 행 배타 잠금으로 동시 설정/변경을 직렬화한다. 공개 handle은 Naver 식별자나 내부 TSID와 구분하고 최초 확정 후 변경하지 않는다. 아직 설정하지 않은 회원의 콘텐츠 작성 제한은 해당 콘텐츠 Application이 member의 완료 상태 검증을 호출해야 한다.
 
-Post의 POST·PATCH·DELETE는 인증된 USER Bearer 요청만 허용한다. Post Application이 ACTIVE 회원, 프로필 설정 완료, 리소스 소유권을 확인한다. 수정·삭제는 대상 Post 행 잠금 아래에서 수행하며 본인 콘텐츠 밖의 ID는 공개되지 않은 리소스와 동일하게 처리한다. Post 작성·수정 권한을 관리자 권한으로 우회하지 않으며 관리자 Post 조회·차단 경로는 아직 구현하지 않았다. slug와 postNumber는 공개 주소 식별자일 뿐 권한 근거가 아니다.
+Post의 POST·PATCH·DELETE는 인증된 USER Bearer 요청만 허용한다. Post Application이 ACTIVE 회원, 프로필 설정 완료, 리소스 소유권을 확인한다. 수정·삭제는 대상 Post 행 잠금 아래에서 수행하며 본인 콘텐츠 밖의 ID는 공개되지 않은 리소스와 동일하게 처리한다. Post 작성·수정 권한을 관리자 권한으로 우회하지 않으며 별도 관리자 검수·차단·해제·강제 삭제 경로로 운영한다. slug와 postNumber는 공개 주소 식별자일 뿐 권한 근거가 아니다.
 
 좋아요는 숫자 ID Post·Project의 /like PUT·DELETE 경로만 USER Bearer 쓰기로 허용한다. Like Application은 요청 회원 ACTIVE 상태를 검사하며 프로필 완료는 요구하지 않는다. 요청 회원 Member 잠금 뒤 대상 Feature의 Application 계약으로 콘텐츠를 잠그고 공개·미차단·미삭제·비탈퇴 소유자를 확인한다. 공개 조건을 만족하지 않는 취소도 404이며 관리자 역할은 허용하지 않는다. 집계는 탈퇴 대기 회원의 좋아요를 제외하고 Guest·관리자의 likedByMe를 false로 처리한다. CORS는 허용 Origin의 PUT·DELETE·Authorization을 등록하며 새 CSRF 예외는 추가하지 않는다. 쿠키는 좋아요 인증 수단이 아니다.
 
 댓글은 Post·Project 숫자 ID 하위 /comments의 GET·POST, 숫자 댓글 ID 상세 GET·PATCH·DELETE를 제공한다. 쓰기는 USER Bearer와 ACTIVE 계정을 요구하고 프로필 완료는 요구하지 않는다. Member → 대상 콘텐츠 → 댓글 잠금 안에서 생성의 공개 조건과 본인 수정·삭제 권한을 검증한다. 공개 GET은 PUBLIC 댓글만 제공하며 ACTIVE 댓글 작성자의 본인 SECRET과 콘텐츠 소유자의 관리 조회만 추가 허용한다. HIDDEN·차단 대상의 목록은 ACTIVE 콘텐츠 소유자만, SECRET 단일 조회는 ACTIVE 댓글 작성자도 가능하다. 부모 삭제·탈퇴 대기 소유자와 탈퇴 대기 댓글 작성자는 일반 경로에서 숨기며 권한 없는 댓글 ID는 404다. 삭제는 본문을 제거한다. 관리자 댓글 경로는 아직 거부한다. CORS는 허용 Origin의 목록 GET/POST·상세 GET/PATCH/DELETE만 등록하고 새 CSRF 예외는 추가하지 않는다.
 
-Project의 POST·PATCH·DELETE도 인증된 USER Bearer 요청만 허용하며 Project Application이 ACTIVE·프로필 완료·소유권을 검증한다. Member 행을 먼저 잠그고 수정·삭제 시 Project 행을 잠가 하위 배열 교체와 상태 전이를 직렬화한다. Post 연결 변경도 같은 Member 잠금을 사용하며 Project Application 조회 계약으로 본인 소유·미삭제를 검증한다. 삭제 시 Post Application이 같은 트랜잭션에서 모든 연결을 해제한다. 공개 GET·검색·회원별 목록은 PUBLIC·미차단·미삭제이며 소유자가 WITHDRAWAL_PENDING이 아닌 콘텐츠만 반환한다. 작성자 상세·본인 목록의 HIDDEN·차단 조회에는 ACTIVE 검증을 적용하고 본인 목록은 USER만 허용한다. 숫자 ID Project의 관련 Post 목록은 부모의 공개 조건과 Post의 공개 조건을 모두 검증한다. 미디어·관리자 운영 경로는 아직 허용하지 않으며 CSRF 예외를 추가하지 않는다. CORS는 허용 Origin에 Project 목록 GET/POST, 숫자 ID 상세 GET/PATCH/DELETE, 검색·본인/회원별 목록·관련 Post 목록 GET을 등록한다.
+Project의 POST·PATCH·DELETE도 인증된 USER Bearer 요청만 허용하며 Project Application이 ACTIVE·프로필 완료·소유권을 검증한다. Member 행을 먼저 잠그고 수정·삭제 시 Project 행을 잠가 하위 배열 교체와 상태 전이를 직렬화한다. Post 연결 변경도 같은 Member 잠금을 사용하며 Project Application 조회 계약으로 본인 소유·미삭제를 검증한다. 삭제 시 Post Application이 같은 트랜잭션에서 모든 연결을 해제한다. 공개 GET·검색·회원별 목록은 PUBLIC·미차단·미삭제이며 소유자가 WITHDRAWAL_PENDING이 아닌 콘텐츠만 반환한다. 작성자 상세·본인 목록의 HIDDEN·차단 조회에는 ACTIVE 검증을 적용하고 본인 목록은 USER만 허용한다. 숫자 ID Project의 관련 Post 목록은 부모의 공개 조건과 Post의 공개 조건을 모두 검증한다. 미디어 경로는 아직 허용하지 않으며 CSRF 예외를 추가하지 않는다. CORS는 허용 Origin에 Project 목록 GET/POST, 숫자 ID 상세 GET/PATCH/DELETE, 검색·본인/회원별 목록·관련 Post 목록 GET을 등록한다.
 
 프로필과 Post 쓰기는 Cookie/HTTP 세션/Basic 인증을 제공하지 않는다. Spring Resource Server의 Bearer 요청 CSRF 처리와 JWT 검증을 사용하며 전역 CSRF disable 또는 Cookie Origin 검사 제외를 추가하지 않는다. Refresh Cookie 단독 쓰기는 거부하고 refresh/logout은 Bearer 헤더가 있어도 기존 필수 Origin 검사를 유지한다. CORS는 프로필 POST/PATCH, Post 목록 POST/GET 및 상세 GET/PATCH/DELETE, 공개 블로그와 회원 Post GET에만 허용 Origin을 등록한다.
 
@@ -235,6 +235,10 @@ Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access To
 - 운영 비밀을 `.env`, 예제 설정, 로그, 이슈 본문 또는 Git에 기록하지 않는다. 저장소에 실제 비밀이 유입되면 파일에서 지우는 것만으로 끝내지 말고 해당 비밀을 교체한다.
 
 ## 9. 브라우저 전송, CORS와 CSRF
+
+관리자 콘텐츠 운영은 정확한 `/api/v1/admin/posts`·`/api/v1/admin/projects` GET 목록, 숫자 상세 GET/DELETE와 숫자 block PUT/DELETE만 MANAGER/MASTER로 허용한다. 관리자 온라인 sid 검증과 Application의 현재 ACTIVE 관리자 읽기 잠금을 유지한다. USER 생성/수정 권한을 우회하지 않고 Post/Project Application 계약이 자신의 상태 전이를 소유한다. 조회는 모든 콘텐츠/소유자 상태를 포함하되 안전한 DTO만 제공하며 writes는 관리자 → 소유자 회원 → 콘텐츠 잠금 순서다. 불변 소유자 ID를 조회한 뒤 회원 잠금을 획득하고 콘텐츠를 조회해 기존 작성자 쓰기/삭제·회원 상태 변경과 직렬화한다. 정지·탈퇴 대기 소유자에도 ACTIVE 조건을 강제로 적용하지 않는다.
+
+차단은 공개 상태와 독립적이며 같은 상태 요청은 메타데이터를 보존한다. DELETED의 차단 전환은 409이고 강제 삭제는 복구 없는 멱등 논리 삭제다. Project 강제 삭제의 Post 연결 해제와 부모 변경은 하나의 DB 트랜잭션이며 실패 시 전체 롤백한다. 일반 상세·목록·검색·댓글·좋아요의 기존 공개 판정은 유지한다. 새 permitAll·CSRF 예외·Cookie 인증은 없으며 허용 Origin의 정확한 관리자 Method만 CORS에 등록한다. 감사는 전용 파일에 actor/대상 내부 ID·action/outcome·IP·traceId·dataType=post/project를 기록하며 제목·본문·검색어·응답 내용·토큰을 남기지 않는다.
 
 - API의 Access Token 전달 방식은 `Authorization: Bearer`다. TLS 없이 토큰을 주고받지 않는다.
 - Access JWT는 로그인·갱신 응답 본문으로 전달하고 클라이언트 메모리에만 보관한다. 보호된 API에는 `Authorization: Bearer`로 보낸다. `localStorage`나 `sessionStorage`에 저장하지 않는다.

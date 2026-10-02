@@ -238,7 +238,7 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 (후속, 미구현) |
 | DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 (후속, 미구현) |
 
-Board 관리와 Post의 Board·Project 지정, 공개 Post 검색, 좋아요를 제공한다. 썸네일·미디어와 관리자 Post 운영 API는 아직 구현하지 않았으며 위 썸네일 행은 후속 계획 계약을 보존한다.
+Board 관리와 Post의 Board·Project 지정, 공개 Post 검색, 좋아요를 제공한다. 관리자 Post 운영은 6.5절을 따르며 썸네일·미디어는 아직 구현하지 않았고 위 썸네일 행은 후속 계획 계약을 보존한다.
 
 ### 5.3 Project
 
@@ -389,7 +389,7 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 ### 6.2 관리자 인증과 회원
 
-현재 관리자 login·refresh·logout, MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정, MANAGER/MASTER의 회원 목록·상세·상태 설정을 제공한다. 콘텐츠 운영 API는 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
+현재 관리자 login·refresh·logout, MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정, MANAGER/MASTER의 회원 목록·상세·상태 설정을 제공한다. Post/Project 검수·차단·해제·강제 삭제도 제공하며 관리자 댓글·분류 편집은 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
 
 관리자 쿠키는 `admin_refresh_token`, Path는 `/api/v1/admin/auth`이며 USER 쿠키와 상호 교환할 수 없다. 세 POST 모두 허용 Origin 하나를 필수로 요구하며 누락·null·미허용·중복 Origin은 403이다. query는 허용하지 않으며 refresh·logout은 요청 본문도 금지한다. 만료·재사용·폐기·계정 상태/role 불일치 refresh는 `INVALID_REFRESH_TOKEN` 401이고 재사용은 sid도 폐기한다. 로그아웃은 미확인·없는 쿠키에도 204와 쿠키 만료를 반환한다. 제한 초과는 `RATE_LIMITED` 429다. 관리자 Bearer 요청은 공개 경로에서도 현재 DB 계정 상태·role과 Redis sid를 검증하며 무효이면 `INVALID_TOKEN` 401이다. 관리자에게 USER 전용 권한을 부여하지 않는다.
 
@@ -534,7 +534,7 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
 
 `urlKey`는 slug가 있으면 slug, 없으면 `postNumber` 문자열이다. `GET /api/v1/blogs/{handle}/posts/{postKey}`에서 숫자 키는 작성자별 번호, 그 외 키는 slug로 해석한다. 본인 블로그 기본 목록은 displayOrder 오름차순이고 공개 전체 목록 기본 순서는 publishedAt 내림차순이다. 공개 주소 경로는 공개 handle과 postNumber 또는 slug를 사용하며 Naver 식별자와 내부 TSID를 경로에 사용하지 않는다. 응답의 `id`는 TSID 문자열이다.
 
-Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 현재 항상 null이다. `likeCount`와 `likedByMe`는 6.7절의 공개 집계·요청 회원 규칙을 따른다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
+Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 현재 항상 null이다. `likeCount`와 `likedByMe`는 6.7절의 공개 집계·요청 회원 규칙을 따른다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 검수 응답은 6.5절을 따른다.
 
 ### 6.4 Project
 
@@ -593,14 +593,22 @@ Project 상세에는 현재 빈 미디어 배열, 주요 기능, 링크, 기술 
 
 ### 6.5 관리자 차단
 
-차단 API는 별도 요청 본문 없이 상태 변경을 수행한다. Post·Project 관리자 차단 경로는 현재 구현되어 있지 않으며 아래 규칙은 향후 운영 기능 계약이다.
+Post·Project 관리자 검수·차단·해제·강제 삭제는 MANAGER/MASTER Bearer 및 현재 DB ACTIVE 관리자 상태를 요구한다. 정확한 `/admin/posts`·`/admin/projects` 목록 GET, 숫자 상세 GET/DELETE, 숫자 block PUT/DELETE만 제공하며 Cookie 단독 인증·USER 권한은 허용하지 않는다. 모든 경로는 본문을 금지하며 목록 외 query는 허용하지 않는다. 미지원/중복 query·잘못된 숫자 ID·입력은 INVALID_REQUEST 400, 미존재 콘텐츠는 404다. 숫자 ID는 양수 BIGINT의 선행 0 없는 10진 문자열이고 숫자 외 미지원 관리자 경로는 기본 거부 정책을 따른다.
+
+목록은 공개/숨김/삭제·차단 여부와 ACTIVE/SUSPENDED/WITHDRAWAL_PENDING 소유자 상태에 관계없이 조회한다. q·visibilityStatus(PUBLIC/HIDDEN/DELETED)·isBlocked(true/false)와 Post의 authorId 또는 Project의 ownerId를 AND 적용한다. q는 앞뒤 공백 제거 후 1~200 유니코드 코드 포인트이며 NUL·잘못된 Unicode를 거부한다. 검색 대상·대소문자 구분 없는 부분 문자열·특수 문자 리터럴·EXISTS 중복 방지는 각 공개 Post/Project 검색과 같고 공개 제한만 적용하지 않는다. page=0, size=20(최대 100), 기본 createdAt desc 및 ID desc이며 createdAt·updatedAt·publishedAt의 asc/desc와 같은 방향 ID 보조 정렬을 지원한다. 페이지 offset은 signed INT 범위 안이어야 한다.
+
+검수 목록은 공통 페이지 응답이며 각 항목과 상세/차단 응답은 `{content, blockedAt, blockedByAdminId, deletedAt}`이다. content는 기존 안전한 Post/Project DTO에 isBlocked를 포함한 값이다. 목록은 본문 블록·Project 상세 필드를 생략하고 상세는 삭제된 콘텐츠의 보존된 본문·기능·링크·Tag도 제공한다. blockedByAdminId는 내부 ID 문자열 또는 null이며 OAuth 식별자·인증 비밀은 제공하지 않는다. likeCount는 기존 공개 가능한 콘텐츠 집계만 반영하고 관리자 likedByMe는 false다.
+
+차단 PUT/DELETE는 200과 검수 상세 응답을 반환한다. 차단과 해제는 본문 없이 상태만 설정한다.
 
 - PUT block은 isBlocked=true, blockedAt=현재 시각, blockedByAdminId=요청 관리자 ID로 설정한다.
 - DELETE block은 isBlocked=false로 설정하고 blockedAt과 blockedByAdminId를 비운다.
-- 이미 차단된 리소스에 PUT, 차단되지 않은 리소스에 DELETE를 보내도 멱등하게 200을 반환한다.
+- 이미 차단된 리소스에 PUT, 차단되지 않은 리소스에 DELETE를 보내도 멱등하게 200을 반환한다. 같은 차단 상태는 최초 blockedAt·blockedByAdminId·updatedAt을 보존한다.
 - DELETED 콘텐츠는 차단 상태 변경을 거부하고 CONTENT_DELETED를 반환한다.
 - 차단과 차단 해제는 visibilityStatus를 변경하지 않는다.
 - 차단 메타데이터는 현재 차단 상태만 기록한다. 과거 차단 이력은 MVP에서 제공하지 않는다.
+
+관리자 DELETE 상세는 visibilityStatus=DELETED의 논리 삭제이며 본문 없는 204를 반환한다. 이미 삭제된 콘텐츠도 204이며 최초 deletedAt을 보존한다. 복구 API는 없고 본문·Tag·댓글·좋아요 이력은 물리 삭제하지 않는다. Project 강제 삭제는 숨김·차단·삭제 Post를 포함한 모든 연결의 projectId를 같은 트랜잭션에서 null로 만들며 글의 공개 상태와 내용을 보존한다. 차단/삭제는 기존 공개 상세·목록·검색·댓글·좋아요 판정에서 제외하고 차단 해제 시 이력은 다시 공개 규칙으로 집계한다. 허용 Origin의 정확한 목록 GET·상세 GET/DELETE·block PUT/DELETE CORS만 등록하며 새 CSRF 예외는 없다.
 
 ### 6.6 Category, Tag와 Board
 
@@ -710,7 +718,7 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 ## 8. API 전역 제약
 
 - API는 회원이 다른 회원의 Post, Project, Board, 댓글을 수정 또는 삭제하지 못하게 한다.
-- isBlocked, blockedAt, blockedByAdminId는 USER 생성·수정 요청으로 변경할 수 없다. Post 관리자 조회·차단 API는 아직 구현하지 않았다.
-- 구현된 리소스의 관리자 강제 삭제는 visibilityStatus를 DELETED로 전환한다. DELETED 복구 API는 없다. Post 관리자 강제 삭제는 미구현이다.
+- isBlocked, blockedAt, blockedByAdminId는 USER 생성·수정 요청으로 변경할 수 없다. Post/Project 관리자 조회·차단 API는 6.5절을 따른다.
+- 구현된 리소스의 관리자 강제 삭제는 visibilityStatus를 DELETED로 전환한다. DELETED 복구 API는 없다. Post/Project 관리자 강제 삭제는 6.5절을 따른다.
 - 탈퇴 요청 후 7일 동안 취소할 수 있으며, 요청 즉시 계정 이용과 콘텐츠 공개를 막는다. 예약 기간이 끝나면 계정과 콘텐츠를 영구 삭제한다.
 - 업로드 형식, 크기·픽셀 한도, WebP 파생 크기와 품질, signed GET URL 15분 만료 정책은 6.8절을 따른다.
