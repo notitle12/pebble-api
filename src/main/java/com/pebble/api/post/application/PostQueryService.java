@@ -15,6 +15,13 @@ public class PostQueryService {
     private final PostRepository posts;
 
     @Transactional
+    public com.pebble.api.post.domain.Post findForComments(long id, boolean forWrite) {
+        var post = (forWrite ? posts.findByIdForUpdate(id) : posts.findById(id)).orElseThrow(PostQueryService::notFound);
+        post.getAuthor().getStatus();
+        return post;
+    }
+
+    @Transactional
     public void requirePublicForWrite(long id) {
         var post = posts.findByIdForUpdate(id).orElseThrow(PostQueryService::notFound);
         if (post.getVisibility() != PostVisibility.PUBLIC || post.isBlocked()
