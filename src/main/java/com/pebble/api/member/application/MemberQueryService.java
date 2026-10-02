@@ -17,6 +17,11 @@ public class MemberQueryService {
 
     private final MemberRepository memberRepository;
 
+    @Transactional
+    public java.util.Optional<Member> findForAuthentication(long id) {
+        return memberRepository.findForAuthentication(id);
+    }
+
     public Member findActiveById(long id) {
         Member member = memberRepository.findById(id)
                 .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND));

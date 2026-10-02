@@ -80,6 +80,8 @@ Post와 Project는 서로 다른 Feature와 테이블을 유지한다. 댓글과
 
 - CHECK로 `status = 'WITHDRAWAL_PENDING'`일 때 두 탈퇴 시각이 모두 존재하고, 그 외 상태에서는 두 값이 모두 NULL임을 보장한다. 탈퇴 예약 취소 시 시각을 NULL로 되돌린다. 탈퇴 유예 기간이 끝나면 `WITHDRAWN` tombstone을 남기지 않고 회원 및 종속 데이터를 물리 삭제한다.
 
+MANAGER/MASTER의 회원 운영은 member Application이 목록·상세와 ACTIVE/SUSPENDED 전환을 소유한다. 관리자 ACTIVE 읽기 잠금 → 대상 회원 쓰기 잠금 순서로 상태 변경과 USER 로그인/Refresh의 회원 읽기 잠금을 직렬화한다. WITHDRAWAL_PENDING 회원의 운영 상태 변경은 409로 거부한다. 같은 상태는 DB 갱신 시각을 바꾸지 않지만 기존 Refresh Family는 폐기하며 Redis 폐기 실패는 DB 상태 변경을 롤백한다. 공개 콘텐츠 상태와 탈퇴 시각·프로필·OAuth 연결은 변경하지 않는다. 기존 스키마와 상태 CHECK를 사용하므로 migration은 추가하지 않는다.
+
 `V4__add_member_profile.sql`은 최초 설정 컬럼과 세 이름의 고유 제약을 추가한다. 기존 닉네임 중복은 created_at·id 순서의 첫 회원 값을 보존하고 나머지에 30자 이내 숫자 접미사를 부여한다. 기존 접미사 이름도 먼저 예약해 덮어쓰지 않으며 회원 ID·OAuth 연결은 유지한다. 기존 회원의 blog_name·handle·완료 시각은 NULL로 두어 다음 로그인에서 설정한다. 닉네임 변경 시각은 created_at으로 채우며 최초 설정 때 두 쿨타임을 새로 시작한다.
 
 handle은 영문으로 시작하는 3~30자 영문 소문자·숫자·하이픈이며 끝 하이픈 및 API 예약어를 CHECK로 막는다. profile_completed_at이 없으면 blog_name·handle·blog_name_changed_at은 모두 NULL이어야 하고, 완료되면 이름과 변경 시각이 있어야 한다. 최초 handle 확정 뒤 변경 또는 NULL 제거는 DB 트리거도 거부한다. 닉네임 기본값 할당과 직접 이름 설정은 PostgreSQL advisory transaction lock을 공유하고 고유 제약을 최종 방어로 사용한다. 쿨타임은 Redis TTL 대신 회원 변경 시각으로 계산하고 회원 행 배타 잠금 안에서 검증한다.

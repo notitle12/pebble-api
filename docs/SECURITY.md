@@ -182,11 +182,17 @@ Refresh 요청이 성공할 때마다 기존 Token을 한 번만 사용할 수 �
 
 현재 USER 구현은 단일 Redis 인스턴스의 Lua Script로 토큰 상태 검사·소비·후속 digest 저장 또는 Family 폐기 표식 저장을 한 번에 처리한다. 개별 digest hash와 Family digest set은 기존 초기 세션 형식을 유지한다. Family 폐기 표식이 있으면 모든 후속 갱신이 거부되어 활성 digest도 즉시 논리적으로 폐기된다. 소비 hash와 폐기 표식은 절대 만료까지 보관하며 활성 hash는 유휴·절대 만료 중 이른 시각에 만료한다. Lua는 Redis TIME으로 만료를 다시 검사한다. Family set이 사라진 경우도 갱신을 거부한다. 토큰 원문을 복구하거나 응답 유실 유예를 제공하지 않는다. 동시 요청의 첫 회전 성공 응답이 늦게 도착해도 이후 재사용 요청으로 그 Family가 폐기될 수 있다. 클라이언트는 재로그인한다.
 
-조회한 회원 상태는 회전 직전에 member Application 계약으로 확인하고 비활성 상태라면 제출된 Family를 폐기한다. PostgreSQL 회원 상태 조회와 Redis 전이는 분산 트랜잭션이 아니다. 향후 탈퇴·상태 변경 기능은 7.3절의 전체 Family 폐기 조정을 구현해야 하며, 이번 USER refresh/logout 기능이 전체 회원 세션 폐기 기능을 대신하지 않는다. Redis Cluster는 동적 Family 키와 digest 키의 같은 hash slot을 보장하지 않으므로 현재 지원하지 않는다. Cluster 전환 시 키 설계와 원자성 검증을 함께 변경한다.
+조회한 회원 상태는 회전 직전에 member Application 계약의 PESSIMISTIC_READ 아래에서 확인하고 비활성 상태라면 제출된 Family를 폐기한다. Naver 공급자 통신과 OAuth 연결 완료 후 USER 발급도 별도 일반 트랜잭션에서 회원 읽기 잠금과 최신 상태 검증을 유지한다. 관리자 상태 설정의 회원 쓰기 잠금과 직렬화해 정지 commit 후 발급/회전을 막고 먼저 발급된 세션은 전체 폐기한다. PostgreSQL과 Redis는 분산 트랜잭션이 아니다. Redis Cluster는 동적 Family·digest·회원 세대 키의 같은 hash slot을 보장하지 않으므로 현재 지원하지 않는다. Cluster 전환 시 키 설계와 원자성 검증을 함께 변경한다.
 
 토큰 교체와 재사용 판정은 하나의 원자적 상태 전이여야 한다. Redis의 개별 읽기와 쓰기를 순서대로 실행하는 것만으로 회전 동시성을 보장하지 않는다.
 
 ### 7.3 로그아웃과 계정 상태 변경
+
+MANAGER/MASTER는 정확한 GET `/api/v1/admin/members`·숫자 회원 상세와 숫자 status PATCH만 회원 운영 경로로 사용할 수 있다. Application은 현재 DB ACTIVE 관리자를 읽기 잠금 아래 재검증하며 member Application이 회원 조회와 상태 변경을 소유한다. 새 permitAll·CSRF 예외·Cookie 인증은 추가하지 않는다. WITHDRAWAL_PENDING 회원을 운영 API로 복구/정지할 수 없다.
+
+ACTIVE/SUSPENDED 설정은 같은 상태도 `UserRefreshTokenService.revokeAll`로 회원별 Redis 세대를 새 UUID로 바꾼다. 생성 Lua는 현재 세대를 Family의 토큰 hash에 저장하며 회전 Lua는 같은 세대인지 원자적으로 검증하고 후속 hash에 유지한다. 기존 세대 필드가 없는 hash는 빈 세대로 취급해 최초 전체 폐기 후에도 재사용할 수 없다. 회원 세대 키는 최소 30일이며 발급·회전 때 해당 세대를 참조하는 Family의 절대 만료까지 TTL을 연장한다. 기존 hash·소비 기록과 Family 재사용 판정은 유지하며 원문 Token 저장·Redis SCAN·Family 목록 조회는 추가하지 않는다. 폐기 확인 실패는 DB 변경을 롤백하고 DB rollback/commit 실패 후 폐기된 Family는 복구하지 않는다. 모든 인증 노드에 세대 검증·회원 잠금 구현을 배포한 뒤 회원 상태 API를 사용해야 한다.
+
+USER Access JWT는 세대/Redis를 요청마다 검사하지 않는 기존 900초 정책을 유지한다. 정지 동안 회원 Application의 ACTIVE 검사로 업무 접근을 거부하고 공개 콘텐츠·댓글·좋아요는 유지한다. 복구 후 기존 Refresh Family는 재사용할 수 없지만 만료 전 Access JWT는 사용할 수 있다. 회원 운영 감사는 전용 파일에 actor·대상 내부 ID·action·outcome·IP·traceId·dataType=member를 남기며 검색어·회원 표시 이름·응답 내용·OAuth 식별자·토큰은 기록하지 않는다.
 
 - 회원 로그아웃은 Refresh Token Family를 폐기한다. 온라인 Access Token 검사를 선택하지 않은 동안 이미 발급된 회원 Access JWT는 만료 시각까지 유효할 수 있다.
 - 관리자 로그아웃은 Refresh Token Family와 Redis의 활성 `sid`를 폐기한다. 이후 해당 세션으로 발급된 관리자 Access JWT는 다음 요청부터 거부한다.

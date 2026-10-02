@@ -133,6 +133,14 @@ public class Member {
         return status;
     }
 
+    public void changeOperationalStatus(MemberStatus status) {
+        if (this.status == MemberStatus.WITHDRAWAL_PENDING
+                || status == null || status == MemberStatus.WITHDRAWAL_PENDING) {
+            throw new IllegalStateException("Withdrawal status cannot be changed by an administrator");
+        }
+        this.status = status;
+    }
+
     public Instant getWithdrawalRequestedAt() {
         return withdrawalRequestedAt;
     }
