@@ -110,7 +110,8 @@ public class AdminRefreshTokenService {
     }
 
     public void revokeAll(long adminId) {
-        redis.execute(REVOKE_ALL, List.of(subjectKey(adminId)), "pebble:auth:admin:session:");
+        Long result = redis.execute(REVOKE_ALL, List.of(subjectKey(adminId)), "pebble:auth:admin:session:");
+        if (result == null) throw new IllegalStateException("Admin session revocation could not be confirmed");
     }
 
     private Long transition(TokenSnapshot snapshot, String action, String token, Instant now, Instant idle) {

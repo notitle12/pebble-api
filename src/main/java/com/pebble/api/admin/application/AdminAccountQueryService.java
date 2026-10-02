@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Transactional(readOnly = true)
+@Transactional
 public class AdminAccountQueryService {
     private final AdminAccountRepository repository;
 
@@ -18,7 +18,8 @@ public class AdminAccountQueryService {
     }
 
     public boolean findActive(long id, String role) {
-        return repository.findById(id)
+        // 비활성 상태를 보고 세션을 폐기하는 동안 재활성화·새 로그인과 경합하지 않는다.
+        return repository.findForAuthenticationById(id)
                 .filter(account -> account.getStatus() == AdminStatus.ACTIVE)
                 .filter(account -> account.getRole().name().equals(role))
                 .isPresent();
