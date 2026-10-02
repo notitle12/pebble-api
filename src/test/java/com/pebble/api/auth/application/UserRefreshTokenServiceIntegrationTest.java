@@ -166,6 +166,65 @@ class UserRefreshTokenServiceIntegrationTest extends AuthenticationTestSupport {
         }
     }
 
+    @Test
+    void wholeMemberRevocationRejectsLegacyAndRotatedFamiliesWithoutAffectingNewLoginOrOthers() {
+        long memberId = com.pebble.api.global.id.TsidGenerator.generate();
+        long otherId = com.pebble.api.global.id.TsidGenerator.generate();
+        var legacy = tokens.issue(memberId, Instant.now());
+        var legacySnapshot = tokens.find(legacy.value());
+        redis.opsForHash().delete(key(legacySnapshot), "generation");
+        var first = tokens.issue(memberId, Instant.now());
+        var second = tokens.rotate(tokens.find(first.value()), Instant.now());
+        var cachedSnapshot = tokens.find(second.value());
+        var other = tokens.issue(otherId, Instant.now());
+        tokens.revokeAll(memberId);
+        for (String old : List.of(legacy.value(), first.value(), second.value()))
+            assertThatThrownBy(() -> tokens.find(old)).isInstanceOf(AuthException.class);
+        assertThatThrownBy(() -> tokens.rotate(cachedSnapshot, Instant.now())).isInstanceOf(AuthException.class);
+        assertThat(tokens.rotate(tokens.find(other.value()), Instant.now()).value()).isNotBlank();
+        var fresh = tokens.issue(memberId, Instant.now());
+        tokens.logout(legacy.value());
+        assertThat(tokens.rotate(tokens.find(fresh.value()), Instant.now()).value()).isNotBlank();
+        tokens.revokeAll(memberId);
+        assertThatThrownBy(() -> tokens.find(fresh.value())).isInstanceOf(AuthException.class);
+    }
+
+    @Test
+    void generationIsRetainedUntilEveryReferencingFamilyExpires() {
+        long memberId = com.pebble.api.global.id.TsidGenerator.generate();
+        String generationKey = "pebble:auth:user:member:" + memberId + ":generation";
+        tokens.revokeAll(memberId);
+        redis.expire(generationKey, Duration.ofSeconds(1));
+        var issued = tokens.issue(memberId, Instant.now());
+        assertThat(redis.getExpire(generationKey)).isGreaterThan(Duration.ofDays(29).toSeconds());
+        var snapshot = tokens.find(issued.value());
+        redis.expire(generationKey, Duration.ofSeconds(1));
+        var next = tokens.rotate(snapshot, Instant.now());
+        assertThat(redis.getExpire(generationKey)).isGreaterThan(Duration.ofDays(29).toSeconds());
+        assertThat(tokens.find(next.value()).memberId()).isEqualTo(memberId);
+    }
+
+    @Test
+    void revocationAndRotationRaceNeverLeavesAUsableSuccessor() throws Exception {
+        long memberId = com.pebble.api.global.id.TsidGenerator.generate();
+        var issued = tokens.issue(memberId, Instant.now());
+        var snapshot = tokens.find(issued.value());
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var rotation = executor.submit(() -> {
+                start.await();
+                try { return tokens.rotate(snapshot, Instant.now()).value(); }
+                catch (AuthException exception) { return "rejected"; }
+            });
+            var revocation = executor.submit(() -> { start.await(); tokens.revokeAll(memberId); return true; });
+            start.countDown();
+            String next = rotation.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(revocation.get(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            if (!"rejected".equals(next)) assertThatThrownBy(() -> tokens.find(next)).isInstanceOf(AuthException.class);
+            assertThatThrownBy(() -> tokens.rotate(snapshot, Instant.now())).isInstanceOf(AuthException.class);
+        }
+    }
+
     private String key(UserRefreshTokenService.TokenSnapshot snapshot) {
         return "pebble:auth:user:refresh-token:" + snapshot.digest();
     }
