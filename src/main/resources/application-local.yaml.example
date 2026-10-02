@@ -26,6 +26,11 @@ spring:
         enabled: ${REDIS_SSL_ENABLED:false}
 
 pebble:
+  admin:
+    bootstrap:
+      enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
+      login-id: ${ADMIN_BOOTSTRAP_LOGIN_ID:}
+      password: ${ADMIN_BOOTSTRAP_PASSWORD:}
   security:
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

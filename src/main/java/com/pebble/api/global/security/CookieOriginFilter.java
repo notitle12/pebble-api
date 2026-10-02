@@ -29,7 +29,9 @@ public class CookieOriginFilter extends OncePerRequestFilter {
             path = request.getRequestURI().substring(request.getContextPath().length());
         }
         return !"POST".equals(request.getMethod())
-                || !("/api/v1/auth/token/refresh".equals(path) || "/api/v1/auth/logout".equals(path));
+                || !("/api/v1/auth/token/refresh".equals(path) || "/api/v1/auth/logout".equals(path)
+                    || "/api/v1/admin/auth/login".equals(path) || "/api/v1/admin/auth/token/refresh".equals(path)
+                    || "/api/v1/admin/auth/logout".equals(path));
     }
 
     @Override

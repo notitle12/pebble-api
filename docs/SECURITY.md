@@ -118,6 +118,8 @@ Spring Security 설정에서는 명시적인 authority를 사용한다. 예를 �
 
 ### 5.3 관리자 비밀번호 저장
 
+현재 Spring Security Argon2id는 salt 16바이트·hash 32바이트·병렬도 1·메모리 19MiB·반복 2회다. OWASP 최소 설정을 따르며 운영 서버에서 비용을 측정해 조정한다. Spring Security 구현에 필요한 `bcprov-jdk18on:1.86`을 추가했다. 미존재 계정도 임시 해시를 검증하며 미존재·비밀번호 불일치·INACTIVE 실패를 구분하지 않는다.
+
 - 평문 또는 복호화 가능한 형태로 저장하지 않는다. DB에는 적응형 password hash만 저장한다.
 - Spring Security `PasswordEncoder`를 사용하고, 신규 비밀번호에는 OWASP 권고를 충족하는 Argon2id 설정을 우선한다. 플랫폼 요건상 사용할 수 없으면 적절히 구성한 bcrypt 등 지원되는 적응형 해시를 선택한다.
 - Salt는 해시 구현이 제공하는 고유 Salt 처리에 맡긴다. SHA-256 같은 빠른 일반 해시만으로 password를 저장하지 않는다.
@@ -195,6 +197,10 @@ Refresh 요청이 성공할 때마다 기존 Token을 한 번만 사용할 수 �
 
 ## 8. Pepper와 비밀 키 관리
 
+관리자 세션은 별도 `pebble:auth:admin:*` 키를 사용하고 Family ID와 sid는 같은 UUID다. 로그인 저장과 refresh 회전·소비·sid 폐기는 단일 Lua 원자 연산이다. 활성 token·sid는 유휴/절대 만료 중 이른 시각까지, 소비 token은 절대 만료까지 보관한다. sid 제거로 Family 전체의 갱신이 거부된다. USER와 토큰 생성·pepper 계산만 공유하고 저장·회전 정책은 분리한다. Redis Cluster는 지원하지 않는다.
+
+Resource Server 검증 후 관리자 인증 변환 단계가 모든 경로에서 Redis sid와 admin Application의 DB ACTIVE·현재 role을 확인한다. role에 맞는 `admin:<id>`와 UUID sid가 필수다. DB/Redis 조회 장애는 인증을 거부한다. 계정 미존재·상태/role 불일치는 해당 계정의 알려진 모든 sid를 폐기한다. 로그인·refresh는 계정 PESSIMISTIC_READ 잠금 아래에서 발급/회전한다. PostgreSQL과 Redis는 분산 트랜잭션이 아니다. 후속 계정 상태·역할·비밀번호 변경 기능은 변경 시 `AdminRefreshTokenService.revokeAll`을 호출해야 하며 재활성화로 기존 세션을 복구하지 않는다. 현재 계정 변경 API는 없다.
+
 ### 8.1 Refresh Token pepper
 
 Refresh Token digest용 pepper는 Refresh Token을 Redis에 보관할 때 HMAC 키로 사용한다.
@@ -243,10 +249,16 @@ Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access To
 
 ## 11. 출시 전에 확정할 결정
 
+초기 MASTER는 `ADMIN_BOOTSTRAP_ENABLED=true`와 보호된 `ADMIN_BOOTSTRAP_LOGIN_ID`/`ADMIN_BOOTSTRAP_PASSWORD`를 명시적으로 주입할 때만 생성한다. advisory transaction lock으로 여러 노드의 생성을 직렬화한다. MASTER가 이미 있으면 덮어쓰지 않는다. 신규 비밀번호는 12~128 코드 포인트이며 빈 값·제어 문자·잘못된 Unicode는 금지한다. 완료 후 옵션과 자격 증명을 제거한다. 공개 생성 API·migration seed·복구 기능은 제공하지 않는다.
+
+관리자 속도 제한은 단일 Redis Lua 카운터다. 기본 로그인은 계정 10회·IP 60회/15분, refresh는 계정 60회·IP 120회/1분이며 성공·실패 모두 계산한다. 쿠키 조회 전 전체 refresh IP 제한도 적용한다. `pebble.auth.admin-rate-limit`에서 조정한다. Redis 키에는 계정/IP의 SHA-256 요약값만 쓴다. remoteAddr를 사용하고 Forwarded/X-Forwarded-For를 신뢰하지 않으므로 프록시 배포의 신뢰 경계를 확인한다. 관리자 세 POST만 필수 Origin 검사와 함께 CSRF 예외를 적용한다.
+
+관리자 인증 감사는 전용 `pebble.admin.audit` logger의 별도 일별 압축 파일이며 콘솔에 전파하지 않는다. 로그인·refresh·logout 결과, 확인된 내부 관리자 ID, 원격 IP, UTC 시각, traceId만 기록하고 원문 자격 증명·요청/응답은 기록하지 않는다. 재사용은 `REFRESH_TOKEN_REUSED`로 구분한다. `ADMIN_AUDIT_LOG_DIR`에 별도 접근 제한 볼륨을 연결한다. 일별 기본 366개 보관이며 2년 조건 해당 시 `ADMIN_AUDIT_RETENTION_DAYS>=731`로 지정한다. 더 짧은 보관기간을 운영에 적용하지 않는다. 위변조·무단 삭제 방지, 파일/백업 권한, 디스크 장애 감시와 정기 점검은 배포 운영에서 준비해야 한다. 파일 기록은 WORM/외부 감사 저장소와 실제 보존 검증을 대신하지 않는다. 후속 관리자 운영 API는 접근 대상과 결과 감사 이벤트를 추가한다.
+
 다음 구현 세부사항은 코드·배포 환경과 함께 확정한다. 관리자 접속기록 보유기간은 10절의 정책을 따른다.
 
 1. 서명 알고리즘, 키 크기, Key ID 형식, Secret Manager/HSM 및 키 교체 절차
-2. 관리자 Redis 토큰 Family 구현 및 Redis Cluster 전환 시 키·원자성 설계 (USER 정책은 7.2절에서 구현)
+2. Redis Cluster 전환 시 USER·관리자 키·원자성 설계 (현재 두 정책은 단일 Redis에서 구현)
 3. Refresh Token pepper와 선택적 Password pepper의 관리·교체 담당자 및 장애 복구 절차
 4. 로그인 속도 제한, 계정별 잠금/지연 수치와 비접속 운영 로그의 목적별 보유기간
 5. Admin API가 별도 백엔드로 분리될 경우 Token Issuer, Audience, 관리자 전용 세션과 키 경계
