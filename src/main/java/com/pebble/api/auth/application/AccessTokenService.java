@@ -23,18 +23,29 @@ public class AccessTokenService {
     private final JwtProperties properties;
 
     public String issueForMember(long memberId, Instant issuedAt) {
+        return issue("member:" + memberId, "USER", null, issuedAt);
+    }
+
+    public String issueForAdmin(long adminId, String role, String sessionId, Instant issuedAt) {
+        if (!("MANAGER".equals(role) || "MASTER".equals(role)) || sessionId == null || sessionId.isBlank())
+            throw new IllegalArgumentException("Invalid administrator token identity");
+        return issue("admin:" + adminId, role, sessionId, issuedAt);
+    }
+
+    private String issue(String subject, String role, String sessionId, Instant issuedAt) {
         Instant expiresAt = issuedAt.plus(Duration.ofSeconds(EXPIRES_IN_SECONDS));
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        JwtClaimsSet.Builder builder = JwtClaimsSet.builder()
                 .issuer(properties.issuer())
-                .subject("member:" + memberId)
+                .subject(subject)
                 .audience(List.of(properties.audience()))
                 .issuedAt(issuedAt)
                 .notBefore(issuedAt)
                 .expiresAt(expiresAt)
                 .id(UUID.randomUUID().toString())
-                .claim("role", "USER")
-                .claim("token_type", "access")
-                .build();
+                .claim("role", role)
+                .claim("token_type", "access");
+        if (sessionId != null) builder.claim("sid", sessionId);
+        JwtClaimsSet claims = builder.build();
         JwsHeader headers = JwsHeader.with(SignatureAlgorithm.RS256).keyId(properties.keyId()).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(headers, claims)).getTokenValue();
     }

@@ -78,19 +78,18 @@ public class JwtConfiguration {
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 new JwtIssuerValidator(properties.issuer()),
                 timestamps,
-                jwt -> validateMemberAccessToken(jwt, properties, clock)));
+                jwt -> validateAccessToken(jwt, properties, clock)));
         return decoder;
     }
 
-    private OAuth2TokenValidatorResult validateMemberAccessToken(Jwt jwt, JwtProperties properties, Clock clock) {
+    private OAuth2TokenValidatorResult validateAccessToken(Jwt jwt, JwtProperties properties, Clock clock) {
         Instant issuedAt = jwt.getIssuedAt();
         Instant notBefore = jwt.getNotBefore();
         Instant expiresAt = jwt.getExpiresAt();
         Object tokenId = jwt.getClaims().get("jti");
         if (issuedAt == null || notBefore == null || expiresAt == null
                 || !(tokenId instanceof String id) || id.isBlank()
-                || !isMemberSubject(jwt.getClaims().get("sub"))
-                || !"USER".equals(jwt.getClaims().get("role"))
+                || !validIdentity(jwt)
                 || !"access".equals(jwt.getClaims().get("token_type"))
                 || jwt.getAudience() == null || !jwt.getAudience().contains(properties.audience())
                 || !expiresAt.isAfter(issuedAt) || !expiresAt.isAfter(notBefore)
@@ -102,12 +101,19 @@ public class JwtConfiguration {
         return OAuth2TokenValidatorResult.success();
     }
 
-    private boolean isMemberSubject(Object claim) {
-        if (!(claim instanceof String subject) || !subject.matches("member:[1-9][0-9]{0,18}")) {
+    private boolean validIdentity(Jwt jwt) {
+        Object role = jwt.getClaims().get("role");
+        boolean admin = "MANAGER".equals(role) || "MASTER".equals(role);
+        if (!(admin || "USER".equals(role))) return false;
+        String prefix = admin ? "admin:" : "member:";
+        Object claim = jwt.getClaims().get("sub");
+        if (!(claim instanceof String subject) || !subject.matches(prefix + "[1-9][0-9]{0,18}")) {
             return false;
         }
+        if (admin && (!(jwt.getClaims().get("sid") instanceof String sid)
+                || !sid.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"))) return false;
         try {
-            return Long.parseLong(subject.substring("member:".length())) > 0;
+            return Long.parseLong(subject.substring(prefix.length())) > 0;
         } catch (NumberFormatException exception) {
             return false;
         }

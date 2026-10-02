@@ -72,6 +72,24 @@ class JwtConfigurationTest {
     }
 
     @Test
+    void acceptsAdminClaimsAndRejectsSubjectRoleAndSessionConfusion() {
+        for (String role : List.of("MANAGER", "MASTER")) {
+            Map<String, Object> claims = validClaims();
+            claims.put("sub", "admin:123");
+            claims.put("role", role);
+            claims.put("sid", "e926c731-3730-4943-a37b-099121c2ff94");
+            assertThat(decoder.decode(encode(claims)).getClaimAsString("role")).isEqualTo(role);
+            for (Object sid : List.of("", "malformed-session", 123, List.of("sid"))) {
+                Map<String, Object> invalid = new HashMap<>(claims);
+                invalid.put("sid", sid);
+                assertThatThrownBy(() -> decoder.decode(encode(invalid))).isInstanceOf(JwtException.class);
+            }
+            claims.remove("sid");
+            assertThatThrownBy(() -> decoder.decode(encode(claims))).isInstanceOf(JwtException.class);
+        }
+    }
+
+    @Test
     void rejectsOtherRsaAlgorithmsEvenWithTrustedKey() {
         for (JWSAlgorithm algorithm : List.of(JWSAlgorithm.RS384, JWSAlgorithm.RS512)) {
             assertThatThrownBy(() -> decoder.decode(encode(validClaims(), algorithm))).isInstanceOf(JwtException.class);

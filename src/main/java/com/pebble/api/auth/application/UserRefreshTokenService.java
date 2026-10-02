@@ -1,23 +1,17 @@
 package com.pebble.api.auth.application;
 
 import com.pebble.api.auth.infrastructure.redis.RefreshTokenProperties;
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
+import com.pebble.api.auth.infrastructure.redis.RefreshTokenCodec;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.LinkedHashMap;
 import com.pebble.api.auth.domain.AuthError;
 import com.pebble.api.auth.domain.AuthException;
 import org.springframework.core.io.ClassPathResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.UUID;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -27,7 +21,6 @@ public class UserRefreshTokenService {
 
     public static final Duration IDLE_TTL = Duration.ofDays(14);
     public static final Duration ABSOLUTE_TTL = Duration.ofDays(30);
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final DefaultRedisScript<Long> STORE_TOKEN = new DefaultRedisScript<>("""
             redis.call('HSET', KEYS[1],
                 'subjectType', 'USER',
@@ -57,43 +50,18 @@ public class UserRefreshTokenService {
     }
 
     private final StringRedisTemplate redisTemplate;
-    private final Map<String, byte[]> peppers;
+    private final RefreshTokenCodec codec;
     private final String currentVersion;
 
     public UserRefreshTokenService(StringRedisTemplate redisTemplate, RefreshTokenProperties properties) {
         this.redisTemplate = redisTemplate;
-        this.currentVersion = properties.pepperVersion() == null ? "v1" : properties.pepperVersion();
-        if (!currentVersion.matches("[a-zA-Z0-9_-]{1,32}")) {
-            throw new IllegalStateException("Invalid Refresh Token pepper version");
-        }
-        Map<String, byte[]> configured = new LinkedHashMap<>();
-        configured.put(currentVersion, decodePepper(properties.pepperBase64()));
-        if (properties.previousPeppers() != null) {
-            properties.previousPeppers().forEach((version, secret) -> {
-                if (!version.matches("[a-zA-Z0-9_-]{1,32}") || configured.containsKey(version)) {
-                    throw new IllegalStateException("Invalid or duplicate Refresh Token pepper version");
-                }
-                configured.put(version, decodePepper(secret));
-            });
-        }
-        this.peppers = Map.copyOf(configured);
-    }
-
-    private byte[] decodePepper(String value) {
-        try {
-            byte[] decoded = Base64.getDecoder().decode(value);
-            if (decoded.length < 32) {
-                throw new IllegalStateException("Refresh Token pepper must contain at least 32 bytes");
-            }
-            return decoded;
-        } catch (IllegalArgumentException | NullPointerException exception) {
-            throw new IllegalStateException("Refresh Token pepper is not configured");
-        }
+        this.codec = new RefreshTokenCodec(properties);
+        this.currentVersion = codec.currentVersion();
     }
 
     public IssuedRefreshToken issue(long memberId, Instant now) {
-        String token = randomToken();
-        String digest = digest(token, peppers.get(currentVersion));
+        String token = codec.randomToken();
+        String digest = codec.currentDigest(token);
         String familyId = UUID.randomUUID().toString();
         String sessionId = UUID.randomUUID().toString();
         Instant idleExpiresAt = now.plus(IDLE_TTL);
@@ -117,8 +85,8 @@ public class UserRefreshTokenService {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
             throw new AuthException(AuthError.INVALID_REFRESH_TOKEN);
         }
-        for (Map.Entry<String, byte[]> entry : peppers.entrySet()) {
-            String digest = digest(token, entry.getValue());
+        for (Map.Entry<String, String> entry : codec.digests(token).entrySet()) {
+            String digest = entry.getValue();
             Map<Object, Object> data = redisTemplate.opsForHash().entries(tokenKey(digest));
             if (data.isEmpty()) {
                 continue;
@@ -140,7 +108,7 @@ public class UserRefreshTokenService {
     }
 
     public IssuedRefreshToken rotate(TokenSnapshot snapshot, Instant now) {
-        String token = randomToken();
+        String token = codec.randomToken();
         Instant expiresAt = now.plus(IDLE_TTL);
         Instant absolute = Instant.parse(snapshot.absoluteExpiresAt());
         if (expiresAt.isAfter(absolute)) {
@@ -157,7 +125,7 @@ public class UserRefreshTokenService {
     }
 
     public void revoke(TokenSnapshot snapshot) {
-        transition(snapshot, "revoke", randomToken(), Instant.now(), Instant.now());
+        transition(snapshot, "revoke", codec.randomToken(), Instant.now(), Instant.now());
     }
 
     public void logout(String token) {
@@ -166,14 +134,14 @@ public class UserRefreshTokenService {
         }
         try {
             TokenSnapshot snapshot = find(token);
-            transition(snapshot, "logout", randomToken(), Instant.now(), Instant.now());
+            transition(snapshot, "logout", codec.randomToken(), Instant.now(), Instant.now());
         } catch (AuthException exception) {
             // 알 수 없거나 만료된 쿠키도 삭제할 수 있도록 로그아웃은 멱등 처리한다.
         }
     }
 
     private long transition(TokenSnapshot snapshot, String action, String token, Instant now, Instant expiresAt) {
-        String digest = digest(token, peppers.get(currentVersion));
+        String digest = codec.currentDigest(token);
         Long result = redisTemplate.execute(TRANSITION,
                 List.of(tokenKey(snapshot.digest()), familyKey(snapshot.familyId()),
                         familyKey(snapshot.familyId()) + ":revoked", tokenKey(digest)),
@@ -188,25 +156,8 @@ public class UserRefreshTokenService {
         return result;
     }
 
-    private String randomToken() {
-        byte[] random = new byte[32];
-        SECURE_RANDOM.nextBytes(random);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(random);
-    }
-
     public record TokenSnapshot(String digest, String familyId, long memberId,
                                 String idleExpiresAt, String absoluteExpiresAt) {
-    }
-
-    private String digest(String token, byte[] pepper) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(pepper, "HmacSHA256"));
-            return Base64.getUrlEncoder().withoutPadding()
-                    .encodeToString(mac.doFinal(token.getBytes(StandardCharsets.UTF_8)));
-        } catch (GeneralSecurityException exception) {
-            throw new IllegalStateException("HMAC-SHA-256 is unavailable", exception);
-        }
     }
 
     private String tokenKey(String digest) {

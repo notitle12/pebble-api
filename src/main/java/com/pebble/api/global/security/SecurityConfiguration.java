@@ -1,5 +1,6 @@
 package com.pebble.api.global.security;
 
+import com.pebble.api.auth.application.AdminSessionService;
 import java.util.List;
 import java.net.URI;
 import org.springframework.web.filter.CorsFilter;
@@ -23,7 +24,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfiguration {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, ApiSecurityErrorHandler errorHandler, CorsProperties corsProperties) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, ApiSecurityErrorHandler errorHandler, CorsProperties corsProperties,
+                                            AdminSessionService adminSessions) throws Exception {
+        JwtAuthenticationConverter converter = userJwtAuthenticationConverter();
         return http
                 .cors(Customizer.withDefaults())
                 .addFilterBefore(new CookieOriginFilter(corsProperties, errorHandler), CorsFilter.class)
@@ -32,11 +35,15 @@ public class SecurityConfiguration {
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/authorization"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/login"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/token/refresh"),
-                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout")))
+                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout"),
+                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/admin/auth/login"),
+                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/admin/auth/token/refresh"),
+                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/admin/auth/logout")))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
-                                "/api/v1/auth/token/refresh", "/api/v1/auth/logout").permitAll()
+                                "/api/v1/auth/token/refresh", "/api/v1/auth/logout",
+                                "/api/v1/admin/auth/login", "/api/v1/admin/auth/token/refresh", "/api/v1/admin/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards",
                                 "/api/v1/members/me/projects").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
@@ -78,7 +85,20 @@ public class SecurityConfiguration {
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .authenticationEntryPoint(errorHandler)
                         .accessDeniedHandler(errorHandler)
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(userJwtAuthenticationConverter())))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(token -> {
+                            if (!"USER".equals(token.getClaimAsString("role"))) {
+                                boolean active;
+                                try {
+                                    active = adminSessions.isAccessSessionActive(Long.parseLong(token.getSubject().substring("admin:".length())),
+                                            token.getClaimAsString("role"), token.getClaimAsString("sid"));
+                                } catch (org.springframework.dao.DataAccessException exception) {
+                                    // Redis 또는 계정 저장소 장애로 온라인 검증을 할 수 없으면 인증을 거부한다.
+                                    active = false;
+                                }
+                                if (!active) throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException("invalid_token");
+                            }
+                            return converter.convert(token);
+                        })))
                 .build();
     }
 
@@ -114,6 +134,9 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/auth/naver/**", cors);
         source.registerCorsConfiguration("/api/v1/auth/token/refresh", cors);
         source.registerCorsConfiguration("/api/v1/auth/logout", cors);
+        source.registerCorsConfiguration("/api/v1/admin/auth/login", cors);
+        source.registerCorsConfiguration("/api/v1/admin/auth/token/refresh", cors);
+        source.registerCorsConfiguration("/api/v1/admin/auth/logout", cors);
         CorsConfiguration getCors = new CorsConfiguration(cors);
         getCors.setAllowedMethods(List.of("GET"));
         source.registerCorsConfiguration("/api/v1/members/me", getCors);
