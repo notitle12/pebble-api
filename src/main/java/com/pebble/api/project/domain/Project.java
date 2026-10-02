@@ -108,6 +108,14 @@ public class Project {
         deletedAt = Instant.now();
     }
 
+    public void setBlocked(boolean blocked, long adminId) {
+        ensureNotDeleted();
+        if (this.blocked == blocked) return;
+        this.blocked = blocked;
+        this.blockedAt = blocked ? Instant.now() : null;
+        this.blockedByAdminId = blocked ? adminId : null;
+    }
+
     private void ensureNotDeleted() {
         if (visibility == ProjectVisibility.DELETED) throw new IllegalStateException("Deleted project cannot be changed");
     }

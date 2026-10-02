@@ -126,6 +126,14 @@ public class Post {
         deletedAt = Instant.now();
     }
 
+    public void setBlocked(boolean value, long adminId) {
+        ensureNotDeleted();
+        if (blocked == value) return;
+        blocked = value;
+        blockedAt = value ? Instant.now() : null;
+        blockedByAdminId = value ? adminId : null;
+    }
+
     public void changeBoard(Long boardId) {
         ensureNotDeleted();
         this.boardId = boardId;
