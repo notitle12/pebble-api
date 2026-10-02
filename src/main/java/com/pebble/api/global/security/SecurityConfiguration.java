@@ -54,6 +54,10 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/posts").hasRole("USER")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/posts/{postId:[0-9]+}/like",
+                                "/api/v1/projects/{projectId:[0-9]+}/like").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}/like",
+                                "/api/v1/projects/{projectId:[0-9]+}/like").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/projects").hasRole("USER")
@@ -123,6 +127,10 @@ public class SecurityConfiguration {
         CorsConfiguration projectDetailCors = new CorsConfiguration(cors);
         projectDetailCors.setAllowedMethods(List.of("GET", "PATCH", "DELETE"));
         source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}", projectDetailCors);
+        CorsConfiguration likeCors = new CorsConfiguration(cors);
+        likeCors.setAllowedMethods(List.of("PUT", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}/like", likeCors);
+        source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}/like", likeCors);
         source.registerCorsConfiguration("/api/v1/projects/search", getCors);
         source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}/posts", getCors);
         source.registerCorsConfiguration("/api/v1/members/{memberId:[0-9]+}/projects", getCors);
