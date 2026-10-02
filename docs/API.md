@@ -441,9 +441,15 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 - 최초 설정일부터 각 표시 이름의 마지막 실제 변경 시각을 기준으로 독립적인 7일(168시간) 쿨타임을 적용한다. 같은 값 또는 빈 PATCH는 성공하며 시각을 갱신하지 않는다. 제한 중 변경은 `NICKNAME_CHANGE_COOLDOWN` 또는 `BLOG_NAME_CHANGE_COOLDOWN` 409다. 변경 가능 시각은 위 응답의 두 `*ChangeAvailableAt` UTC 필드로 확인한다. 여러 필드를 보낸 요청은 모두 성공하거나 모두 취소된다.
 - 두 쓰기 API는 검증된 USER Bearer JWT와 DB ACTIVE 상태를 요구하며 같은 회원 행을 잠가 최초 설정·쿨타임을 검증한다. Refresh Cookie나 세션 쿠키로 인증하지 않는다. 허용 Origin에 POST/PATCH와 Authorization·Content-Type CORS를 제공한다. 별도 프로필 GET은 제공하지 않고 `GET /members/me`를 사용한다.
 
-`DELETE /members/me`는 Refresh Token Family를 즉시 폐기하고 Refresh Cookie를 만료시킨 뒤 회원을 `WITHDRAWAL_PENDING`으로 전환한다. 응답은 202이며 `withdrawalScheduledAt`에 삭제 예정 시각을 반환한다. 탈퇴 예약 뒤에는 기존 Access JWT의 만료 여부와 관계없이 보호된 USER 요청을 거부하고 회원의 콘텐츠·댓글·좋아요·미디어를 일반 사용자에게 숨긴다. Naver authorization code를 다시 검증하는 `POST /auth/naver/withdrawal/cancel`로 예약 후 7일 이내 취소할 수 있다. 취소는 계정을 ACTIVE로 돌리고 탈퇴 기간에 발급된 세션은 복구하지 않으므로 회원은 다시 로그인한다. 예약 시각에 도달하면 취소할 수 없으며 회원 레코드, OAuth 연결, 사용자 콘텐츠와 저장 미디어를 운영 데이터베이스 및 R2에서 물리 삭제한다. 법령상 보관하는 관리자 접속기록은 회원 콘텐츠와 분리해 SECURITY.md 정책에 따라 보관한다.
+`DELETE /members/me`는 ACTIVE USER Bearer를 요구하고 본문·query를 받지 않는다. 회원 쓰기 잠금 안에서 모든 기존 Refresh Family를 폐기하고 `WITHDRAWAL_PENDING` 및 요청 시각·요청 시각 + 정확히 7일인 삭제 예정 시각을 기록한다. 응답은 202와 `{withdrawalScheduledAt}`이며 Refresh Cookie를 만료시킨다. 정지는 403 ACCOUNT_SUSPENDED, 이미 탈퇴 대기는 403 ACCOUNT_WITHDRAWAL_PENDING으로 거부하고 최초 예정 시각을 연장하지 않는다. 미존재 회원은 404다. 허용 Origin의 GET·DELETE·Authorization CORS를 지원한다.
 
-일반 Naver 로그인 시 탈퇴 대기 회원이 확인되면 `WITHDRAWAL_PENDING` 오류를 반환하며, 로그인으로 탈퇴 예약을 자동 취소하지 않는다. 취소 endpoint 요청은 `{authorizationCode, state}`를 받으며 로그인과 같은 일회용 state를 검증한다. 성공 응답은 200과 `{ "data": { "status": "ACTIVE" } }`를 반환하며 토큰을 발급하지 않는다.
+탈퇴 대기 중에는 기존 Access JWT의 만료 여부와 관계없이 보호된 USER 업무 요청을 현재 회원 상태 검사로 거부하고 회원의 콘텐츠·댓글·좋아요를 일반 조회·검색·집계에서 숨긴다. 콘텐츠 자체의 상태와 상호작용 이력은 보존한다. 일반 Naver 로그인은 WITHDRAWAL_PENDING 409를 반환하며 예약을 자동 취소하지 않는다.
+
+`POST /auth/naver/withdrawal/cancel`은 `{authorizationCode, state}`만 받는다. JSON 중복·추가 필드·null·후행 값·잘못된 Unicode·query는 400 INVALID_REQUEST다. code/state는 공백만인 값을 거부하고 길이는 각각 4096/256 UTF-16 단위 이하다. 로그인과 동일한 일회용 state 및 HttpOnly state Cookie를 검증하며 허용 목록의 단일 Origin이 필수다. 누락·null·중복·불허 Origin은 403이다. Naver 재인증 후 기존 OAuth 연결의 회원만 취소하며 신규 계정을 생성하지 않는다. 외부 공급자 통신은 DB 트랜잭션 밖에서 수행하고 회원 쓰기 잠금 뒤 현재 상태와 기한을 다시 확인한다. ACTIVE/SUSPENDED는 409 WITHDRAWAL_NOT_PENDING, 예정 시각 이상은 409 WITHDRAWAL_EXPIRED, 미존재 연결/회원은 404다.
+
+취소 성공은 200과 `{ "data": { "status": "ACTIVE" } }`를 반환하고 예약 시각을 NULL로 되돌린다. 모든 기존 Refresh Family를 다시 폐기하고 state·Refresh Cookie를 만료시키며 새 토큰을 발급하지 않는다. Refresh 세션을 복구하지 않아 다시 로그인해야 한다. 기존 USER Access JWT는 요청별 Redis 조회를 하지 않는 900초 정책을 유지하므로 ACTIVE 복구 후 만료 전 토큰은 다시 사용할 수 있다.
+
+예정 시각 이상인 예약은 백그라운드 작업이 회원별 독립 트랜잭션으로 DB에서 물리 삭제한다. 현재 구현은 회원·OAuth 연결·Post/Project 및 하위 데이터·Board·댓글·좋아요를 제거한다. 현재 미디어 저장 테이블·R2 업로드 기능은 없으며 R2 삭제·재시도와 백업 복원 전 탈퇴 반영은 후속 운영 범위다. 미디어 활성화 전에 R2 파기 절차를 연결해야 한다. 법령상 보관하는 관리자 접속기록은 회원 콘텐츠와 분리해 SECURITY.md 정책을 따른다.
 
 ### 6.3 Post
 

@@ -176,7 +176,7 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET,DELETE"))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "Authorization"));
 
         mockMvc.perform(get(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
@@ -193,7 +193,7 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
         mockMvc.perform(options(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE"))
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PATCH"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(options("/api/v1/auth/token/refresh").header(HttpHeaders.ORIGIN, ORIGIN)
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
@@ -208,7 +208,7 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
         mockMvc.perform(get("/api/v1/projects/1/media").header(HttpHeaders.AUTHORIZATION, bearer))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("INSUFFICIENT_ROLE"));
-        mockMvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, bearer))
+        mockMvc.perform(delete(PATH))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("INSUFFICIENT_ROLE"));
     }
