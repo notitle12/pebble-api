@@ -71,4 +71,9 @@ public class AdminAccount {
     public AdminStatus getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+
+    public void changeManagerStatus(AdminStatus status) {
+        if (role != AdminRole.MANAGER || status == null) throw new IllegalStateException("Only MANAGER status may be changed");
+        this.status = status;
+    }
 }

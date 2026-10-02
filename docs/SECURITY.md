@@ -197,9 +197,13 @@ Refresh 요청이 성공할 때마다 기존 Token을 한 번만 사용할 수 �
 
 ## 8. Pepper와 비밀 키 관리
 
+MASTER 계정 관리는 정확한 GET/POST `/api/v1/admin/admin-accounts`와 숫자 ID 하위 status PATCH만 MASTER 권한으로 허용한다. 새 CSRF 예외를 추가하지 않으며 쿠키는 인증 수단이 아니다. Application도 ACTIVE MASTER를 읽기 잠금 아래에서 재검증한다. 상태 쓰기는 MASTER → 대상 MANAGER 쓰기 잠금 순서이며 본인/MASTER를 변경하지 않는다. 로그인·refresh의 대상 읽기 잠금과 직렬화해 비활성화 commit 뒤에는 발급하지 않고, 먼저 발급된 세션은 상태 설정에서 폐기한다.
+
+상태 설정은 같은 값도 `AdminRefreshTokenService.revokeAll`을 실행한 뒤 DB 상태를 flush한다. Access 인증의 현재 계정 상태 조회도 읽기 잠금을 유지해 비활성 상태를 근거로 폐기하는 동안 재활성화·새 로그인과 엇갈리지 않는다. PostgreSQL은 read-only transaction에서 행 잠금을 허용하지 않으므로 잠금 조회를 포함한 관리자 인증/계정 트랜잭션은 readOnly=false다. Redis 폐기 실패는 DB 트랜잭션을 롤백하며 폐기를 확인하지 못한 성공 응답을 반환하지 않는다. DB rollback/commit 실패 뒤 이미 폐기된 Redis 세션은 복구하지 않는다. 재활성화는 새 로그인을 요구한다. 계정 목록/생성/상태 결과는 기존 전용 감사 파일에 actor·대상 내부 ID·dataType=admin_account·IP·traceId를 기록하며 로그인 ID·비밀번호·목록 내용은 기록하지 않는다.
+
 관리자 세션은 별도 `pebble:auth:admin:*` 키를 사용하고 Family ID와 sid는 같은 UUID다. 로그인 저장과 refresh 회전·소비·sid 폐기는 단일 Lua 원자 연산이다. 활성 token·sid는 유휴/절대 만료 중 이른 시각까지, 소비 token은 절대 만료까지 보관한다. sid 제거로 Family 전체의 갱신이 거부된다. USER와 토큰 생성·pepper 계산만 공유하고 저장·회전 정책은 분리한다. Redis Cluster는 지원하지 않는다.
 
-Resource Server 검증 후 관리자 인증 변환 단계가 모든 경로에서 Redis sid와 admin Application의 DB ACTIVE·현재 role을 확인한다. role에 맞는 `admin:<id>`와 UUID sid가 필수다. DB/Redis 조회 장애는 인증을 거부한다. 계정 미존재·상태/role 불일치는 해당 계정의 알려진 모든 sid를 폐기한다. 로그인·refresh는 계정 PESSIMISTIC_READ 잠금 아래에서 발급/회전한다. PostgreSQL과 Redis는 분산 트랜잭션이 아니다. 후속 계정 상태·역할·비밀번호 변경 기능은 변경 시 `AdminRefreshTokenService.revokeAll`을 호출해야 하며 재활성화로 기존 세션을 복구하지 않는다. 현재 계정 변경 API는 없다.
+Resource Server 검증 후 관리자 인증 변환 단계가 모든 경로에서 Redis sid와 admin Application의 DB ACTIVE·현재 role을 확인한다. role에 맞는 `admin:<id>`와 UUID sid가 필수다. DB/Redis 조회 장애는 인증을 거부한다. 계정 미존재·상태/role 불일치는 해당 계정의 알려진 모든 sid를 폐기한다. 로그인·refresh는 계정 PESSIMISTIC_READ 잠금 아래에서 발급/회전한다. PostgreSQL과 Redis는 분산 트랜잭션이 아니다. 현재 MANAGER 상태 설정은 `AdminRefreshTokenService.revokeAll`을 호출하며 재활성화로 기존 세션을 복구하지 않는다. 후속 역할·비밀번호 변경도 같은 폐기 계약을 적용해야 한다.
 
 ### 8.1 Refresh Token pepper
 

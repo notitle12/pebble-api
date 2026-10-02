@@ -389,13 +389,19 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 ### 6.2 관리자 인증과 회원
 
-현재 관리자 인증은 login·refresh·logout만 제공하며 관리자 계정 CRUD·회원/콘텐츠 운영 API는 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
+현재 관리자 login·refresh·logout과 MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정을 제공한다. 회원/콘텐츠 운영 API는 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
 
 관리자 쿠키는 `admin_refresh_token`, Path는 `/api/v1/admin/auth`이며 USER 쿠키와 상호 교환할 수 없다. 세 POST 모두 허용 Origin 하나를 필수로 요구하며 누락·null·미허용·중복 Origin은 403이다. query는 허용하지 않으며 refresh·logout은 요청 본문도 금지한다. 만료·재사용·폐기·계정 상태/role 불일치 refresh는 `INVALID_REFRESH_TOKEN` 401이고 재사용은 sid도 폐기한다. 로그아웃은 미확인·없는 쿠키에도 204와 쿠키 만료를 반환한다. 제한 초과는 `RATE_LIMITED` 429다. 관리자 Bearer 요청은 공개 경로에서도 현재 DB 계정 상태·role과 Redis sid를 검증하며 무효이면 `INVALID_TOKEN` 401이다. 관리자에게 USER 전용 권한을 부여하지 않는다.
 
 관리자 로그인 요청은 `{loginId, password}`를 받는다. 성공 응답은 Access Token과 `admin: {id, loginId, role, status}`를 data에 반환하고 관리자 Refresh Token은 별도의 `HttpOnly; Secure; SameSite=Lax` 쿠키로 설정한다. 관리자(MANAGER, MASTER) Refresh Token은 비활성 1시간, 최초 로그인부터 절대 24시간 동안 유효하다. 관리자 Access JWT의 만료 시간도 900초(15분)다. 관리자 refresh와 로그아웃은 관리자 Refresh Cookie를 사용하며 JSON 본문으로 Refresh Token을 받지 않는다. 회전 시 쿠키 `Max-Age`는 비활성 만료와 남은 절대 만료 기간 중 짧은 쪽으로 갱신한다. 관리자 로그아웃은 해당 Refresh Token Family와 Redis의 `sid`를 폐기하고 쿠키를 만료시키므로 그 세션의 Access JWT는 다음 관리자 인증 요청부터 거부한다. 관리자 계정 생성은 `{loginId, initialPassword}`를 받고 새 계정 role은 MANAGER로 고정한다. MASTER 계정은 이 API로 생성하지 않는다.
 
 관리자 회원 상태 변경 요청은 `{status}`를 받으며 값은 ACTIVE 또는 SUSPENDED다. `WITHDRAWAL_PENDING` 전환과 취소는 회원 탈퇴 API만 수행한다. 탈퇴 유예 기간이 끝나면 회원 레코드를 물리 삭제하므로 `WITHDRAWN` 상태는 저장하지 않는다. 관리자 계정 상태 변경은 `{status}`를 받으며 ACTIVE 또는 INACTIVE다.
+
+관리자 계정 관리는 검증된 MASTER Bearer 및 현재 DB ACTIVE·MASTER 상태를 요구한다. Refresh Cookie만으로 인증하지 않는다. `POST /admin/admin-accounts`는 `{loginId, initialPassword}`만 받으며 비밀번호는 12~128 유니코드 코드 포인트, 공백 전용·제어 문자·잘못된 Unicode는 금지다. 대소문자 구분 loginId 고유 중복은 `DUPLICATE_RESOURCE` 409다. 생성 계정은 ACTIVE MANAGER로 고정하며 201, 생성 URI의 Location과 `{id, loginId, role, status, createdAt, updatedAt}`을 반환한다. 비밀번호·hash를 응답하지 않는다.
+
+`GET /admin/admin-accounts`는 MASTER/MANAGER와 ACTIVE/INACTIVE 전체 계정을 같은 안전한 DTO의 공통 페이지 응답으로 반환한다. page=0, size=20(최대 100), 기본 createdAt desc 및 ID desc이며 createdAt·updatedAt·loginId의 asc/desc를 허용하고 같은 방향의 ID를 보조 정렬한다. 지원 필터는 없으며 알 수 없거나 중복된 query·본문·범위 초과 값은 400이다. 허용된 Origin에 GET/POST, 숫자 ID status 경로에 PATCH CORS를 등록한다.
+
+`PATCH /admin/admin-accounts/{adminId}/status`는 `{status: "ACTIVE"|"INACTIVE"}`만 받고 200과 위 DTO를 반환한다. MANAGER만 대상이며 MASTER·본인·없는 계정은 `RESOURCE_NOT_FOUND` 404다. ID는 양수 BIGINT의 10진 문자열이며 선행 0·범위 초과는 400이다. 두 쓰기는 query, 미지원/중복 JSON 필드·null·추가 JSON 값을 거부한다. 같은 상태 설정도 성공하지만 해당 계정의 기존 모든 sid를 폐기하며 갱신·Access 사용을 막는다. ACTIVE로 바꿔도 이전 세션은 복구되지 않아 새 로그인해야 한다. role·비밀번호 변경과 삭제·개별 상세 조회는 제공하지 않는다.
 
 회원 상세 응답:
 

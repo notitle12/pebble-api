@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 public interface AdminAccountRepository extends JpaRepository<AdminAccount, Long> {
     Optional<AdminAccount> findByLoginId(String loginId);
     boolean existsByRole(com.pebble.api.admin.domain.AdminRole role);
+    boolean existsByLoginId(String loginId);
 
     @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("select a from AdminAccount a where a.loginId = :loginId")
@@ -19,4 +20,8 @@ public interface AdminAccountRepository extends JpaRepository<AdminAccount, Long
     @Lock(LockModeType.PESSIMISTIC_READ)
     @Query("select a from AdminAccount a where a.id = :id")
     Optional<AdminAccount> findForAuthenticationById(@Param("id") long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from AdminAccount a where a.id = :id and a.role = com.pebble.api.admin.domain.AdminRole.MANAGER")
+    Optional<AdminAccount> findManagerForUpdate(@Param("id") long id);
 }
