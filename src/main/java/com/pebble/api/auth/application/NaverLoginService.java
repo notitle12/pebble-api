@@ -7,6 +7,7 @@ import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
 import com.pebble.api.auth.infrastructure.naver.NaverOAuthProperties;
 import com.pebble.api.auth.infrastructure.redis.OAuthStateStore;
 import com.pebble.api.member.application.OAuthMemberService;
+import com.pebble.api.member.application.MemberWithdrawalService;
 import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.OAuthProvider;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +25,7 @@ public class NaverLoginService {
     private final NaverOAuthProperties naverProperties;
     private final OAuthMemberService memberService;
     private final UserSessionService sessions;
+    private final MemberWithdrawalService withdrawals;
 
     public AuthorizationGrant beginAuthorization() {
         String state = stateStore.issue();
@@ -31,6 +33,21 @@ public class NaverLoginService {
     }
 
     public LoginGrant login(String authorizationCode, String state, String cookieState) {
+        NaverProfile profile = authenticate(authorizationCode, state, cookieState);
+        Member member = memberService.resolve(OAuthProvider.NAVER, profile.subject(),
+                profile.nickname(), profile.profileImageUrl());
+        // 공급자 통신·계정 연결이 끝난 뒤 회원 읽기 잠금으로 최신 상태 확인과 발급을 조정한다.
+        var grant = sessions.login(member.getId());
+        return new LoginGrant(grant.accessToken(), grant.refreshToken(), grant.cookieTtl(), grant.member());
+    }
+
+    public void cancelWithdrawal(String authorizationCode, String state, String cookieState) {
+        // 외부 공급자 통신은 DB 잠금 밖에서 수행하고 기존 계정만 취소한다.
+        NaverProfile profile = authenticate(authorizationCode, state, cookieState);
+        withdrawals.cancel(OAuthProvider.NAVER, profile.subject());
+    }
+
+    private NaverProfile authenticate(String authorizationCode, String state, String cookieState) {
         if (isBlank(state) || isBlank(cookieState) || !MessageDigest.isEqual(
                 state.getBytes(StandardCharsets.UTF_8), cookieState.getBytes(StandardCharsets.UTF_8))) {
             throw new AuthException(AuthError.INVALID_OAUTH_STATE);
@@ -39,12 +56,7 @@ public class NaverLoginService {
             throw new AuthException(AuthError.INVALID_OAUTH_STATE);
         }
 
-        NaverProfile profile = naverOAuthGateway.authenticate(authorizationCode, state);
-        Member member = memberService.resolve(OAuthProvider.NAVER, profile.subject(),
-                profile.nickname(), profile.profileImageUrl());
-        // 공급자 통신·계정 연결이 끝난 뒤 회원 읽기 잠금으로 최신 상태 확인과 발급을 조정한다.
-        var grant = sessions.login(member.getId());
-        return new LoginGrant(grant.accessToken(), grant.refreshToken(), grant.cookieTtl(), grant.member());
+        return naverOAuthGateway.authenticate(authorizationCode, state);
     }
 
     private boolean isBlank(String value) {
