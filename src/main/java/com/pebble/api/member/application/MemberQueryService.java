@@ -22,6 +22,13 @@ public class MemberQueryService {
         return memberRepository.findForAuthentication(id);
     }
 
+    @Transactional
+    public Member findForManagementWrite(long id) {
+        // 관리자 운영은 정지·탈퇴 대기 소유자도 처리하되 기존 회원→콘텐츠 잠금 순서를 유지한다.
+        return memberRepository.findByIdForWrite(id)
+                .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND));
+    }
+
     public Member findActiveById(long id) {
         Member member = memberRepository.findById(id)
                 .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND));

@@ -156,9 +156,13 @@ public class PostService {
     }
 
     public Page<PostView> search(String term, Long categoryId, Long tagId, Long authorId, Pageable pageable) {
+        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null).and(searchMatching(term)), pageable), false);
+    }
+
+    private Specification<Post> searchMatching(String term) {
         // LIKE의 특수 문자를 이스케이프해 사용자가 입력한 부분 문자열만 검색한다.
         String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-        Specification<Post> matching = (root, query, cb) -> {
+        return (root, query, cb) -> {
             var loweredPattern = cb.lower(cb.literal(pattern));
             var category = root.join("category", JoinType.LEFT);
             var parent = category.join("parent", JoinType.LEFT);
@@ -176,7 +180,45 @@ public class PostService {
                     cb.like(cb.lower(category.get("name")), loweredPattern, '\\'),
                     cb.like(cb.lower(parent.get("name")), loweredPattern, '\\'), cb.exists(technology));
         };
-        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null).and(matching), pageable), false);
+    }
+
+    public Page<PostView> listForManagement(String q, PostVisibility visibility, Boolean blocked, Long authorId, Pageable pageable) {
+        Specification<Post> filter = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (visibility != null) predicates.add(cb.equal(root.get("visibility"), visibility));
+            if (blocked != null) predicates.add(cb.equal(root.get("blocked"), blocked));
+            if (authorId != null) predicates.add(cb.equal(root.get("author").get("id"), authorId));
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        if (q != null) filter = filter.and(searchMatching(q));
+        return page(posts.findAll(filter, pageable), true);
+    }
+
+    public PostView detailForManagement(long id) {
+        return detailView(posts.findById(id).orElseThrow(PostService::notFound), true);
+    }
+
+    @Transactional
+    public PostView setBlockedForManagement(long id, long adminId, boolean blocked) {
+        Post post = forManagementUpdate(id);
+        if (post.getVisibility() == PostVisibility.DELETED) throw new ApplicationException(PostError.CONTENT_DELETED);
+        post.setBlocked(blocked, adminId);
+        posts.flush();
+        return detailView(post, true);
+    }
+
+    @Transactional
+    public void deleteForManagement(long id) {
+        Post post = forManagementUpdate(id);
+        if (post.getVisibility() == PostVisibility.DELETED) return;
+        post.delete();
+        posts.flush();
+    }
+
+    private Post forManagementUpdate(long id) {
+        long authorId = posts.findAuthorIdForManagement(id).orElseThrow(PostService::notFound);
+        members.findForManagementWrite(authorId);
+        return posts.findByIdForUpdate(id).orElseThrow(PostService::notFound);
     }
 
     public Page<PostView> listBoard(long ownerId, long boardId, Pageable pageable) {
