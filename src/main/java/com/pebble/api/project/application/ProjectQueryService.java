@@ -20,6 +20,13 @@ public class ProjectQueryService {
     private final ProjectRepository projects;
 
     @Transactional
+    public Project findForComments(long id, boolean forWrite) {
+        Project project = (forWrite ? projects.findByIdForUpdate(id) : projects.findById(id)).orElseThrow(ProjectQueryService::notFound);
+        project.getOwner().getStatus();
+        return project;
+    }
+
+    @Transactional
     public void requirePublicForWrite(long projectId) {
         Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectQueryService::notFound);
         if (project.getVisibility() != ProjectVisibility.PUBLIC || project.isBlocked()

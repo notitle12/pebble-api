@@ -293,12 +293,12 @@ Board 쓰기는 프로필 설정 완료를 요구하지 않는다. POST는 name�
 |---|---|---|---|
 | GET | /api/v1/posts/{postId}/comments | Guest, USER, 작성자, MANAGER, MASTER | 댓글 목록. SECRET 접근 규칙 적용 |
 | POST | /api/v1/posts/{postId}/comments | USER | 댓글 생성 |
-| GET | /api/v1/posts/{postId}/comments/{commentId} | 댓글 작성자, 콘텐츠 작성자, MANAGER, MASTER | 권한이 있는 단일 댓글 조회 |
+| GET | /api/v1/posts/{postId}/comments/{commentId} | Guest(PUBLIC), 댓글 작성자, 콘텐츠 작성자 | 권한이 있는 단일 댓글 조회 |
 | PATCH | /api/v1/posts/{postId}/comments/{commentId} | 댓글 작성자 | 본인 댓글 수정 |
 | DELETE | /api/v1/posts/{postId}/comments/{commentId} | 댓글 작성자 | 본인 댓글 논리 삭제 |
 | GET | /api/v1/projects/{projectId}/comments | Guest, USER, 작성자, MANAGER, MASTER | 댓글 목록. SECRET 접근 규칙 적용 |
 | POST | /api/v1/projects/{projectId}/comments | USER | 댓글 생성 |
-| GET | /api/v1/projects/{projectId}/comments/{commentId} | 댓글 작성자, 콘텐츠 작성자, MANAGER, MASTER | 권한이 있는 단일 댓글 조회 |
+| GET | /api/v1/projects/{projectId}/comments/{commentId} | Guest(PUBLIC), 댓글 작성자, 콘텐츠 작성자 | 권한이 있는 단일 댓글 조회 |
 | PATCH | /api/v1/projects/{projectId}/comments/{commentId} | 댓글 작성자 | 본인 댓글 수정 |
 | DELETE | /api/v1/projects/{projectId}/comments/{commentId} | 댓글 작성자 | 본인 댓글 논리 삭제 |
 | PUT | /api/v1/posts/{postId}/like | USER | Post 좋아요 |
@@ -608,7 +608,7 @@ Board 생성 요청은 `{name, parentId, displayOrder}`다. name은 공백이 �
 
 ### 6.7 댓글과 좋아요
 
-Post·Project 좋아요 API를 제공한다. 댓글 API는 후속 기능이며 아래 댓글 계약은 계획된 범위를 보존한다.
+Post·Project 좋아요와 일반 회원 댓글 API를 제공한다. 관리자 인증·운영 댓글 조회·삭제와 대댓글은 후속 기능이며 관리자 관련 계약은 계획된 범위다.
 
 댓글 생성 요청:
 
@@ -621,6 +621,10 @@ Post·Project 좋아요 API를 제공한다. 댓글 API는 후속 기능이며 �
 
 - body는 필수, 최대 2,000자다.
 - visibility는 PUBLIC 또는 SECRET이다.
+- POST는 body·visibility를 모두 받고 201 Created와 댓글 단일 주소 Location을 반환한다. PATCH는 body·visibility의 부분 수정이며 생략은 기존 값 유지, 명시적 null·알 수 없는 필드는 400이다. 빈 PATCH는 200으로 기존 값을 반환한다. body는 공백 전용을 거부하고 최대 2,000 유니코드 코드 포인트다. NUL·잘못된 유니코드는 400이다.
+- ACTIVE USER는 프로필 완료 없이 작성·본인 수정·삭제를 수행한다. 댓글 대상·부모 소유권은 경로의 콘텐츠 종류와 ID로 검증하며 타인 댓글 수정·삭제와 잘못된 부모 경로는 404다. 본인 댓글은 부모가 HIDDEN·차단이어도 수정·삭제할 수 있으나 DELETED·탈퇴 대기 소유자 대상은 404다.
+- DELETE는 204이며 본문을 빈 문자열로 제거하고 삭제 시각을 기록한다. 삭제 댓글 조회·수정·반복 삭제는 404다. DELETE 본문과 목록 외 경로의 query parameter는 허용하지 않는다.
+- 목록은 CommentPage(content·page·size·totalElements·totalPages·hasNext·hasPrevious)를 반환한다. page 기본 0, size 기본 20·최대 100, sort 기본 createdAt,asc이며 createdAt·updatedAt과 asc·desc만 허용한다. ID를 같은 방향 보조 정렬로 사용한다. 공개 범위·작성자 상태를 적용한 뒤 집계·페이징하고, 알 수 없는·중복 query parameter는 400이다.
 - 작성, 좋아요는 PUBLIC이고 차단되지 않은 콘텐츠에서만 허용한다.
 - Guest는 PUBLIC 댓글만 조회하며, 대상 콘텐츠도 PUBLIC이고 차단되지 않아야 한다.
 - SECRET 댓글은 댓글 작성자, 대상 콘텐츠 작성자, MANAGER와 MASTER만 조회할 수 있다.
@@ -630,6 +634,7 @@ Post·Project 좋아요 API를 제공한다. 댓글 API는 후속 기능이며 �
 - 공개 댓글은 대상 콘텐츠가 PUBLIC이고 차단되지 않은 경우에만 Guest에게 노출한다. SECRET 댓글의 접근 권한은 대상 콘텐츠 상태와 별도로 댓글 작성자, 콘텐츠 작성자, MANAGER, MASTER에게 부여한다.
 - DELETED 대상 콘텐츠의 댓글은 관리자 운영 경로 외에는 반환하지 않는다.
 - 삭제 댓글 본문은 어떤 응답에도 포함하지 않는다.
+- 탈퇴 대기 콘텐츠 소유자의 댓글 영역과 탈퇴 대기 작성자의 댓글은 일반 경로에서 404 또는 목록 제외 처리한다. 정지 작성자의 기존 PUBLIC 댓글은 공개 대상에서 유지한다. 비활성 USER의 공개 목록은 PUBLIC만 제공하고 본인 SECRET·소유자의 HIDDEN/차단 관리 접근에는 ACTIVE 검증을 적용한다. 본인 SECRET 작성자는 부모가 HIDDEN·차단이어도 단일 조회가 가능하지만 목록 전체 권한을 얻지는 않는다.
 
 댓글 응답 항목은 `{id, author, body, visibility, createdAt, updatedAt}`다. 관리자는 삭제된 댓글의 운영 메타데이터를 볼 수 있지만 삭제 본문을 복구할 수 없다.
 
@@ -684,7 +689,7 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 - Guest 검색은 PUBLIC이고 차단되지 않은 콘텐츠만 대상으로 한다.
 - 검색은 MVP의 기본 문자열 검색을 제공한다. 자동 완성, 검색어 추천, 개인화, 전문 검색 엔진은 제공하지 않는다.
 - USER 요청의 visibilityStatus 필터는 본인 콘텐츠 목록에서만 사용할 수 있다. 공개 사용자 목록의 필터는 PUBLIC/차단 제외를 우회하지 않는다.
-- 검색 및 후속 댓글·좋아요 집계는 차단된 콘텐츠를 포함하지 않는다.
+- 검색·댓글 공개 조회·좋아요 집계는 차단된 콘텐츠를 포함하지 않는다. 콘텐츠 소유자의 댓글 관리 조회와 본인 SECRET 단일 조회 예외는 6.7절을 따른다.
 
 ## 8. API 전역 제약
 
