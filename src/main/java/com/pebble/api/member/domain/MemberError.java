@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 public enum MemberError implements ErrorCode {
     ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 계정은 이용할 수 없습니다."),
     ACCOUNT_WITHDRAWAL_PENDING(HttpStatus.FORBIDDEN, "탈퇴 대기 중인 계정은 이용할 수 없습니다."),
+    WITHDRAWAL_PENDING(HttpStatus.CONFLICT, "탈퇴 대기 회원의 상태는 관리자가 변경할 수 없습니다."),
     PROFILE_REQUIRED(HttpStatus.CONFLICT, "블로그명과 공개 아이디를 먼저 설정해 주세요."),
     PROFILE_ALREADY_COMPLETED(HttpStatus.CONFLICT, "최초 설정을 이미 완료했습니다."),
     DUPLICATE_NICKNAME(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),

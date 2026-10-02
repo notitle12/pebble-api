@@ -47,6 +47,10 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/admin-accounts").hasRole("MASTER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/admin/admin-accounts").hasRole("MASTER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/admin-accounts/{adminId:[0-9]+}/status").hasRole("MASTER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/members", "/api/v1/admin/members/{memberId:[0-9]+}")
+                            .hasAnyRole("MANAGER", "MASTER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/members/{memberId:[0-9]+}/status")
+                            .hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards",
                                 "/api/v1/members/me/projects").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
@@ -146,8 +150,11 @@ public class SecurityConfiguration {
         CorsConfiguration adminStatusCors = new CorsConfiguration(cors);
         adminStatusCors.setAllowedMethods(List.of("PATCH"));
         source.registerCorsConfiguration("/api/v1/admin/admin-accounts/{adminId:[0-9]+}/status", adminStatusCors);
+        source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}/status", adminStatusCors);
         CorsConfiguration getCors = new CorsConfiguration(cors);
         getCors.setAllowedMethods(List.of("GET"));
+        source.registerCorsConfiguration("/api/v1/admin/members", getCors);
+        source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}", getCors);
         source.registerCorsConfiguration("/api/v1/members/me", getCors);
         source.registerCorsConfiguration("/api/v1/categories", getCors);
         source.registerCorsConfiguration("/api/v1/tags", getCors);

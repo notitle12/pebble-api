@@ -1,6 +1,5 @@
 package com.pebble.api.auth.application;
 
-import com.pebble.api.auth.application.UserRefreshTokenService.IssuedRefreshToken;
 import com.pebble.api.auth.domain.AuthError;
 import com.pebble.api.auth.domain.AuthException;
 import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway.NaverProfile;
@@ -9,13 +8,10 @@ import com.pebble.api.auth.infrastructure.naver.NaverOAuthProperties;
 import com.pebble.api.auth.infrastructure.redis.OAuthStateStore;
 import com.pebble.api.member.application.OAuthMemberService;
 import com.pebble.api.member.domain.Member;
-import com.pebble.api.member.domain.MemberStatus;
 import com.pebble.api.member.domain.OAuthProvider;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -27,9 +23,7 @@ public class NaverLoginService {
     private final OAuthStateStore stateStore;
     private final NaverOAuthProperties naverProperties;
     private final OAuthMemberService memberService;
-    private final AccessTokenService accessTokenService;
-    private final UserRefreshTokenService refreshTokenService;
-    private final Clock clock;
+    private final UserSessionService sessions;
 
     public AuthorizationGrant beginAuthorization() {
         String state = stateStore.issue();
@@ -48,17 +42,9 @@ public class NaverLoginService {
         NaverProfile profile = naverOAuthGateway.authenticate(authorizationCode, state);
         Member member = memberService.resolve(OAuthProvider.NAVER, profile.subject(),
                 profile.nickname(), profile.profileImageUrl());
-        if (member.getStatus() == MemberStatus.WITHDRAWAL_PENDING) {
-            throw new AuthException(AuthError.WITHDRAWAL_PENDING);
-        }
-        if (member.getStatus() == MemberStatus.SUSPENDED) {
-            throw new AuthException(AuthError.ACCOUNT_SUSPENDED);
-        }
-        Instant now = clock.instant();
-        String accessToken = accessTokenService.issueForMember(member.getId(), now);
-        IssuedRefreshToken refreshToken = refreshTokenService.issue(member.getId(), now);
-        return new LoginGrant(accessToken, refreshToken.value(),
-                Duration.between(now, refreshToken.idleExpiresAt()), member);
+        // 공급자 통신·계정 연결이 끝난 뒤 회원 읽기 잠금으로 최신 상태 확인과 발급을 조정한다.
+        var grant = sessions.login(member.getId());
+        return new LoginGrant(grant.accessToken(), grant.refreshToken(), grant.cookieTtl(), grant.member());
     }
 
     private boolean isBlank(String value) {

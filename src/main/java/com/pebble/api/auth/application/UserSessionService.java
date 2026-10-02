@@ -3,13 +3,15 @@ package com.pebble.api.auth.application;
 import com.pebble.api.auth.domain.AuthError;
 import com.pebble.api.auth.domain.AuthException;
 import com.pebble.api.auth.application.UserRefreshTokenService.IssuedRefreshToken;
-import com.pebble.api.member.application.OAuthMemberService;
+import com.pebble.api.member.application.MemberQueryService;
+import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,12 +19,24 @@ public class UserSessionService {
 
     private final UserRefreshTokenService refreshTokens;
     private final AccessTokenService accessTokens;
-    private final OAuthMemberService members;
+    private final MemberQueryService members;
     private final Clock clock;
 
+    @Transactional
+    public LoginGrant login(long memberId) {
+        Member member = members.findForAuthentication(memberId)
+                .orElseThrow(() -> new AuthException(AuthError.INVALID_CREDENTIALS));
+        requireActive(member.getStatus());
+        Instant now = clock.instant();
+        String accessToken = accessTokens.issueForMember(memberId, now);
+        IssuedRefreshToken refresh = refreshTokens.issue(memberId, now);
+        return new LoginGrant(accessToken, refresh.value(), Duration.between(now, refresh.idleExpiresAt()), member);
+    }
+
+    @Transactional
     public RefreshGrant refresh(String token) {
         var snapshot = refreshTokens.find(token);
-        MemberStatus status = members.findStatus(snapshot.memberId()).orElse(null);
+        MemberStatus status = members.findForAuthentication(snapshot.memberId()).map(Member::getStatus).orElse(null);
         if (status != MemberStatus.ACTIVE) {
             refreshTokens.revoke(snapshot);
             if (status == MemberStatus.SUSPENDED) {
@@ -42,6 +56,14 @@ public class UserSessionService {
 
     public void logout(String token) {
         refreshTokens.logout(token);
+    }
+
+    private void requireActive(MemberStatus status) {
+        if (status == MemberStatus.SUSPENDED) throw new AuthException(AuthError.ACCOUNT_SUSPENDED);
+        if (status == MemberStatus.WITHDRAWAL_PENDING) throw new AuthException(AuthError.WITHDRAWAL_PENDING);
+    }
+
+    public record LoginGrant(String accessToken, String refreshToken, Duration cookieTtl, Member member) {
     }
 
     public record RefreshGrant(String accessToken, String refreshToken, Duration cookieTtl) {

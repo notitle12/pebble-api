@@ -9,6 +9,9 @@ local time = redis.call('TIME')
 local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
 local absolute = tonumber(ARGV[5])
 if absolute <= now then return 0 end
+-- 회원 상태 변경의 전체 폐기 세대를 원자적으로 확인한다. 이전 저장 형식은 빈 세대다.
+local generation = redis.call('GET', KEYS[5]) or ''
+if (redis.call('HGET', KEYS[1], 'generation') or '') ~= generation then return 0 end
 if redis.call('EXISTS', KEYS[3]) == 1 then return 0 end
 local status = redis.call('HGET', KEYS[1], 'status')
 if ARGV[6] == 'logout' or ARGV[6] == 'revoke' or status == 'CONSUMED' then
@@ -28,8 +31,12 @@ redis.call('HSET', KEYS[4],
     'status', 'ACTIVE', 'issuedAt', ARGV[9], 'lastUsedAt', ARGV[9],
     'familyCreatedAt', redis.call('HGET', KEYS[1], 'familyCreatedAt'),
     'idleExpiresAt', ARGV[10], 'absoluteExpiresAt', ARGV[3],
-    'pepperVersion', ARGV[11])
+    'pepperVersion', ARGV[11], 'generation', generation)
 redis.call('PEXPIREAT', KEYS[4], math.min(tonumber(ARGV[12]), idle))
 redis.call('SADD', KEYS[2], ARGV[13])
 redis.call('PEXPIREAT', KEYS[2], absolute)
+-- 이 세대를 참조하는 마지막 Family가 절대 만료할 때까지 표식을 보존한다.
+if generation ~= '' and redis.call('PTTL', KEYS[5]) < absolute - now then
+    redis.call('PEXPIREAT', KEYS[5], absolute)
+end
 return 1
