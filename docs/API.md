@@ -238,7 +238,7 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 (후속, 미구현) |
 | DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 (후속, 미구현) |
 
-Board 관리와 Post의 Board·Project 지정 및 공개 Post 검색은 구현되어 있다. 썸네일·미디어, 좋아요, 관리자 Post 운영 API는 아직 구현하지 않았으며 위 썸네일 행은 후속 계획 계약을 보존한다.
+Board 관리와 Post의 Board·Project 지정, 공개 Post 검색, 좋아요를 제공한다. 썸네일·미디어와 관리자 Post 운영 API는 아직 구현하지 않았으며 위 썸네일 행은 후속 계획 계약을 보존한다.
 
 ### 5.3 Project
 
@@ -518,7 +518,7 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
 
 `urlKey`는 slug가 있으면 slug, 없으면 `postNumber` 문자열이다. `GET /api/v1/blogs/{handle}/posts/{postKey}`에서 숫자 키는 작성자별 번호, 그 외 키는 slug로 해석한다. 본인 블로그 기본 목록은 displayOrder 오름차순이고 공개 전체 목록 기본 순서는 publishedAt 내림차순이다. 공개 주소 경로는 공개 handle과 postNumber 또는 slug를 사용하며 Naver 식별자와 내부 TSID를 경로에 사용하지 않는다. 응답의 `id`는 TSID 문자열이다.
 
-Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 현재 항상 null이고 `likeCount`는 0, `likedByMe`는 false다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
+Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 현재 항상 null이다. `likeCount`와 `likedByMe`는 6.7절의 공개 집계·요청 회원 규칙을 따른다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 Post 조회·차단 기능은 아직 구현하지 않았다.
 
 ### 6.4 Project
 
@@ -573,7 +573,7 @@ Project 생성 요청과 수정 가능한 필드:
 - 입력 문자열 길이는 유니코드 코드 포인트로 검증하며 NUL·잘못된 유니코드는 거부한다. 선택 문자열과 날짜는 null로 비울 수 있고, 배열의 null은 거부한다. 상세의 선택 description·architectureDescription·executionInstructions는 null이면 생략한다.
 - 같은 이름의 Project 생성은 허용한다. 이번 API는 날짜 형식을 검증하며 기간과 lifecycleStatus를 자동으로 연동하지 않는다. 회원별 공개 목록과 본인 목록은 아직 제공하지 않는다.
 
-Project 상세에는 현재 빈 미디어 배열, 주요 기능, 링크, 기술 태그, likeCount 0, likedByMe false를 포함한다. 목록 응답은 상세 설명과 주요 기능·링크·미디어 배열을 생략한다. 미디어 저장 키는 공개하지 않고, 후속 미디어 기능에서는 권한을 통과한 요청에 한해 15분 만료의 signed URL을 반환한다. 만료된 URL로 아직 로드되지 않은 이미지를 요청하면 리소스 조회 API에서 새 URL을 받아 다시 요청한다. 이미 로드된 이미지는 URL 만료만으로 화면에서 사라지지 않는다.
+Project 상세에는 현재 빈 미디어 배열, 주요 기능, 링크, 기술 태그와 6.7절 규칙을 따르는 likeCount·likedByMe를 포함한다. 목록 응답은 상세 설명과 주요 기능·링크·미디어 배열을 생략한다. 미디어 저장 키는 공개하지 않고, 후속 미디어 기능에서는 권한을 통과한 요청에 한해 15분 만료의 signed URL을 반환한다. 만료된 URL로 아직 로드되지 않은 이미지를 요청하면 리소스 조회 API에서 새 URL을 받아 다시 요청한다. 이미 로드된 이미지는 URL 만료만으로 화면에서 사라지지 않는다.
 
 ### 6.5 관리자 차단
 
@@ -608,7 +608,7 @@ Board 생성 요청은 `{name, parentId, displayOrder}`다. name은 공백이 �
 
 ### 6.7 댓글과 좋아요
 
-Post·Project 좋아요 API는 아직 제공하지 않는다. 현재 Post 응답은 `likeCount: 0`, `likedByMe: false`를 반환한다. 아래 권한 규칙은 좋아요 기능을 제공할 때 적용할 계약이다.
+Post·Project 좋아요 API를 제공한다. 댓글 API는 후속 기능이며 아래 댓글 계약은 계획된 범위를 보존한다.
 
 댓글 생성 요청:
 
@@ -633,7 +633,9 @@ Post·Project 좋아요 API는 아직 제공하지 않는다. 현재 Post 응답
 
 댓글 응답 항목은 `{id, author, body, visibility, createdAt, updatedAt}`다. 관리자는 삭제된 댓글의 운영 메타데이터를 볼 수 있지만 삭제 본문을 복구할 수 없다.
 
-좋아요 등록/취소 요청은 본문이 없다. 공개 가능한 Post/Project 상세 응답에 likeCount를 포함한다. 인증된 USER에게 likedByMe를 함께 반환한다. Guest에는 false를 반환한다. MANAGER와 MASTER의 likedByMe는 false이며 좋아요 API 호출은 403이다.
+좋아요 PUT·DELETE 요청은 본문과 query parameter가 없으며 둘 다 204 No Content를 반환한다. 중복 등록·취소는 멱등 처리한다. ACTIVE USER는 프로필 완료 없이 호출할 수 있다. 대상이 PUBLIC·미차단·미삭제·비탈퇴 소유자 조건을 만족하지 않거나 존재하지 않으면 등록·취소 모두 404다. SUSPENDED·WITHDRAWAL_PENDING 요청 회원은 403이며 Bearer 없는 쓰기는 기존 CSRF 방어에서 거부된다.
+
+Post·Project 상세와 모든 목록·검색 응답은 공개 가능한 콘텐츠의 활성 좋아요를 집계한 likeCount와 요청 USER의 likedByMe를 제공한다. 탈퇴 대기 회원의 좋아요는 집계·likedByMe에서 제외하며 정지 회원의 기존 좋아요는 유지한다. Guest·관리자는 likedByMe=false다. 소유자가 조회하는 숨김·차단 콘텐츠도 집계는 0·false다. 콘텐츠 숨김·차단·논리 삭제는 좋아요 이력을 보존하고, 재공개하면 유효한 기존 좋아요가 다시 집계된다. 취소는 논리 삭제하며 다시 등록하면 새 행을 추가한다. MANAGER와 MASTER는 좋아요를 등록·취소할 수 없다. 관리자 인증은 후속 기능이다.
 
 ### 6.8 미디어
 
