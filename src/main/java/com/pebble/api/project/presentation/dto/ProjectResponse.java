@@ -19,7 +19,7 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                               List<Technology> tags,
                               @JsonInclude(JsonInclude.Include.NON_NULL) List<Feature> features,
                               @JsonInclude(JsonInclude.Include.NON_NULL) List<Link> links,
-                              @JsonInclude(JsonInclude.Include.NON_NULL) List<?> media,
+                              @JsonInclude(JsonInclude.Include.NON_NULL) List<ProjectMediaResponse> media,
                               ProjectVisibility visibilityStatus, long likeCount, boolean likedByMe,
                               Instant publishedAt, Instant createdAt, Instant updatedAt,
                               @JsonInclude(JsonInclude.Include.NON_NULL) Boolean isBlocked) {
@@ -38,7 +38,7 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                         feature.getTitle(), feature.getDescription(), feature.getDisplayOrder())).toList(),
                 view.links() == null ? null : view.links().stream().map(link -> new Link(link.getId().toString(),
                         link.getType(), link.getLabel(), link.getUrl(), link.getDisplayOrder())).toList(),
-                view.detail() ? List.of() : null, project.getVisibility(), view.likeCount(), view.likedByMe(), project.getPublishedAt(),
+                view.media() == null ? null : view.media().stream().map(ProjectMediaResponse::from).toList(), project.getVisibility(), view.likeCount(), view.likedByMe(), project.getPublishedAt(),
                 project.getCreatedAt(), project.getUpdatedAt(), view.owner() ? project.isBlocked() : null);
     }
 

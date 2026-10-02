@@ -42,6 +42,21 @@ public class ApiExceptionHandler {
         return error(GlobalErrorCode.INVALID_REQUEST, List.of(), request);
     }
 
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnsupportedMediaType(HttpServletRequest request) {
+        return error(GlobalErrorCode.UNSUPPORTED_MEDIA_TYPE, List.of(), request);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMediaTooLarge(HttpServletRequest request) {
+        return error(GlobalErrorCode.MEDIA_TOO_LARGE, List.of(), request);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidMultipart(HttpServletRequest request) {
+        return error(GlobalErrorCode.INVALID_REQUEST, List.of(), request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpectedException(HttpServletRequest request) {
         return error(GlobalErrorCode.INTERNAL_ERROR, List.of(), request);

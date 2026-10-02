@@ -364,6 +364,11 @@ Project에 연결된 GitHub·배포·다운로드 등 외부 링크를 저장한
 
 ### 7.4 `project_media`
 
+V13에서 project_media와 Post의 nullable thumbnail_storage_key를 추가한다. Post 썸네일 키는 부분 UNIQUE, Project 대표 이미지는 부분 UNIQUE로 보호하고 각 파일은 서버 생성 UUID 키를 사용한다. 부모의 논리 삭제 시 연결을 제거하고 물리 삭제는 FK CASCADE로 처리한다.
+
+외부 삭제를 위한 media_deletion_job은 storage_key PK, next_attempt_at, created_at을 저장하며 회원/콘텐츠 FK를 두지 않아 탈퇴 DB 파기 후에도 남는다. 교체/연결 삭제 trigger가 큐를 같은 트랜잭션에 기록한다. 신규 업로드는 별도 트랜잭션으로 1시간 뒤 회수 작업을 먼저 커밋하고 연결 트랜잭션이 작업 행을 잠근 뒤 업로드한다. 연결 성공은 큐 제거와 함께 커밋하며 실패·롤백은 회수 작업을 보존한다. 작업자는 SKIP LOCKED·최신 참조 여부 확인 후 객체를 멱등 삭제하고 큐를 제거한다. 저장소 실패는 5분 뒤 다시 시도하며 키나 비밀을 로그에 남기지 않는다.
+
+
 Project 대표 이미지 및 스크린샷의 저장소 참조를 보관한다.
 
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
@@ -495,7 +500,7 @@ V10에서 두 테이블과 활성 부분 UNIQUE·회원 역방향 인덱스를 �
 
 현재 DB 파기 구현은 만료된 WITHDRAWAL_PENDING ID를 예정 시각·ID 순서로 최대 100개 조회하고 각 회원을 별도 트랜잭션의 `FOR UPDATE SKIP LOCKED`로 다시 확인한다. 다른 노드나 회원 작업이 잠근 회원은 건너뛰고 다음 실행에서 재시도한다. Refresh 전체 Family 폐기 → Post → Project → Board(최대 3단계의 말단부터) → OAuth 연결 → Member 순서로 제거한다. 콘텐츠 FK CASCADE는 다른 회원이 남긴 댓글·좋아요와 하위 데이터를, 회원 FK CASCADE는 다른 콘텐츠에 남긴 본인 댓글·좋아요를 제거한다. 공유 Category/Tag와 다른 회원의 콘텐츠는 보존한다. 실패는 해당 회원의 DB 변경 전체를 롤백하고 다음 회원 처리를 계속한다. 이미 폐기한 Redis Family는 DB 롤백으로 복구하지 않는다.
 
-`pebble.member.withdrawal-cleanup.enabled` 기본값은 true이며 `delay`·`initial-delay`는 각각 60000ms다. 실행 시점에 즉시 삭제된다고 보장하지 않으며 잠금·장애 시 다음 주기에 재시도한다. test 프로필에서는 기본 비활성화한다. 기존 FK·상태 CHECK를 사용하므로 migration은 추가하지 않는다. 현재 R2/미디어 저장 모델은 없어서 외부 객체 삭제는 구현하지 않는다. 미디어 제공 전 재시도 가능한 R2 파기와 완료 확인을 연결하고, 출시 전 백업 만료·복원 시 탈퇴 데이터 제거 절차를 검증해야 한다.
+`pebble.member.withdrawal-cleanup.enabled` 기본값은 true이며 `delay`·`initial-delay`는 각각 60000ms다. 실행 시점에 즉시 삭제된다고 보장하지 않으며 잠금·장애 시 다음 주기에 재시도한다. test 프로필에서는 기본 비활성화한다. 기존 FK·상태 CHECK를 사용하므로 migration은 추가하지 않는다. V13 미디어 참조의 FK CASCADE·Post 키 제거 trigger는 별도 media_deletion_job에 R2 삭제 요청을 남긴다. R2 작업자는 성공 후에만 삭제 요청을 제거하며 저장소 장애 시 재시도한다. 출시 전 백업 만료·복원 시 탈퇴 데이터 제거 절차는 별도 검증해야 한다.
 
 ---
 

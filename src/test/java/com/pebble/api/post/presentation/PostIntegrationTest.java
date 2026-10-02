@@ -307,8 +307,9 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         for (String path : List.of(PATH + "/123/thumbnail", "/api/v1/admin/posts")) {
             mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isForbidden());
         }
+        // 썸네일 PUT 구현으로 정확한 허용 Origin의 preflight를 지원한다.
         mvc.perform(options(PATH + "/123/thumbnail").header(HttpHeaders.ORIGIN, ORIGIN).header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
     }
 
     @Test

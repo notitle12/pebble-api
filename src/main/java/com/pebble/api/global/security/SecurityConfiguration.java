@@ -86,6 +86,11 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/boards").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/posts/{postId:[0-9]+}/thumbnail").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}/thumbnail").hasRole("USER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/media").hasRole("USER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/projects/{projectId:[0-9]+}/media/{mediaId:[0-9]+}").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/projects/{projectId:[0-9]+}/media/{mediaId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/posts").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts/{postId:[0-9]+}/comments",
                                 "/api/v1/posts/{postId:[0-9]+}/comments/{commentId:[0-9]+}",
@@ -248,6 +253,15 @@ public class SecurityConfiguration {
         CorsConfiguration boardDetailCors = new CorsConfiguration(cors);
         boardDetailCors.setAllowedMethods(List.of("PATCH", "DELETE"));
         source.registerCorsConfiguration("/api/v1/boards/{boardId:[0-9]+}", boardDetailCors);
+        CorsConfiguration postMediaCors = new CorsConfiguration(cors);
+        postMediaCors.setAllowedMethods(List.of("PUT", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}/thumbnail", postMediaCors);
+        CorsConfiguration projectMediaUploadCors = new CorsConfiguration(cors);
+        projectMediaUploadCors.setAllowedMethods(List.of("POST"));
+        source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}/media", projectMediaUploadCors);
+        CorsConfiguration projectMediaEditCors = new CorsConfiguration(cors);
+        projectMediaEditCors.setAllowedMethods(List.of("PATCH", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}/media/{mediaId:[0-9]+}", projectMediaEditCors);
         return source;
     }
 }

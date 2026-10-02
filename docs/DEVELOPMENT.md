@@ -99,7 +99,7 @@ set +a
 
 IntelliJ Run Configuration에서는 `SPRING_PROFILES_ACTIVE=local`을 지정하고, Environment variables에서 `.env` 파일을 실행 설정에 명시적으로 연결하거나 필요한 환경변수를 직접 입력한다. `.env`는 Docker Compose에서는 자동 참조하지만 Spring Boot 애플리케이션 프로세스에는 자동 전달되지 않는다. Compose의 DB 사용자·비밀번호를 변경할 때는 앱의 `DB_USERNAME`·`DB_PASSWORD`도 동일한 값으로 맞춘다. 이미 초기화된 `postgres_data` 볼륨에는 새 `POSTGRES_USER`·`POSTGRES_PASSWORD`가 적용되지 않으므로 기존 DB 자격 증명을 함께 변경하거나 개발 데이터를 버리고 볼륨을 다시 만들어야 한다.
 
-`application.yaml`은 `${SPRING_PROFILES_ACTIVE:local}`로 프로필만 선택한다. `local`과 `prod`의 애플리케이션·DB·Redis·Naver·JWT·pepper·CORS 설정은 각각의 프로필 YAML에 둔다. 새 checkout에서는 로컬 예시를 복사해 실제 `application-local.yaml`을 준비한다. 운영은 개인 local 파일에 의존하지 않는다. 테스트는 test 프로필과 `src/test/resources/application-test.yaml`을 사용하여 개인 local 파일 없이 실행한다. 미지정 시 `local`을 사용하고 운영 배포는 `prod`를 명시한다. `local`은 개발용 DB·Redis 기본값을 사용한다. JWT Base64 키, 32바이트 이상 난수 pepper, Naver Client ID·Secret을 채워야 로그인 검증이 가능하다. 키·pepper 생성 방법은 위의 로컬 개발 환경 절을 따른다.
+`application.yaml`은 `${SPRING_PROFILES_ACTIVE:local}`로 프로필을 선택하고 공통 multipart 한도·R2 환경변수 바인딩을 제공한다. `local`과 `prod`의 애플리케이션·DB·Redis·Naver·JWT·pepper·CORS 설정은 각각의 프로필 YAML에 둔다. 새 checkout에서는 로컬 예시를 복사해 실제 `application-local.yaml`을 준비한다. 운영은 개인 local 파일에 의존하지 않는다. 테스트는 test 프로필과 `src/test/resources/application-test.yaml`을 사용하여 개인 local 파일 없이 실행한다. 미지정 시 `local`을 사용하고 운영 배포는 `prod`를 명시한다. `local`은 개발용 DB·Redis 기본값을 사용한다. JWT Base64 키, 32바이트 이상 난수 pepper, Naver Client ID·Secret을 채워야 로그인 검증이 가능하다. 키·pepper 생성 방법은 위의 로컬 개발 환경 절을 따른다.
 
 운영에서는 `SPRING_PROFILES_ACTIVE=prod`를 지정하고 `.env.prod.example`의 항목을 배포 플랫폼의 Secret/환경변수에 주입한다. `application-prod.yaml`은 비밀을 포함하지 않아 Git에 보관할 수 있다. 운영 DB·Redis host, CORS, Naver, JWT, pepper에는 로컬 기본값을 두지 않는다. Redis는 TLS를 기본 활성화하며 서비스의 실제 TLS·ACL 설정을 확인한다. PostgreSQL TLS 옵션은 운영 `DB_URL`에 지정한다. API HTTPS는 배포 환경에서 구성하고 기존 Secure Cookie 정책을 유지한다. 정상 pepper 교체용 이전 버전 map은 SECURITY.md 8.1절대로 별도 보호된 설정에 주입한다.
 
@@ -206,3 +206,9 @@ Pull Request는 관련 Issue에 연결하고 다음 내용을 적는다.
 - 버그 제보 템플릿: `.github/ISSUE_TEMPLATE/bug-report.md`
 - Pull Request 템플릿: `.github/PULL_REQUEST_TEMPLATE.md`
 - 템플릿은 저장소의 기본 브랜치에 반영된 뒤 GitHub의 새 이슈·Pull Request 작성 화면에 적용된다.
+
+### R2 미디어 연결
+
+공유 예시의 R2_ENDPOINT, R2_BUCKET_NAME, R2_REGION(auto), R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY를 보호된 실행 환경에 주입하고 준비가 끝나면 R2_ENABLED=true로 활성화한다. 기존 개인 로컬 YAML을 읽거나 바꾸지 않아도 application.yaml의 공통 바인딩을 사용한다. `.env`는 자동 로드하지 않으므로 기존 IDE/셸 주입 절차를 따른다. endpoint는 버킷 경로를 제외한 계정 S3 HTTPS URL이며 관할권 지정 버킷은 해당 관할권 endpoint를 사용한다. 공개 r2.dev URL·사용자 지정 도메인은 필요하지 않다.
+
+AWS SDK S3·URL Connection transport는 저장소 업로드/삭제 및 15분 SigV4 URL을 제공한다. WebP ImageIO는 Java 기본 디코더에 없는 WebP 읽기/쓰기와 macOS ARM·운영 Linux 실행을 제공한다. 원본 대신 lossy quality82 WebP 파생본만 저장한다. 테스트는 실제 R2 credentials를 사용하지 않고 이미지 변환·가짜 저장소와 독립 DB/Redis를 사용한다. 대역 성공과 실제 R2 연결 성공을 구분하며 배포 전 비공개 버킷 업로드/조회/삭제 및 삭제 큐 복구를 별도 확인한다.
