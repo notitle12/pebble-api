@@ -44,6 +44,9 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout",
                                 "/api/v1/admin/auth/login", "/api/v1/admin/auth/token/refresh", "/api/v1/admin/auth/logout").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/admin-accounts").hasRole("MASTER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/admin-accounts").hasRole("MASTER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/admin-accounts/{adminId:[0-9]+}/status").hasRole("MASTER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards",
                                 "/api/v1/members/me/projects").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
@@ -137,6 +140,12 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/admin/auth/login", cors);
         source.registerCorsConfiguration("/api/v1/admin/auth/token/refresh", cors);
         source.registerCorsConfiguration("/api/v1/admin/auth/logout", cors);
+        CorsConfiguration adminAccountsCors = new CorsConfiguration(cors);
+        adminAccountsCors.setAllowedMethods(List.of("GET", "POST"));
+        source.registerCorsConfiguration("/api/v1/admin/admin-accounts", adminAccountsCors);
+        CorsConfiguration adminStatusCors = new CorsConfiguration(cors);
+        adminStatusCors.setAllowedMethods(List.of("PATCH"));
+        source.registerCorsConfiguration("/api/v1/admin/admin-accounts/{adminId:[0-9]+}/status", adminStatusCors);
         CorsConfiguration getCors = new CorsConfiguration(cors);
         getCors.setAllowedMethods(List.of("GET"));
         source.registerCorsConfiguration("/api/v1/members/me", getCors);
