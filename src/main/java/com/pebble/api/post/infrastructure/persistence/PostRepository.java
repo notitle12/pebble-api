@@ -36,6 +36,10 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     boolean existsByAuthorIdAndSlug(Long authorId, String slug);
     boolean existsByCategoryId(Long categoryId);
 
+    @Modifying
+    @Query("delete from Post p where p.author.id=:memberId")
+    int deleteForMember(@Param("memberId") long memberId);
+
     @Override
     @EntityGraph(attributePaths = {"author", "category"})
     Page<Post> findAll(Specification<Post> specification, Pageable pageable);

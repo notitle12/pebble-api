@@ -9,6 +9,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/pebble}
     username: ${DB_USERNAME:pebble}
     password: ${DB_PASSWORD:pebble-local}
+    # 여러 테스트 Context의 유휴 연결 누적으로 PostgreSQL 연결 한도를 소진하지 않는다.
+    hikari:
+      maximum-pool-size: 4
+      minimum-idle: 0
   jpa:
     hibernate:
       ddl-auto: validate
@@ -25,6 +29,9 @@ spring:
         enabled: ${REDIS_SSL_ENABLED:false}
 
 pebble:
+  member:
+    withdrawal-cleanup:
+      enabled: false
   security:
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

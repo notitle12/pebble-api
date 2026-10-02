@@ -149,6 +149,8 @@ JWT 서명은 Claim이 위조되지 않았음을 보장하지만 이미 발급�
 
 로그아웃된 `jti`만 Redis에 기록하는 블랙리스트는 저장 공간을 줄일 수 있지만, 요청 토큰이 폐기 목록에 있는지 판별하려면 보호 요청마다 조회해야 한다. 따라서 Access JWT의 즉시 폐기에는 온라인 Redis 확인 비용이 필요하다. `sid`는 한 세션에서 발급한 여러 Access JWT를 한 번에 폐기하기 쉬운 반면, `jti` 블랙리스트는 해당 세션의 다른 유효 토큰도 모두 처리할 수 있도록 추가 관계 관리가 필요할 수 있다.
 
+회원 탈퇴 요청은 ACTIVE USER Bearer와 회원 쓰기 잠금으로 처리하고 Refresh 전체 Family를 폐기한다. 대기 중에는 보호된 USER 업무의 현재 상태 검사로 기존 JWT도 거부한다. 취소는 토큰 없이 Naver 재인증·일회용 state·동일 Cookie·필수 단일 허용 Origin을 요구하며 새 회원을 생성하지 않는다. 외부 인증 완료 후 회원 쓰기 잠금으로 최신 상태와 엄격한 기한(`now < withdrawalScheduledAt`)을 확인한다. 취소와 만료 파기는 같은 회원 잠금으로 직렬화하고, 이미 물리 삭제된 계정을 취소로 되살리지 않는다. 취소 시 Refresh Family를 다시 폐기하고 토큰은 발급하지 않는다. 기존 USER JWT의 오프라인 900초 정책은 유지하므로 ACTIVE 복구 뒤 만료 전 Access JWT는 사용 가능하며 폐기된 Refresh Family는 복구되지 않는다. Redis 폐기 실패는 회원 상태·DB 파기를 롤백하고, DB 롤백이 이미 폐기된 Family를 복구하지는 않는다.
+
 ## 7. Refresh Token과 Redis
 
 ### 7.1 형식과 저장
@@ -247,7 +249,7 @@ Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access To
 - Refresh Token은 별도 USER/Admin 쿠키에만 담아 전달한다. 쿠키는 `HttpOnly; Secure; SameSite=Lax`로 설정하고 API 계약처럼 브라우저가 refresh·logout 요청에 자동으로 포함한다. JSON 본문에 Refresh Token을 넣지 않는다.
 - Cookie가 자동으로 전송되는 refresh·logout 요청에는 CSRF 방어를 적용한다. `SameSite`는 방어의 한 겹으로 사용하고, 허용 Origin 검증과 필요 시 CSRF Token을 함께 적용한다.
 - USER refresh/logout POST는 허용 CORS 목록과 정확히 같은 단일 Origin을 필수로 검증한다. 누락·null·중복·불허 Origin은 쿠키 사용과 Redis 변경 이전에 공통 403으로 거부한다. SameSite=Lax와 필수 Origin 검증을 함께 사용하는 현재 계약에서는 별도 CSRF Token을 요구하지 않는다. 비브라우저 호출도 Origin 계약을 따른다. Origin 검사 제외·SameSite 변경·새 Cookie 인증 경로 추가 시 CSRF 정책을 다시 검토한다.
-- 전역 CSRF는 활성화한다. POST Naver authorization/login은 OAuth state 검증 흐름, USER refresh/logout은 별도 필수 Origin 필터를 적용한 명시적 예외다. 그 밖의 경로는 기본 CSRF 검사와 기존 접근 거부 정책을 유지한다.
+- 전역 CSRF는 활성화한다. POST Naver authorization/login은 OAuth state 검증 흐름, withdrawal/cancel은 일회용 OAuth state와 필수 단일 Origin, USER refresh/logout은 별도 필수 Origin 필터를 적용한 명시적 예외다. 그 밖의 경로는 기본 CSRF 검사와 기존 접근 거부 정책을 유지한다.
 - CORS는 필요한 Origin, Method, Header만 허용한다. 쿠키 Credential을 허용할 때는 와일드카드 Origin을 사용하지 않는다.
 - 현재 기본값은 같은 사이트 배포를 위한 `SameSite=Lax`다. UI와 API가 서로 다른 사이트에 배포되어 `SameSite=None`이 필요한 경우에도 `Secure`를 유지하고 CSRF 방어와 정확한 Credential 허용 Origin을 적용한다. 가능한 경우 Cookie `Domain`은 지정하지 않는다.
 

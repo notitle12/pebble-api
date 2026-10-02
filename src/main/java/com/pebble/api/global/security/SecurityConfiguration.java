@@ -34,6 +34,7 @@ public class SecurityConfiguration {
                 .csrf(csrf -> csrf.ignoringRequestMatchers(
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/authorization"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/login"),
+                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/withdrawal/cancel"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/token/refresh"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/admin/auth/login"),
@@ -42,6 +43,7 @@ public class SecurityConfiguration {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/naver/authorization", "/api/v1/auth/naver/login",
+                                "/api/v1/auth/naver/withdrawal/cancel",
                                 "/api/v1/auth/token/refresh", "/api/v1/auth/logout",
                                 "/api/v1/admin/auth/login", "/api/v1/admin/auth/token/refresh", "/api/v1/admin/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/admin/admin-accounts").hasRole("MASTER")
@@ -69,6 +71,7 @@ public class SecurityConfiguration {
                                 "/api/v1/admin/projects/{id:[0-9]+}").hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards",
                                 "/api/v1/members/me/projects").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/members/me").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/members/me/profile").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/members/me/profile").hasRole("USER")
@@ -169,6 +172,8 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}/status", adminStatusCors);
         CorsConfiguration getCors = new CorsConfiguration(cors);
         getCors.setAllowedMethods(List.of("GET"));
+        CorsConfiguration memberMeCors = new CorsConfiguration(cors);
+        memberMeCors.setAllowedMethods(List.of("GET", "DELETE"));
         CorsConfiguration adminClassificationCors = new CorsConfiguration(cors);
         adminClassificationCors.setAllowedMethods(List.of("GET", "POST"));
         source.registerCorsConfiguration("/api/v1/admin/categories", adminClassificationCors);
@@ -195,7 +200,7 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/admin/projects/{id:[0-9]+}/block", adminBlockCors);
         source.registerCorsConfiguration("/api/v1/admin/members", getCors);
         source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}", getCors);
-        source.registerCorsConfiguration("/api/v1/members/me", getCors);
+        source.registerCorsConfiguration("/api/v1/members/me", memberMeCors);
         source.registerCorsConfiguration("/api/v1/categories", getCors);
         source.registerCorsConfiguration("/api/v1/tags", getCors);
         CorsConfiguration profileCors = new CorsConfiguration(cors);
