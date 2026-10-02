@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
+import com.pebble.api.like.application.ProjectLikeService;
 import com.pebble.api.project.application.ProjectService;
 import com.pebble.api.project.domain.ProjectLifecycleStatus;
 import com.pebble.api.project.domain.ProjectVisibility;
@@ -31,19 +32,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ProjectController {
     private final ProjectService projects;
+    private final ProjectLikeService likes;
 
     @GetMapping("/api/v1/projects/search")
-    public ApiResponse<ProjectPage> search(@RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<ProjectPage> search(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("q", "page", "size", "sort", "tagId", "lifecycleStatus"));
-        return ApiResponse.of(ProjectPage.from(projects.search(ProjectWriteRequest.searchTerm(query.getFirst("q")),
-                optionalId(query, "tagId"), lifecycle(query), pageable(query))));
+        return ApiResponse.of(ProjectPage.from(likes.decorate(projects.search(ProjectWriteRequest.searchTerm(query.getFirst("q")),
+                optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/{memberId:[0-9]+}/projects")
-    public ApiResponse<ProjectPage> member(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<ProjectPage> member(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query,
+                                           @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
-        return ApiResponse.of(ProjectPage.from(projects.listMember(ProjectWriteRequest.id(memberId, "memberId"),
-                optionalId(query, "tagId"), lifecycle(query), pageable(query))));
+        return ApiResponse.of(ProjectPage.from(likes.decorate(projects.listMember(ProjectWriteRequest.id(memberId, "memberId"),
+                optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/me/projects")
@@ -58,21 +61,23 @@ public class ProjectController {
                 throw invalid("visibilityStatus");
             }
         }
-        return ApiResponse.of(ProjectPage.from(projects.listMine(memberId(jwt), visibility, pageable(query))));
+        return ApiResponse.of(ProjectPage.from(likes.decorate(projects.listMine(memberId(jwt), visibility, pageable(query)), requesterId(jwt))));
     }
 
     @PostMapping(value = "/api/v1/projects", consumes = "application/json")
     public ResponseEntity<ApiResponse<ProjectResponse>> create(@AuthenticationPrincipal Jwt jwt,
                                                                 @RequestBody JsonNode request) {
-        ProjectResponse response = ProjectResponse.from(projects.create(memberId(jwt), ProjectWriteRequest.parse(request, true)));
+        ProjectResponse response = ProjectResponse.from(likes.decorate(
+                projects.create(memberId(jwt), ProjectWriteRequest.parse(request, true)), requesterId(jwt)));
         return ResponseEntity.created(org.springframework.web.util.UriComponentsBuilder.fromPath("/api/v1/projects/{id}")
                 .buildAndExpand(response.id()).encode().toUri()).body(ApiResponse.of(response));
     }
 
     @GetMapping("/api/v1/projects")
-    public ApiResponse<ProjectPage> list(@RequestParam MultiValueMap<String, String> query) {
+    public ApiResponse<ProjectPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
-        return ApiResponse.of(ProjectPage.from(projects.listPublic(optionalId(query, "tagId"), lifecycle(query), pageable(query))));
+        return ApiResponse.of(ProjectPage.from(likes.decorate(
+                projects.listPublic(optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
     private Long optionalId(MultiValueMap<String, String> query, String field) {
@@ -93,15 +98,15 @@ public class ProjectController {
 
     @GetMapping("/api/v1/projects/{projectId:[0-9]+}")
     public ApiResponse<ProjectResponse> detail(@PathVariable String projectId, @AuthenticationPrincipal Jwt jwt) {
-        return ApiResponse.of(ProjectResponse.from(projects.detail(ProjectWriteRequest.id(projectId, "projectId"),
-                jwt == null ? null : memberId(jwt))));
+        return ApiResponse.of(ProjectResponse.from(likes.decorate(projects.detail(ProjectWriteRequest.id(projectId, "projectId"),
+                jwt == null ? null : memberId(jwt)), requesterId(jwt))));
     }
 
     @PatchMapping(value = "/api/v1/projects/{projectId:[0-9]+}", consumes = "application/json")
     public ApiResponse<ProjectResponse> update(@PathVariable String projectId, @AuthenticationPrincipal Jwt jwt,
                                                 @RequestBody JsonNode request) {
-        return ApiResponse.of(ProjectResponse.from(projects.update(ProjectWriteRequest.id(projectId, "projectId"),
-                memberId(jwt), ProjectWriteRequest.parse(request, false))));
+        return ApiResponse.of(ProjectResponse.from(likes.decorate(projects.update(ProjectWriteRequest.id(projectId, "projectId"),
+                memberId(jwt), ProjectWriteRequest.parse(request, false)), requesterId(jwt))));
     }
 
     @DeleteMapping("/api/v1/projects/{projectId:[0-9]+}")
@@ -111,6 +116,10 @@ public class ProjectController {
     }
 
     private long memberId(Jwt jwt) { return Long.parseLong(jwt.getSubject().substring("member:".length())); }
+
+    private Long requesterId(Jwt jwt) {
+        return jwt != null && "USER".equals(jwt.getClaimAsString("role")) ? memberId(jwt) : null;
+    }
 
     private PageRequest pageable(MultiValueMap<String, String> query) {
         int page = integer(query.getFirst("page"), 0, "page");
