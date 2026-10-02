@@ -50,7 +50,7 @@ public class ProjectLikeService {
     }
 
     private ProjectView withSummary(ProjectView view, LikeSummary summary) {
-        return new ProjectView(view.project(), view.features(), view.links(), view.tags(), view.detail(), view.owner(), summary.count(), summary.likedByMe());
+        return new ProjectView(view.project(), view.features(), view.links(), view.tags(), view.detail(), view.owner(), summary.count(), summary.likedByMe(), view.media());
     }
 
     private boolean isPublic(Project content) {

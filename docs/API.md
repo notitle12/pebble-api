@@ -81,6 +81,7 @@ JSON 본문을 반환하는 성공 응답은 data 래퍼를 사용한다.
 | 429 | 보안 정책의 요청 제한을 초과함 |
 | 500 | 예기치 않은 서버 오류 |
 | 502 | 외부 인증 공급자가 요청을 처리하지 못함 |
+| 503 | 미디어 저장소 비활성화 또는 저장소 작업 실패 |
 
 대표 오류 code:
 
@@ -108,6 +109,7 @@ JSON 본문을 반환하는 성공 응답은 data 래퍼를 사용한다.
 | INVALID_MEDIA | 400 | 이미지 검증 또는 WebP 변환 실패 |
 | MEDIA_TOO_LARGE | 413 | 미디어 크기 또는 픽셀 한도 초과 |
 | UNSUPPORTED_MEDIA_TYPE | 415 | 지원하지 않는 실제 이미지 형식 |
+| STORAGE_UNAVAILABLE | 503 | 미디어 저장소 비활성화 또는 작업 실패 |
 | RATE_LIMITED | 429 | 요청 제한 초과 |
 | OAUTH_PROVIDER_UNAVAILABLE | 502 | OAuth 공급자 오류 또는 응답 오류 |
 
@@ -235,10 +237,10 @@ USER Access JWT는 로그아웃 뒤에도 만료 시각까지 서명 검증을 �
 | POST | /api/v1/posts | ACTIVE, 프로필 완료 USER | Post 생성 |
 | PATCH | /api/v1/posts/{postId} | ACTIVE, 프로필 완료 작성자 | 본인 Post 수정 및 순서 이동 |
 | DELETE | /api/v1/posts/{postId} | ACTIVE, 프로필 완료 작성자 | 본인 Post 논리 삭제 및 순서 압축 |
-| PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 (후속, 미구현) |
-| DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 (후속, 미구현) |
+| PUT | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 업로드·교체 |
+| DELETE | /api/v1/posts/{postId}/thumbnail | 작성자 | 썸네일 제거 |
 
-Board 관리와 Post의 Board·Project 지정, 공개 Post 검색, 좋아요를 제공한다. 관리자 Post 운영은 6.5절을 따르며 썸네일·미디어는 아직 구현하지 않았고 위 썸네일 행은 후속 계획 계약을 보존한다.
+Board 관리와 Post의 Board·Project 지정, 공개 Post 검색, 좋아요를 제공한다. 관리자 Post 운영은 6.5절을 따르며 썸네일·미디어는 6.8절을 따른다.
 
 ### 5.3 Project
 
@@ -255,7 +257,7 @@ Board 관리와 Post의 Board·Project 지정, 공개 Post 검색, 좋아요를 
 | PATCH | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | 미디어 설명·순서 수정 |
 | DELETE | /api/v1/projects/{projectId}/media/{mediaId} | 작성자 | Project 미디어 제거 |
 
-Project 기본 CRUD·공개 목록·상세·검색, 회원별 공개 목록과 본인 목록, Post 연결을 제공한다. 미디어 API는 후속 기능이며 해당 표 행은 계획된 계약을 보존한다.
+Project 기본 CRUD·공개 목록·상세·검색, 회원별 공개 목록과 본인 목록, Post 연결을 제공한다. 이미지·미디어 API는 6.8절을 따른다.
 
 ### 5.4 Board
 
@@ -449,7 +451,7 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 취소 성공은 200과 `{ "data": { "status": "ACTIVE" } }`를 반환하고 예약 시각을 NULL로 되돌린다. 모든 기존 Refresh Family를 다시 폐기하고 state·Refresh Cookie를 만료시키며 새 토큰을 발급하지 않는다. Refresh 세션을 복구하지 않아 다시 로그인해야 한다. 기존 USER Access JWT는 요청별 Redis 조회를 하지 않는 900초 정책을 유지하므로 ACTIVE 복구 후 만료 전 토큰은 다시 사용할 수 있다.
 
-예정 시각 이상인 예약은 백그라운드 작업이 회원별 독립 트랜잭션으로 DB에서 물리 삭제한다. 현재 구현은 회원·OAuth 연결·Post/Project 및 하위 데이터·Board·댓글·좋아요를 제거한다. 현재 미디어 저장 테이블·R2 업로드 기능은 없으며 R2 삭제·재시도와 백업 복원 전 탈퇴 반영은 후속 운영 범위다. 미디어 활성화 전에 R2 파기 절차를 연결해야 한다. 법령상 보관하는 관리자 접속기록은 회원 콘텐츠와 분리해 SECURITY.md 정책을 따른다.
+예정 시각 이상인 예약은 백그라운드 작업이 회원별 독립 트랜잭션으로 DB에서 물리 삭제한다. 현재 구현은 회원·OAuth 연결·Post/Project 및 하위 데이터·Board·댓글·좋아요를 제거한다. Post 썸네일·Project 미디어의 저장 참조도 함께 제거하며 별도 삭제 큐가 R2 객체 삭제를 재시도한다. DB 파기와 R2 삭제 완료 시점은 다르며 백업 복원 전 탈퇴 반영은 후속 운영 범위다. 법령상 보관하는 관리자 접속기록은 회원 콘텐츠와 분리해 SECURITY.md 정책을 따른다.
 
 ### 6.3 Post
 
@@ -595,7 +597,7 @@ Project 생성 요청과 수정 가능한 필드:
 - 입력 문자열 길이는 유니코드 코드 포인트로 검증하며 NUL·잘못된 유니코드는 거부한다. 선택 문자열과 날짜는 null로 비울 수 있고, 배열의 null은 거부한다. 상세의 선택 description·architectureDescription·executionInstructions는 null이면 생략한다.
 - 같은 이름의 Project 생성은 허용한다. 이번 API는 날짜 형식을 검증하며 기간과 lifecycleStatus를 자동으로 연동하지 않는다. 회원별 공개 목록과 본인 목록은 아직 제공하지 않는다.
 
-Project 상세에는 현재 빈 미디어 배열, 주요 기능, 링크, 기술 태그와 6.7절 규칙을 따르는 likeCount·likedByMe를 포함한다. 목록 응답은 상세 설명과 주요 기능·링크·미디어 배열을 생략한다. 미디어 저장 키는 공개하지 않고, 후속 미디어 기능에서는 권한을 통과한 요청에 한해 15분 만료의 signed URL을 반환한다. 만료된 URL로 아직 로드되지 않은 이미지를 요청하면 리소스 조회 API에서 새 URL을 받아 다시 요청한다. 이미 로드된 이미지는 URL 만료만으로 화면에서 사라지지 않는다.
+Project 상세에는 미디어 배열, 주요 기능, 링크, 기술 태그와 6.7절 규칙을 따르는 likeCount·likedByMe를 포함한다. 목록 응답은 상세 설명과 주요 기능·링크·미디어 배열을 생략한다. 미디어 저장 키는 공개하지 않고, 미디어 기능은 권한을 통과한 요청에 한해 15분 만료의 signed URL을 반환한다. 만료된 URL로 아직 로드되지 않은 이미지를 요청하면 리소스 조회 API에서 새 URL을 받아 다시 요청한다. 이미 로드된 이미지는 URL 만료만으로 화면에서 사라지지 않는다.
 
 ### 6.5 관리자 차단
 
@@ -684,7 +686,7 @@ Post·Project 상세와 모든 목록·검색 응답은 공개 가능한 콘텐�
 
 ### 6.8 미디어
 
-Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제공하지 않는다. 아래는 향후 미디어 기능의 제품 계약이다. 구현 시 업로드는 multipart/form-data를 사용하고 원본 파일은 처리 중에만 사용해 R2에 WebP 파생 파일만 저장한다.
+Post 썸네일 및 Project 미디어 업로드는 multipart/form-data를 사용하고 원본 파일은 처리 중에만 사용해 R2에 WebP 파생 파일만 저장한다. 명시적으로 R2를 활성화하지 않은 환경의 업로드는 STORAGE_UNAVAILABLE 503이다.
 
 - Post 썸네일 업로드 필드: file
 - Project 미디어 업로드 필드: file, mediaRole, 선택적 altText, displayOrder
@@ -694,6 +696,9 @@ Post 썸네일 및 Project 미디어 업로드·signed URL 기능은 아직 제�
 - 입력 이미지의 종횡비를 유지하고 확대하지 않는다. 화면 표시용 파생 이미지는 긴 변 최대 2,560 px, 목록용 썸네일은 긴 변 최대 480 px로 만든다. 두 파생물 모두 WebP lossy quality 82로 저장하며 EXIF 등 불필요한 메타데이터를 제거한다. 원본은 저장하지 않는다.
 - 모든 입력에 WebP lossy quality 82를 일괄 적용한다. 손실 압축은 파일 크기를 줄이는 대신 일부 시각 정보를 버리므로 작은 글자나 얇은 선이 많은 PNG 스크린샷·도식은 경계가 부드러워지거나 압축 흔적이 보일 수 있다. 이는 MVP의 저장 효율을 위한 품질 절충이며 원본은 보관하지 않는다.
 - Post의 `thumbnailUrl`은 480 px 썸네일이다. Project의 `url`은 화면 표시용 이미지이고 `thumbnailUrl`은 목록과 미리보기용 파생 이미지다. R2에는 비공개 버킷과 서버 생성 키를 사용한다.
+- 업로드·수정·삭제는 ACTIVE·프로필 완료 USER이며 해당 콘텐츠 작성자여야 한다. 회원 → 콘텐츠 잠금 아래 처리하고 다른 작성자 대상은 404, 삭제된 콘텐츠는 CONTENT_DELETED 409다. 업로드 query·중복/알 수 없는 multipart 필드·추가 파일은 400으로 거부한다. Project 업로드의 mediaRole·displayOrder는 필수이며 displayOrder는 0 이상 정수다. PATCH는 altText·displayOrder만 지원하며 altText=null은 설명 제거다. 대표 이미지 중복은 THUMBNAIL_ALREADY_EXISTS 409다.
+- HIDDEN·차단 콘텐츠의 소유자는 미디어를 관리할 수 있지만 새 서명 URL은 발급하지 않아 url·thumbnailUrl은 null이다. Project 목록은 미디어 배열을 생략하고 상세에서만 순서·ID 안정 정렬로 반환한다. R2 비활성 환경도 URL을 발급하지 않는다.
+- 교체·삭제·콘텐츠 논리 삭제·회원 물리 파기는 DB 트랜잭션과 함께 삭제 큐를 기록한다. 삭제 작업은 기본 1분 주기·최대 100개·SKIP LOCKED로 처리하고 저장소 오류는 5분 뒤 재시도한다. 실패한 업로드/DB 롤백의 새 객체는 업로드 전에 커밋한 회수 작업으로 1시간 뒤 회수하며 연결 트랜잭션 중에는 삭제하지 않는다.
 - signed GET URL은 발급 시점부터 15분 유효하다. 콘텐츠를 숨김·차단·삭제하거나 회원이 탈퇴 예약한 뒤 새 URL을 발급하지 않는다. 이미 발급된 URL은 만료 전까지 사용할 수 있다. 화면에 이미 내려받은 이미지는 URL 만료 시점에 사라지지 않으며, 만료 후 새로 필요한 이미지는 권한을 다시 확인한 리소스 조회로 URL을 갱신한다.
 
 ## 7. 목록·검색 query parameter

@@ -44,6 +44,9 @@ public class Post {
     @Column(nullable = false, length = 200)
     private String title;
 
+    @Column(name = "thumbnail_storage_key", length = 512)
+    private String thumbnailStorageKey;
+
     @Column(length = 200, updatable = false)
     private String slug;
 
@@ -120,7 +123,18 @@ public class Post {
         }
     }
 
+    public void changeThumbnail(String key) {
+        ensureNotDeleted();
+        if (!java.util.Objects.equals(thumbnailStorageKey, key)) {
+            thumbnailStorageKey = key;
+            updatedAt = Instant.now();
+        }
+    }
+
+    public String getThumbnailStorageKey() { return thumbnailStorageKey; }
+
     public void delete() {
+        thumbnailStorageKey = null;
         ensureNotDeleted();
         visibility = PostVisibility.DELETED;
         deletedAt = Instant.now();

@@ -48,6 +48,7 @@ public class PostService {
     private final TagQueryService tags;
     private final BoardQueryService boards;
     private final ProjectQueryService projects;
+    private final org.springframework.beans.factory.ObjectProvider<com.pebble.api.global.media.R2ObjectStorage> mediaStorage;
 
     @Transactional
     public void purgeForMember(long memberId) {
@@ -313,7 +314,7 @@ public class PostService {
     private PostView detailView(Post post, boolean owner) {
         initializeRelations(post);
         return new PostView(post, blocks.findByPostIdOrderByDisplayOrderAsc(post.getId()),
-                postTags.findForPosts(List.of(post.getId())).stream().map(PostTag::getTag).toList(), owner);
+                postTags.findForPosts(List.of(post.getId())).stream().map(PostTag::getTag).toList(), owner, 0, false, thumbnailUrl(post));
     }
 
     private Page<PostView> page(Page<Post> page, boolean owner) {
@@ -323,13 +324,19 @@ public class PostService {
                 byPost.computeIfAbsent(link.getPost().getId(), id -> new ArrayList<>()).add(link.getTag());
             }
         }
-        return page.map(post -> new PostView(post, null, List.copyOf(byPost.getOrDefault(post.getId(), List.of())), owner));
+        return page.map(post -> new PostView(post, null, List.copyOf(byPost.getOrDefault(post.getId(), List.of())), owner, 0, false, thumbnailUrl(post)));
     }
 
     private void initializeRelations(Post post) {
         // OSIV 없이도 응답 변환에 필요한 관계를 트랜잭션 안에서 읽는다.
         post.getAuthor().getNickname();
         if (post.getCategory() != null) post.getCategory().getName();
+    }
+
+    private String thumbnailUrl(Post post) {
+        var client = mediaStorage.getIfAvailable();
+        return client != null && post.getThumbnailStorageKey() != null && isPublic(post)
+                ? client.signedUrl(post.getThumbnailStorageKey()) : null;
     }
 
     private boolean isPublic(Post post) {
@@ -342,7 +349,10 @@ public class PostService {
     }
 
     public record PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner,
-                           long likeCount, boolean likedByMe) {
+                           long likeCount, boolean likedByMe, String thumbnailUrl) {
+        public PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner, long likeCount, boolean likedByMe) {
+            this(post, blocks, tags, owner, likeCount, likedByMe, null);
+        }
         public PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner) {
             this(post, blocks, tags, owner, 0, false);
         }
