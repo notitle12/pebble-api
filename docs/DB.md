@@ -103,6 +103,8 @@ handle은 영문으로 시작하는 3~30자 영문 소문자·숫자·하이픈�
 
 ### 3.3 `admin_account`
 
+현재 MASTER는 MANAGER를 ACTIVE로 생성하고 상태를 ACTIVE/INACTIVE로 설정한다. 새 loginId와 초기 비밀번호 검증은 bootstrap과 같은 Domain 규칙을 사용하고 고유 제약으로 동시 중복 생성을 차단한다. 상태 변경은 계정 행의 PESSIMISTIC_WRITE 잠금, 로그인·refresh는 PESSIMISTIC_READ 잠금으로 직렬화한다. Redis 전체 sid 폐기를 확인한 뒤 같은 DB 트랜잭션에서 상태를 저장한다. 같은 상태는 updated_at을 바꾸지 않지만 세션 폐기는 실행한다. MASTER 상태·역할·비밀번호 변경과 계정 삭제 API는 제공하지 않는다. 추가 migration은 없다.
+
 일반 회원과 분리된 관리자 계정을 저장한다.
 
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
