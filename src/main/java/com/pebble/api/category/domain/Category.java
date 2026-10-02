@@ -1,6 +1,7 @@
 package com.pebble.api.category.domain;
 
 import com.pebble.api.global.id.TsidGenerator;
+import com.pebble.api.global.exception.ApplicationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -70,6 +71,17 @@ public class Category {
         if (updatedAt == null) {
             updatedAt = now;
         }
+    }
+
+    public void update(Category parent, String name, String slug, int displayOrder, CategoryStatus status) {
+        if (parent != null && (parent == this || parent.getParent() != null)) {
+            throw new ApplicationException(CategoryError.CATEGORY_HIERARCHY_CONFLICT);
+        }
+        this.parent = parent;
+        this.name = name;
+        this.slug = slug;
+        this.displayOrder = displayOrder;
+        this.status = status;
     }
 
     @PreUpdate

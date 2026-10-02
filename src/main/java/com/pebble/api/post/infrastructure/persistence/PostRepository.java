@@ -34,6 +34,7 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     long findLastNumber(@Param("authorId") long authorId);
 
     boolean existsByAuthorIdAndSlug(Long authorId, String slug);
+    boolean existsByCategoryId(Long categoryId);
 
     @Override
     @EntityGraph(attributePaths = {"author", "category"})

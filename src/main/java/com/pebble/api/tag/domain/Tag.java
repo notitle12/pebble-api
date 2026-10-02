@@ -66,6 +66,13 @@ public class Tag {
         updatedAt = Instant.now();
     }
 
+    public void update(String name, String slug, int displayOrder, TagStatus status) {
+        this.name = name;
+        this.slug = slug;
+        this.displayOrder = displayOrder;
+        this.status = status;
+    }
+
     public Long getId() {
         return id;
     }

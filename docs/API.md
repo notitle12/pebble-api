@@ -389,7 +389,7 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 ### 6.2 관리자 인증과 회원
 
-현재 관리자 login·refresh·logout, MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정, MANAGER/MASTER의 회원 목록·상세·상태 설정을 제공한다. Post/Project 검수·차단·해제·강제 삭제와 관리자 댓글 조회·삭제도 제공하며 분류 편집은 후속 범위다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
+현재 관리자 login·refresh·logout, MASTER의 관리자 계정 목록·MANAGER 생성·상태 설정, MANAGER/MASTER의 회원 목록·상세·상태 설정을 제공한다. Post/Project 검수·차단·해제·강제 삭제와 관리자 댓글 조회·삭제와 Category·Tag 전체 조회·생성·수정도 제공한다. 로그인은 200과 `{accessToken, tokenType: "Bearer", accessTokenExpiresIn: 900, admin}`을 반환한다. loginId는 영문·숫자로 시작하는 영문·숫자·점·밑줄·하이픈 3~100자로 대소문자를 구분한다. password는 빈 값·제어 문자·잘못된 Unicode를 거부하고 최대 128 코드 포인트를 허용한다. 로그인 JSON은 두 필드만 허용하며 중복 필드·추가 JSON 값을 거부한다. 미존재·잘못된 비밀번호·INACTIVE는 모두 `INVALID_CREDENTIALS` 401이다.
 
 관리자 쿠키는 `admin_refresh_token`, Path는 `/api/v1/admin/auth`이며 USER 쿠키와 상호 교환할 수 없다. 세 POST 모두 허용 Origin 하나를 필수로 요구하며 누락·null·미허용·중복 Origin은 403이다. query는 허용하지 않으며 refresh·logout은 요청 본문도 금지한다. 만료·재사용·폐기·계정 상태/role 불일치 refresh는 `INVALID_REFRESH_TOKEN` 401이고 재사용은 sid도 폐기한다. 로그아웃은 미확인·없는 쿠키에도 204와 쿠키 만료를 반환한다. 제한 초과는 `RATE_LIMITED` 429다. 관리자 Bearer 요청은 공개 경로에서도 현재 DB 계정 상태·role과 Redis sid를 검증하며 무효이면 `INVALID_TOKEN` 401이다. 관리자에게 USER 전용 권한을 부여하지 않는다.
 
@@ -620,9 +620,15 @@ Tag 응답 항목: `{id, name, slug, displayOrder, status}`. name 최대 50자, 
 
 Category 트리는 활성 하위의 경로를 보존하기 위해 비활성 상위를 `INACTIVE` 상태인 그룹으로 포함할 수 있다. 이 그룹은 신규 선택 대상이 아니다. 사용 중이지 않은 비활성 하위와 Tag는 제외한다. 신규 Post 연결은 ACTIVE이고 저장된 하위 Category가 없는 항목만 허용하며, 공개 children이 비었다는 이유만으로 최하위라고 판단하지 않는다. Post는 Category·Tag를 참조하며, 공개 분류 필터에서 상위 Category를 지정하면 하위 Category에 연결된 공개 Post를 포함한다. Post가 사용 중인 비활성 분류도 공개 탐색에서 유지한다.
 
-초기 데이터는 상위 주제 Backend·Frontend·Database·DevOps·Architecture와 기술 Tag Java·Spring Boot·JPA·JavaScript·React·HTML·CSS·PostgreSQL이다. 하위 주제는 관리자 관리 API에서 필요에 따라 구성한다. 분류 조회는 활성 항목과 활성 하위의 상위 그룹을 제공하며, Post가 사용하는 비활성 분류도 공개 탐색에 포함한다. Category 관리자 API는 후속 범위다.
+초기 데이터는 상위 주제 Backend·Frontend·Database·DevOps·Architecture와 기술 Tag Java·Spring Boot·JPA·JavaScript·React·HTML·CSS·PostgreSQL이다. 하위 주제는 관리자 관리 API에서 필요에 따라 구성한다. 분류 조회는 활성 항목과 활성 하위의 상위 그룹을 제공하며, Post가 사용하는 비활성 분류도 공개 탐색에 포함한다. Category·Tag 관리자 조회·생성·수정 API를 제공한다.
 
 Category 생성 요청은 `{parentId, name, slug, displayOrder}`이며 Tag 생성 요청은 `{name, slug, displayOrder}`다. 수정 요청은 각 생성 필드와 status를 부분 변경한다. status 값은 ACTIVE 또는 INACTIVE다. 참조 항목을 물리 삭제하는 API는 없다.
+
+관리자 GET은 비활성·미참조 항목까지 포함한 전체 Category 트리/Tag 배열을 같은 displayOrder·숫자 ID 순서로 반환하며 페이지·필터·본문은 받지 않는다. POST는 name·slug 필수, parentId 기본 null, displayOrder 기본 0이며 ACTIVE로 생성하고 status 입력은 400이다. 201과 생성 항목의 숫자 ID 운영 주소 Location을 반환한다. PATCH는 누락 필드 유지, parentId의 명시적 null은 루트 이동이며 나머지 null은 400이다. 빈 PATCH는 기존 갱신 시각을 보존하는 200이고 생성·수정 응답은 기존 Category/Tag DTO를 사용한다.
+
+name은 앞뒤 공백 제거 후 1~50 유니코드 코드 포인트이며 NUL·잘못된 Unicode를 거부한다. slug는 소문자로 정규화하고 영문·숫자·단어 사이 하이픈 1~100자를 허용한다. displayOrder는 0 이상의 INT, parentId·경로 ID는 선행 0 없는 양의 BIGINT 문자열이다. 알 수 없는·중복 JSON 필드·추가 JSON·모든 query·GET 본문과 잘못된 값은 400, 없는 ID는 404다. 관리자 상세 GET·DELETE는 제공하지 않는다.
+
+동일 종류의 slug는 비활성 항목까지 포함해 유일하며 충돌은 CATEGORY_SLUG_CONFLICT/TAG_SLUG_CONFLICT 409다. Category 자기 부모·순환·2단계 초과와 저장된 하위를 가진 루트의 하위 이동은 CATEGORY_HIERARCHY_CONFLICT 409다. 비활성 하위도 깊이 검사에 포함한다. 모든 상태 Post가 참조하는 Category에 하위를 추가·이동하는 요청도 같은 409로 거부해 기존 연결을 유지한다. 비활성화는 기존 Post·Project 연결을 보존하지만 신규 선택은 기존 공개 계약에 따라 거부한다.
 
 내 Board 응답은 `{id, parentId, name, displayOrder, children}` 트리이고 공개 Board 응답은 `{id, name, displayOrder, children}` 트리로 parentId를 생략한다. POST와 PATCH는 단일 항목 `{id, parentId, name, displayOrder}`을 반환하며 children은 포함하지 않는다. ID는 문자열이고 루트의 parentId는 null, children이 없는 항목의 children은 `[]`다. Board와 children은 displayOrder 오름차순, 같은 값이면 숫자 ID 오름차순이다.
 
