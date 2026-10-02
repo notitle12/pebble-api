@@ -19,4 +19,3 @@ public class ProjectComment extends Comment {
     @Override
     public long getContentId() { return contentId; }
 }
-
