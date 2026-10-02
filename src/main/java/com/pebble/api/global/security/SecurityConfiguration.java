@@ -51,6 +51,14 @@ public class SecurityConfiguration {
                             .hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/members/{memberId:[0-9]+}/status")
                             .hasAnyRole("MANAGER", "MASTER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/posts", "/api/v1/admin/projects",
+                                "/api/v1/admin/posts/{id:[0-9]+}", "/api/v1/admin/projects/{id:[0-9]+}")
+                            .hasAnyRole("MANAGER", "MASTER")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/posts/{id:[0-9]+}/block",
+                                "/api/v1/admin/projects/{id:[0-9]+}/block").hasAnyRole("MANAGER", "MASTER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/posts/{id:[0-9]+}/block",
+                                "/api/v1/admin/projects/{id:[0-9]+}/block", "/api/v1/admin/posts/{id:[0-9]+}",
+                                "/api/v1/admin/projects/{id:[0-9]+}").hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards",
                                 "/api/v1/members/me/projects").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
@@ -153,6 +161,16 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}/status", adminStatusCors);
         CorsConfiguration getCors = new CorsConfiguration(cors);
         getCors.setAllowedMethods(List.of("GET"));
+        source.registerCorsConfiguration("/api/v1/admin/posts", getCors);
+        source.registerCorsConfiguration("/api/v1/admin/projects", getCors);
+        CorsConfiguration adminContentCors = new CorsConfiguration(cors);
+        adminContentCors.setAllowedMethods(List.of("GET", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/admin/posts/{id:[0-9]+}", adminContentCors);
+        source.registerCorsConfiguration("/api/v1/admin/projects/{id:[0-9]+}", adminContentCors);
+        CorsConfiguration adminBlockCors = new CorsConfiguration(cors);
+        adminBlockCors.setAllowedMethods(List.of("PUT", "DELETE"));
+        source.registerCorsConfiguration("/api/v1/admin/posts/{id:[0-9]+}/block", adminBlockCors);
+        source.registerCorsConfiguration("/api/v1/admin/projects/{id:[0-9]+}/block", adminBlockCors);
         source.registerCorsConfiguration("/api/v1/admin/members", getCors);
         source.registerCorsConfiguration("/api/v1/admin/members/{memberId:[0-9]+}", getCors);
         source.registerCorsConfiguration("/api/v1/members/me", getCors);

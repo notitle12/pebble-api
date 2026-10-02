@@ -92,8 +92,61 @@ public class ProjectService {
     }
 
     public Page<ProjectView> search(String term, Long tagId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, null).and(searchMatching(term)), pageable), false);
+    }
+
+    public Page<ProjectView> listForManagement(String q, ProjectVisibility visibility, Boolean blocked,
+                                               Long ownerId, Pageable pageable) {
+        Specification<Project> filter = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (visibility != null) predicates.add(cb.equal(root.get("visibility"), visibility));
+            if (blocked != null) predicates.add(cb.equal(root.get("blocked"), blocked));
+            if (ownerId != null) predicates.add(cb.equal(root.get("owner").get("id"), ownerId));
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        if (q != null && !q.isBlank()) filter = filter.and(searchMatching(q));
+        return page(projects.findAll(filter, pageable), true);
+    }
+
+    public ProjectView detailForManagement(long projectId) {
+        Project project = projects.findById(projectId).orElseThrow(ProjectService::notFound);
+        return detailView(project, true);
+    }
+
+    @Transactional
+    public ProjectView setBlockedForManagement(long projectId, long adminId, boolean blocked) {
+        Project project = managementForUpdate(projectId);
+        project.setBlocked(blocked, adminId);
+        projects.flush();
+        return detailView(project, true);
+    }
+
+    @Transactional
+    public void deleteForManagement(long projectId) {
+        Long ownerId = projects.findOwnerIdForManagement(projectId).orElseThrow(ProjectService::notFound);
+        members.findForManagementWrite(ownerId);
+        Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectService::notFound);
+        if (!project.getOwner().getId().equals(ownerId)) throw notFound();
+        if (project.getVisibility() == ProjectVisibility.DELETED) return;
+        postProjects.detachForManagement(ownerId, projectId);
+        project.delete();
+        projects.flush();
+    }
+
+    private Project managementForUpdate(long projectId) {
+        Long ownerId = projects.findOwnerIdForManagement(projectId).orElseThrow(ProjectService::notFound);
+        members.findForManagementWrite(ownerId);
+        Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectService::notFound);
+        if (!project.getOwner().getId().equals(ownerId)) throw notFound();
+        if (project.getVisibility() == ProjectVisibility.DELETED) {
+            throw new ApplicationException(ProjectError.CONTENT_DELETED);
+        }
+        return project;
+    }
+
+    private Specification<Project> searchMatching(String term) {
         String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-        Specification<Project> matching = (root, query, cb) -> {
+        return (root, query, cb) -> {
             var lowered = cb.lower(cb.literal(pattern));
             var technology = query.subquery(Long.class);
             var link = technology.from(ProjectTag.class);
@@ -104,7 +157,6 @@ public class ProjectService {
                     cb.like(cb.lower(root.get("summary")), lowered, '\\'),
                     cb.like(cb.lower(root.get("description")), lowered, '\\'), cb.exists(technology));
         };
-        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, null).and(matching), pageable), false);
     }
 
     private Specification<Project> publicFilter(Long tagId, ProjectLifecycleStatus lifecycleStatus, Long ownerId) {

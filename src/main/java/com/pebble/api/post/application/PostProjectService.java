@@ -19,4 +19,10 @@ public class PostProjectService {
         members.findActiveForWrite(memberId);
         posts.detachProject(memberId, projectId, Instant.now());
     }
+
+    @Transactional
+    public void detachForManagement(long memberId, long projectId) {
+        members.findForManagementWrite(memberId);
+        posts.detachProject(memberId, projectId, Instant.now());
+    }
 }

@@ -237,6 +237,8 @@ Board 테이블과 Post의 `board_id`는 V7에서 생성한다. Board는 회원�
 - Post 쓰기와 순서 변경은 ACTIVE이며 프로필 설정을 완료한 작성자만 수행한다.
 - 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. 단일 Post 물리 삭제 API는 없으며, 물리 파기 시 post_block·post_tag의 Post FK CASCADE에 따라 하위 행도 함께 정리된다. 계정 탈퇴에 따른 Post 물리 파기와 이 시점의 주소 예약 정리는 계정 데이터 보존·파기 절차에서 다룬다.
 
+Post/Project 관리자 운영은 기존 blocked 메타데이터·visibility·deleted_at과 V12 관리자 FK를 사용한다. 차단 true 전이만 현재 관리자/시각을 기록하고 해제는 두 값을 NULL로 되돌린다. 같은 차단 상태는 메타데이터·updated_at을 보존하고 DELETED 차단 변경은 409다. 관리자 강제 삭제는 멱등 논리 삭제로 최초 deleted_at과 하위 이력을 보존한다. 관리자 읽기 잠금 → 소유자 회원 쓰기 잠금 → 콘텐츠 쓰기 잠금 순서이며 불변 소유자 ID만 먼저 조회해 잠금 대기 전의 오래된 콘텐츠 상태가 영속성 컨텍스트에 남지 않게 한다. 정지·탈퇴 대기 소유자도 운영 대상이다. Project 강제 삭제는 Post Application 계약으로 모든 연결 Post의 project_id를 같은 트랜잭션에서 해제한다. 연결 해제 또는 삭제 실패는 전체 DB 변경을 롤백한다. 새 migration은 없다.
+
 ### 6.2 `post_block`
 
 Post 본문을 순서가 있는 텍스트·코드 블록으로 저장한다.
