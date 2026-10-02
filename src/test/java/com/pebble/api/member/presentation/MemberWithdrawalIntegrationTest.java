@@ -1,0 +1,391 @@
+package com.pebble.api.member.presentation;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.pebble.api.auth.application.AccessTokenService;
+import com.pebble.api.auth.application.UserSessionService;
+import com.pebble.api.auth.application.NaverLoginService;
+import com.pebble.api.auth.application.UserRefreshTokenService;
+import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.member.application.MemberProfileService;
+import com.pebble.api.member.application.MemberWithdrawalService;
+import com.pebble.api.member.domain.Member;
+import com.pebble.api.member.domain.MemberOAuthIdentity;
+import com.pebble.api.member.domain.OAuthProvider;
+import com.pebble.api.member.domain.MemberStatus;
+import com.pebble.api.member.infrastructure.persistence.MemberOAuthIdentityRepository;
+import com.pebble.api.member.infrastructure.persistence.MemberRepository;
+import com.pebble.api.support.AuthenticationTestSupport;
+import jakarta.servlet.http.Cookie;
+import jakarta.persistence.EntityManager;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import static org.mockito.Mockito.when;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
+    private static final String PATH = "/api/v1/members/me";
+
+    @Autowired MockMvc mvc;
+    @Autowired MemberRepository members;
+    @Autowired AccessTokenService tokens;
+    @Autowired UserSessionService sessions;
+    @Autowired NaverLoginService naverLogin;
+    @Autowired MemberOAuthIdentityRepository identities;
+    @Autowired MemberProfileService profiles;
+    @Autowired MemberWithdrawalService withdrawals;
+    @Autowired ObjectMapper mapper;
+    @Autowired JdbcTemplate jdbc;
+    @Autowired EntityManager em;
+    @Autowired UserRefreshTokenService refreshTokens;
+    @MockitoBean NaverOAuthGateway naver;
+
+    private Member member;
+    private UserSessionService.LoginGrant login;
+
+    @BeforeEach
+    void setUp() {
+        member = members.saveAndFlush(new Member("member-" + UUID.randomUUID().toString().substring(0, 12),
+                null, MemberStatus.ACTIVE, null, null));
+        login = sessions.login(member.getId());
+    }
+
+    @AfterEach
+    void clearRedisSessions() {
+        refreshTokens.revokeAll(member.getId());
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            jdbc.update("delete from member_oauth_identity where member_id=?", member.getId());
+            members.deleteById(member.getId());
+        }
+    }
+
+    @Test
+    void requestSchedulesWithdrawalAndExpiresRefreshCookie() throws Exception {
+        Instant before = Instant.now();
+        mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.withdrawalScheduledAt").isNotEmpty())
+                .andExpect(header().string(HttpHeaders.SET_COOKIE,
+                        org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("refresh_token="),
+                                org.hamcrest.Matchers.containsString("Path=/api/v1/auth"),
+                                org.hamcrest.Matchers.containsString("Max-Age=0"),
+                                org.hamcrest.Matchers.containsString("HttpOnly"),
+                                org.hamcrest.Matchers.containsString("Secure"),
+                                org.hamcrest.Matchers.containsString("SameSite=Lax"))));
+        Member pending = members.findById(member.getId()).orElseThrow();
+        assertThat(pending.getWithdrawalScheduledAt()).isBetween(before.plus(Duration.ofDays(6)), before.plus(Duration.ofDays(8)));
+        mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/auth/token/refresh").header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(new Cookie("refresh_token", login.refreshToken())))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete(PATH)).andExpect(status().isForbidden());
+        mvc.perform(delete(PATH).cookie(new Cookie("refresh_token", login.refreshToken())))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(PATH + "/profile").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"blogName\":\"blocked\",\"handle\":\"blocked-user\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch(PATH + "/profile").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"blocked\"}"))
+                .andExpect(status().isForbidden());
+        assertThat(members.findById(member.getId()).orElseThrow().getWithdrawalScheduledAt())
+                .isEqualTo(pending.getWithdrawalScheduledAt());
+    }
+
+    @Test
+    void rejectsDeleteQueryAndBody() throws Exception {
+        mvc.perform(delete(PATH + "?confirm=true").header(HttpHeaders.AUTHORIZATION, bearer()))
+                .andExpect(status().isBadRequest());
+        mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, bearer())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void cancellationRestoresAccountWithoutRestoringOldSession() throws Exception {
+        String subject = "withdrawal-subject-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        var oldLogin = login;
+        mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + oldLogin.accessToken()))
+                .andExpect(status().isAccepted());
+
+        var authorization = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", authorization.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        var cancellation = mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel")
+                        .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", authorization.state()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + authorization.state() + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.accessToken").doesNotExist())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().exists(HttpHeaders.SET_COOKIE));
+        List<String> cookies = cancellation.andReturn().getResponse().getHeaders(HttpHeaders.SET_COOKIE);
+        assertThat(cookies).hasSize(2);
+        assertThat(cookies).anySatisfy(value -> assertThat(value).contains("Path=/api/v1/auth/naver;", "Max-Age=0", "HttpOnly", "Secure", "SameSite=Lax"));
+        assertThat(cookies).anySatisfy(value -> assertThat(value).contains("Path=/api/v1/auth;", "Max-Age=0", "HttpOnly", "Secure", "SameSite=Lax"));
+        Member restored = members.findById(member.getId()).orElseThrow();
+        assertThat(restored.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        assertThat(restored.getWithdrawalRequestedAt()).isNull();
+        assertThat(restored.getWithdrawalScheduledAt()).isNull();
+        mvc.perform(post("/api/v1/auth/token/refresh").header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(new Cookie("refresh_token", oldLogin.refreshToken())))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + oldLogin.accessToken()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void cancellationRejectsInvalidBodiesBeforeConsumingState() throws Exception {
+        String subject = "withdrawal-subject-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        withdrawalsRequest();
+        var authorization = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", authorization.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        String path = "/api/v1/auth/naver/withdrawal/cancel";
+        for (String invalid : java.util.List.of(
+                "{}", "null", "[]", "{\"authorizationCode\":null,\"state\":\"s\"}",
+                "{\"authorizationCode\":\" \",\"state\":\"s\"}",
+                "{\"authorizationCode\":\"x\",\"state\":null}",
+                "{\"authorizationCode\":\"x\",\"state\":\"s\",\"extra\":1}",
+                "{\"authorizationCode\":\"" + "x".repeat(4097) + "\",\"state\":\"s\"}",
+                "{\"authorizationCode\":\"x\",\"state\":\"" + "s".repeat(257) + "\"}",
+                "{\"authorizationCode\":\"x\",\"authorizationCode\":\"y\",\"state\":\"s\"}",
+                "{\"authorizationCode\":\"x\",\"state\":\"s\"} {}",
+                "{\"authorizationCode\":\"\\u0000\",\"state\":\"s\"}",
+                "{\"authorizationCode\":\"\\uD800\",\"state\":\"s\"}")) {
+            mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                            .cookie(new Cookie("naver_oauth_state", authorization.state()))
+                            .contentType(MediaType.APPLICATION_JSON).content(invalid))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(post(path + "?extra=1").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", authorization.state()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + authorization.state() + "\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", "mismatch"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + authorization.state() + "\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", authorization.state()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + authorization.state() + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void cancellationEnforcesOriginIdentityStatusExpiryAndSingleUseState() throws Exception {
+        String subject = "withdrawal-subject-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        withdrawalsRequest();
+        String path = "/api/v1/auth/naver/withdrawal/cancel";
+        var authorization = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", authorization.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        String body = "{\"authorizationCode\":\"valid-code\",\"state\":\"" + authorization.state() + "\"}";
+        Cookie stateCookie = new Cookie("naver_oauth_state", authorization.state());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "https://untrusted.example").cookie(stateCookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post(path).cookie(stateCookie).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "null").cookie(stateCookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000", "https://untrusted.example")
+                        .cookie(stateCookie).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(stateCookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isOk());
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(stateCookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+
+        var activeState = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", activeState.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", activeState.state())).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + activeState.state() + "\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_NOT_PENDING"));
+
+        jdbc.update("update member set status='SUSPENDED' where id=?", member.getId());
+        emClear();
+        var suspendedState = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", suspendedState.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", suspendedState.state())).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + suspendedState.state() + "\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_NOT_PENDING"));
+    }
+
+    @Test
+    void pendingNaverLoginDoesNotCancelWithdrawalAndUnknownIdentityDoesNotRegister() throws Exception {
+        String subject = "withdrawal-subject-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        withdrawalsRequest();
+        var loginState = naverLogin.beginAuthorization();
+        when(naver.authenticate("login-code", loginState.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        mvc.perform(post("/api/v1/auth/naver/login").cookie(new Cookie("naver_oauth_state", loginState.state()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"login-code\",\"state\":\"" + loginState.state() + "\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_PENDING"));
+
+        var unknownState = naverLogin.beginAuthorization();
+        String unknownSubject = "unregistered-" + UUID.randomUUID();
+        when(naver.authenticate("valid-code", unknownState.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(unknownSubject, "unknown", null));
+        long count = members.count();
+        mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", unknownState.state())).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + unknownState.state() + "\"}"))
+                .andExpect(status().isNotFound());
+        assertThat(members.count()).isEqualTo(count);
+    }
+
+    @Test
+    void expiredWithdrawalCannotBeCancelled() throws Exception {
+        String subject = "withdrawal-subject-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        withdrawalsRequest();
+        jdbc.update("update member set withdrawal_scheduled_at=current_timestamp - interval '1 second' where id=?", member.getId());
+        em.clear();
+        var state = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", state.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", state.state())).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + state.state() + "\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_EXPIRED"));
+    }
+
+    @Test
+    void publicPostAndItsCommentAndLikeDisappearWhilePendingAndReturnAfterCancellation() throws Exception {
+        Member profiled = profiles.complete(member.getId(), "withdrawal-blog-" + member.getId(),
+                "withdrawal-" + member.getId(), null);
+        var createdProject = mvc.perform(post("/api/v1/projects").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"withdrawal project\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"tagIds\":[],\"features\":[],\"links\":[]}"))
+                .andExpect(status().isCreated());
+        String projectId = mapper.readTree(createdProject.andReturn().getResponse().getContentAsString()).at("/data/id").asText();
+        var createdBoard = mvc.perform(post("/api/v1/boards").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"withdrawal board\"}"))
+                .andExpect(status().isCreated());
+        String boardId = mapper.readTree(createdBoard.andReturn().getResponse().getContentAsString()).at("/data/id").asText();
+        String postJson = "{\"title\":\"withdrawal post\",\"summary\":null,\"visibilityStatus\":\"PUBLIC\","
+                + "\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}],\"tagIds\":[],\"boardId\":\"" + boardId + "\"}";
+        var createdPost = mvc.perform(post("/api/v1/posts").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON).content(postJson)).andExpect(status().isCreated());
+        String postId = mapper.readTree(createdPost.andReturn().getResponse().getContentAsString()).at("/data/id").asText();
+        var createdComment = mvc.perform(post("/api/v1/posts/" + postId + "/comments")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"comment body\",\"visibility\":\"PUBLIC\"}"))
+                .andExpect(status().isCreated());
+        String commentId = mapper.readTree(createdComment.andReturn().getResponse().getContentAsString()).at("/data/id").asText();
+        mvc.perform(put("/api/v1/posts/" + postId + "/like").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
+                .andExpect(status().isNoContent());
+        String subject = "withdrawal-subject-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(profiled, OAuthProvider.NAVER, subject));
+        withdrawalsRequest();
+        mvc.perform(get("/api/v1/posts/" + postId)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/projects/" + projectId)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/members/" + member.getId() + "/projects"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/members/" + member.getId() + "/boards"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/posts/" + postId + "/comments")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/posts/" + postId + "/comments/" + commentId)).andExpect(status().isNotFound());
+
+        var state = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", state.state()))
+                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+        mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .cookie(new Cookie("naver_oauth_state", state.state())).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + state.state() + "\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/v1/posts/" + postId)).andExpect(status().isOk()).andExpect(jsonPath("$.data.likeCount").value(1));
+        mvc.perform(get("/api/v1/projects/" + projectId)).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/members/" + member.getId() + "/boards"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].id").value(boardId));
+        mvc.perform(get("/api/v1/posts/" + postId + "/comments")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    void withdrawalAndCancellationPreflightOnlyAllowRegisteredOriginAndMethod() throws Exception {
+        mvc.perform(options(PATH).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization"))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:3000"));
+        mvc.perform(options(PATH).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
+                .andExpect(status().isForbidden());
+        mvc.perform(options(PATH).header(HttpHeaders.ORIGIN, "https://untrusted.example")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE"))
+                .andExpect(status().isForbidden());
+        mvc.perform(options("/api/v1/auth/naver/withdrawal/cancel").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Content-Type"))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+    }
+
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void naverReauthenticationRunsBeforeOpeningCancellationTransaction() {
+        String subject = "withdrawal-subject-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        withdrawalsRequest();
+        var state = naverLogin.beginAuthorization();
+        when(naver.authenticate("valid-code", state.state())).thenAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null);
+        });
+        naverLogin.cancelWithdrawal("valid-code", state.state(), state.state());
+        assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.ACTIVE);
+    }
+
+    private String bearer() {
+        return "Bearer " + tokens.issueForMember(member.getId(), Instant.now());
+    }
+
+    private void withdrawalsRequest() {
+        withdrawals.request(member.getId());
+        em.clear();
+    }
+
+    private void emClear() {
+        em.clear();
+    }
+}

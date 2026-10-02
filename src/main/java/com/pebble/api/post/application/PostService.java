@@ -50,6 +50,12 @@ public class PostService {
     private final ProjectQueryService projects;
 
     @Transactional
+    public void purgeForMember(long memberId) {
+        // 탈퇴 파기 유스케이스가 회원 행을 잠근 뒤 호출하며 하위 이력은 FK CASCADE로 제거한다.
+        posts.deleteForMember(memberId);
+    }
+
+    @Transactional
     public PostView create(long memberId, PostChanges input) {
         Member author = members.findProfileCompletedForWrite(memberId);
         if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);

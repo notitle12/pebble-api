@@ -51,6 +51,12 @@ public class ProjectService {
     private final PostProjectService postProjects;
 
     @Transactional
+    public void purgeForMember(long memberId) {
+        // 같은 회원의 Post 연결을 먼저 파기한 뒤 Project와 하위 데이터를 제거한다.
+        projects.deleteForMember(memberId);
+    }
+
+    @Transactional
     public ProjectView create(long memberId, ProjectChanges input) {
         Member owner = members.findProfileCompletedForWrite(memberId);
         List<Tag> selected = tags.resolveForContent(input.tagIds(), Set.of());
