@@ -13,7 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Transactional(readOnly = true)
+// PostgreSQL 행 잠금 조회는 읽기 전용 트랜잭션에서 실행할 수 없다.
+@Transactional
 public class AdminSessionService {
     private final AdminAccountQueryService accounts;
     private final AdminRefreshTokenService refreshTokens;
