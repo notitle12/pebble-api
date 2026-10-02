@@ -37,6 +37,7 @@ application-secret.properties
 
 ### Logs ###
 *.log
+/logs/
 logs/
 
 ### IntelliJ IDEA ###

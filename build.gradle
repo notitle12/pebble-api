@@ -27,6 +27,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.flywaydb:flyway-core'
     implementation 'com.github.f4b6a3:tsid-creator:5.2.6'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.86'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'

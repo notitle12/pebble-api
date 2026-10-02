@@ -5,12 +5,18 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
 import java.util.Base64;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @ActiveProfiles("test")
 public abstract class AuthenticationTestSupport {
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private static final String PRIVATE_KEY;
     private static final String PUBLIC_KEY;
@@ -42,6 +48,15 @@ public abstract class AuthenticationTestSupport {
         registry.add("pebble.security.cors.allowed-origins", () -> "http://localhost:3000");
         registry.add("pebble.auth.naver.client-id", () -> "test-client-id");
         registry.add("pebble.auth.naver.client-secret", () -> "test-client-secret");
+    }
+
+    @BeforeEach
+    void seedBlockingAdmin() {
+        jdbc.update("""
+                insert into admin_account (id, login_id, password_hash, role, status, created_at, updated_at)
+                values (1, 'test-blocking-admin', 'argon2placeholderhash', 'MANAGER', 'ACTIVE', now(), now())
+                on conflict (id) do nothing
+                """);
     }
 
 }

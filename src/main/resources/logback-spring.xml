@@ -1,0 +1,16 @@
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <!-- 배포 환경은 별도 접근 제한 볼륨에 연결하고 보관·위변조 방지를 운영한다. -->
+    <appender name="ADMIN_AUDIT" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${ADMIN_AUDIT_LOG_DIR:-logs/admin-audit}/current.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${ADMIN_AUDIT_LOG_DIR:-logs/admin-audit}/audit.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+            <maxHistory>${ADMIN_AUDIT_RETENTION_DAYS:-366}</maxHistory>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+        <encoder><pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX,UTC} traceId=%X{traceId} %msg%n</pattern></encoder>
+    </appender>
+    <logger name="pebble.admin.audit" level="INFO" additivity="false"><appender-ref ref="ADMIN_AUDIT"/></logger>
+    <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+</configuration>
