@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.admin.application.AdminCommentService;
 import com.pebble.api.comment.domain.CommentTarget;
 import com.pebble.api.comment.presentation.dto.CommentWriteRequest;
 import com.pebble.api.global.exception.ApplicationException;
@@ -38,6 +39,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @AutoConfigureMockMvc
 class CommentTransactionTest extends AuthenticationTestSupport {
     @Autowired CommentService comments;
+    @Autowired AdminCommentService management;
     @Autowired PostService posts;
     @Autowired ProjectService projects;
     @Autowired MemberRepository members;
@@ -106,6 +108,116 @@ class CommentTransactionTest extends AuthenticationTestSupport {
         }
         String table = type == CommentTarget.POST ? "post_comment" : "project_comment";
         assertThat(jdbc.queryForObject("select count(*) from " + table + " where author_member_id=?", Long.class, writer)).isZero();
+    }
+
+    @ParameterizedTest
+    @EnumSource(CommentTarget.class)
+    void adminDeletionCommitsBeforeWaitingAuthorUpdateAndBodyCannotReturn(CommentTarget type) throws Exception {
+        long owner = member(true);
+        long writer = member(false);
+        long content = content(type, owner);
+        long comment = comments.create(type, content, writer, input("{\"body\":\"original\",\"visibility\":\"SECRET\"}", true)).getId();
+        var patch = input("{\"body\":\"late edit\"}", false);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch attempted = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var deletion = executor.submit(() -> transactions.executeWithoutResult(status -> {
+                management.delete(1L, type, comment);
+                locked.countDown();
+                await(release);
+            }));
+            try {
+                assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+                var update = executor.submit(() -> {
+                    attempted.countDown();
+                    return comments.update(type, content, comment, writer, patch);
+                });
+                assertThat(attempted.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThatThrownBy(() -> update.get(200, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                release.countDown();
+                deletion.get(10, TimeUnit.SECONDS);
+                assertThatThrownBy(() -> update.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(ApplicationException.class);
+            } finally { release.countDown(); }
+        }
+        assertThat(jdbc.queryForObject("select body from " + table(type) + " where id=?", String.class, comment)).isEmpty();
+        assertThat(jdbc.queryForObject("select deleted_at is not null from " + table(type) + " where id=?", Boolean.class, comment)).isTrue();
+    }
+
+    @ParameterizedTest
+    @EnumSource(CommentTarget.class)
+    void adminDeletionWaitsForAuthorUpdateThenErasesLatestBody(CommentTarget type) throws Exception {
+        long owner = member(true);
+        long writer = member(false);
+        long content = content(type, owner);
+        long comment = comments.create(type, content, writer, input("{\"body\":\"original\",\"visibility\":\"PUBLIC\"}", true)).getId();
+        var patch = input("{\"body\":\"latest\",\"visibility\":\"SECRET\"}", false);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch attempted = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var update = executor.submit(() -> transactions.executeWithoutResult(status -> {
+                comments.update(type, content, comment, writer, patch);
+                locked.countDown();
+                await(release);
+            }));
+            try {
+                assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+                var deletion = executor.submit(() -> {
+                    attempted.countDown();
+                    management.delete(1L, type, comment);
+                });
+                assertThat(attempted.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThatThrownBy(() -> deletion.get(200, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                release.countDown();
+                update.get(10, TimeUnit.SECONDS);
+                deletion.get(10, TimeUnit.SECONDS);
+            } finally { release.countDown(); }
+        }
+        assertThat(jdbc.queryForObject("select body from " + table(type) + " where id=?", String.class, comment)).isEmpty();
+        assertThat(jdbc.queryForObject("select visibility from " + table(type) + " where id=?", String.class, comment)).isEqualTo("SECRET");
+    }
+
+    @ParameterizedTest
+    @EnumSource(CommentTarget.class)
+    void failedAdminTransactionRollsBackBodyErasureAndDeletionTimestamp(CommentTarget type) throws Exception {
+        long owner = member(true);
+        long writer = member(false);
+        long content = content(type, owner);
+        long comment = comments.create(type, content, writer, input("{\"body\":\"original\",\"visibility\":\"SECRET\"}", true)).getId();
+        var before = jdbc.queryForMap("select body,updated_at,deleted_at from " + table(type) + " where id=?", comment);
+        assertThatThrownBy(() -> transactions.executeWithoutResult(status -> {
+            management.delete(1L, type, comment);
+            throw new IllegalStateException("rollback fixture");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForMap("select body,updated_at,deleted_at from " + table(type) + " where id=?", comment)).isEqualTo(before);
+    }
+
+    private String table(CommentTarget type) { return type == CommentTarget.POST ? "post_comment" : "project_comment"; }
+
+    @ParameterizedTest
+    @EnumSource(CommentTarget.class)
+    void adminDeletionDoesNotAcquireAuthorOrParentLocks(CommentTarget type) throws Exception {
+        long owner = member(true);
+        long writer = member(false);
+        long content = content(type, owner);
+        long comment = comments.create(type, content, writer, input("{\"body\":\"original\",\"visibility\":\"PUBLIC\"}", true)).getId();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var holder = executor.submit(() -> transactions.executeWithoutResult(status -> {
+                jdbc.queryForObject("select id from member where id=? for update", Long.class, writer);
+                jdbc.queryForObject("select id from " + (type == CommentTarget.POST ? "post" : "project") + " where id=? for update", Long.class, content);
+                locked.countDown();
+                await(release);
+            }));
+            try {
+                assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
+                executor.submit(() -> management.delete(1L, type, comment)).get(5, TimeUnit.SECONDS);
+                assertThat(jdbc.queryForObject("select body from " + table(type) + " where id=?", String.class, comment)).isEmpty();
+            } finally { release.countDown(); }
+            holder.get(10, TimeUnit.SECONDS);
+        }
     }
 
     private CommentChanges input(String json, boolean create) throws Exception { return CommentWriteRequest.parse(mapper.readTree(json), create); }
