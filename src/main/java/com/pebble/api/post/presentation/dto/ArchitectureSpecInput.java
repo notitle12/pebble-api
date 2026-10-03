@@ -47,11 +47,22 @@ final class ArchitectureSpecInput {
         int index = 0;
         for (JsonNode group : groups) {
             String prefix = field + ".groups[" + index++ + "]";
-            object(group, Set.of("id", "type", "label", "parentId"), prefix);
+            object(group, Set.of("id", "type", "label", "parentId", "bounds"), prefix);
             String id = uniqueId(group.get("id"), prefix + ".id", ids);
             String type = text(group.get("type"), prefix + ".type", 40, true);
             if (!GROUP_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 그룹입니다.");
             text(group.get("label"), prefix + ".label", 100, true);
+            JsonNode bounds = group.get("bounds");
+            if (bounds != null && !bounds.isNull()) {
+                object(bounds, Set.of("x", "y", "width", "height"), prefix + ".bounds");
+                coordinate(bounds.get("x"), prefix + ".bounds.x");
+                coordinate(bounds.get("y"), prefix + ".bounds.y");
+                dimension(bounds.get("width"), prefix + ".bounds.width", 200);
+                dimension(bounds.get("height"), prefix + ".bounds.height", 120);
+                if (bounds.get("x").intValue() + bounds.get("width").intValue() > 4200
+                        || bounds.get("y").intValue() + bounds.get("height").intValue() > 4200)
+                    fail(prefix + ".bounds", "경계 영역은 4200 좌표를 넘을 수 없습니다.");
+            }
             groupTypes.put(id, type);
         }
         index = 0;
@@ -90,10 +101,16 @@ final class ArchitectureSpecInput {
             uniqueId(edge.get("id"), prefix + ".id", ids);
             String source = identifier(edge.get("source"), prefix + ".source");
             String target = identifier(edge.get("target"), prefix + ".target");
-            if (!nodeIds.contains(source) || !nodeIds.contains(target)) fail(prefix, "존재하는 요소끼리 연결해 주세요.");
+            if (!(nodeIds.contains(source) || groupTypes.containsKey(source)) || !(nodeIds.contains(target) || groupTypes.containsKey(target))) fail(prefix, "존재하는 요소 또는 그룹끼리 연결해 주세요.");
             if (source.equals(target) || !pairs.add(source + ":" + target)) fail(prefix, "자기 연결이나 같은 방향의 중복 연결은 허용하지 않습니다.");
             optionalText(edge, "label", prefix, 200);
         }
+    }
+
+    private static void dimension(JsonNode value, String field, int min) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToInt()
+                || value.intValue() < min || value.intValue() > 4200)
+            fail(field, min + "~4200 범위의 정수 크기를 입력해 주세요.");
     }
 
     private static void coordinate(JsonNode value, String field) {
