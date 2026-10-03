@@ -69,3 +69,11 @@ version 1의 그룹에 선택 bounds(x/y/width/height)를 추가하고 연결 en
 프론트는 모서리 연결 포인트와 C/Esc 단축키, 경계 영역 드래그 및 우하단 크기 조절을 제공한다. 카드 전체가 경계 내부(제목 아래)에 들어오면 가장 안쪽 Docker 또는 가장 작은 그룹에 포함한다. 부모 이동은 자식 Docker와 내부 카드를 함께 이동하고 외부 카드는 유지한다. 크기 조절은 카드 크기·좌표를 확대하지 않는다. 작성자는 경계를 넓혀 새 카드를 포함하거나 카드 드롭으로 그룹을 바꿀 수 있다.
 
 격리 PostgreSQL/Redis 백엔드 전체 464개 통과(실패/오류/스킵 0). 실제 회원 PATCH→DB→Guest GET으로 수동 bounds와 경계 연결을 재조회했고 TABLE 혼합 본문·잘못된 참조 400을 확인했다. 프론트 검증 결과는 web docs/frontend/ARCHITECTURE_BLOCK.md에 기록한다.
+
+## 화살표 직접 편집 (2026-10-04)
+
+연결의 선택 sourceSide/targetSide(TOP/RIGHT/BOTTOM/LEFT)와 선택 waypoint({x,y}, 각각 0~4200 정수)를 version1에 추가한다. 선택한 변과 경로 지점을 DB JSON에 보존하고 공개 상세도 같은 경로로 렌더링한다. 기존 필드 없는 연결은 자동 경로를 유지한다. API.md6.3이 계약 원본이며 DB migration은 추가하지 않는다.
+
+프론트는 넓은 클릭 영역으로 선 선택, 가운데 경로점 드래그, 양 끝점의 다른 카드/경계 변으로 재연결, 방향 뒤집기, 자동 경로 복원, 캔버스 직접 삭제를 제공한다. 자기/중복 연결은 기존 규칙으로 거부한다. 그룹 내 양 끝점이 함께 이동하면 수동 경로점도 같이 이동한다. 한 번의 드래그는 한 번의 되돌리기 단위이며 최대40개 변경의 Undo/Redo를 메모리에 보관한다. 새로고침 후 이력은 남지 않는다.
+
+백엔드 격리 전체465개 통과(실패/오류/스킵0). 실제 회원 PATCH→DB→Guest GET으로 sourceSide/targetSide/waypoint를 재조회했고 TABLE 혼합 본문 및 잘못된 참조400을 확인했다. 편집 UI·공개SSR 검증은 web docs/frontend/ARCHITECTURE_BLOCK.md를 따른다.

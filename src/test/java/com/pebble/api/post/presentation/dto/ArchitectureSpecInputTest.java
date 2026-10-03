@@ -122,6 +122,21 @@ class ArchitectureSpecInputTest {
         ((ObjectNode) spec.withArray("edges").get(1)).put("target", "oci"); reject(spec.toString());
     }
 
+    @Test void arrowSidesAndWaypointPreserveAndRejectInvalidValues() throws Exception {
+        ObjectNode spec = spec(); var edge = (ObjectNode) spec.withArray("edges").get(0);
+        edge.put("sourceSide", "BOTTOM").put("targetSide", "LEFT");
+        var waypoint = edge.putObject("waypoint").put("x", 0).put("y", 4200);
+        validate(spec.toString());
+        for (String side : List.of("sourceSide", "targetSide")) {
+            for (String bad : List.of("top", "AUTO", "javascript:evil")) { edge.put(side,bad); reject(spec.toString()); }
+            edge.putNull(side); validate(spec.toString());
+        }
+        for (int bad : List.of(-1,4201)) { waypoint.put("x",bad); reject(spec.toString()); }
+        waypoint.put("x",1.5); reject(spec.toString()); waypoint.put("x", "1"); reject(spec.toString());
+        waypoint.put("x",0).put("extra",1); reject(spec.toString()); waypoint.remove("extra");
+        waypoint.remove("y"); reject(spec.toString()); edge.putNull("waypoint"); validate(spec.toString());
+    }
+
     private ObjectNode spec() throws Exception { return (ObjectNode) mapper.readTree(VALID); }
     private void validate(String value) { PostWriteRequest.parse(request(value), false); }
     private void reject(String value) { assertThatThrownBy(() -> validate(value)).as(value).isInstanceOf(ApplicationException.class); }
