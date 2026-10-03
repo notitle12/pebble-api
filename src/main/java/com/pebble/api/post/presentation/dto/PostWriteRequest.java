@@ -64,6 +64,10 @@ public final class PostWriteRequest {
                 CodeLanguage language = block.hasNonNull("language")
                         ? enumValue(block.get("language"), CodeLanguage.class, prefix + "language") : null;
                 if (type == BlockType.CODE && language == null) fail(prefix + "language", "코드 언어를 지정해 주세요.");
+                if (type == BlockType.TABLE) {
+                    if (language != null) fail(prefix + "language", "테이블 명세서에는 코드 언어를 지정할 수 없습니다.");
+                    TableSpecInput.validate(content, prefix + "content");
+                }
                 String blockTitle = block.has("title") ? text(block.get("title"), prefix + "title", 100, true, false) : null;
                 parsed.add(new BlockInput(type, content, language, blockTitle));
             }
