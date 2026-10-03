@@ -143,7 +143,11 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         change(id, "{\"blocks\":[{\"type\":\"ARCHITECTURE\",\"content\":\"{}\"}]}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
         mvc.perform(get(PATH + "/" + id)).andExpect(jsonPath("$.data.blocks[0].content").value(architecture));
-        String updated = architecture.replace("Spring Boot", "API 서버");
+        var edited = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(architecture);
+        var editedNode = (com.fasterxml.jackson.databind.node.ObjectNode) edited.withArray("nodes").get(0);
+        editedNode.put("label", "사용자 정의 API").put("type", "CUSTOM").put("icon", "SPRING");
+        editedNode.putObject("position").put("x", 720).put("y", 160);
+        String updated = edited.toString();
         var patch = mapper.createObjectNode();
         patch.putArray("blocks").addObject().put("type", "ARCHITECTURE").put("content", updated);
         change(id, patch.toString()).andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].content").value(updated));
