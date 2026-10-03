@@ -15,9 +15,11 @@ import org.hibernate.annotations.Check;
 
 @Entity
 @Table(name = "post_block")
-@Check(name = "ck_post_block_type", constraints = "block_type in ('TEXT', 'CODE')")
+@Check(name = "ck_post_block_type", constraints = "block_type in ('TEXT', 'CODE', 'TABLE', 'ARCHITECTURE')")
 @Check(name = "ck_post_block_content_length", constraints = "char_length(content) <= 50000")
 @Check(name = "ck_post_block_order", constraints = "display_order >= 0")
+@Check(name = "ck_post_block_table_language", constraints = "block_type <> 'TABLE' or language is null")
+@Check(name = "ck_post_block_architecture_language", constraints = "block_type <> 'ARCHITECTURE' or language is null")
 @Check(name = "ck_post_block_code_language", constraints = "block_type <> 'CODE' or language is not null")
 public class PostBlock {
 
@@ -51,6 +53,9 @@ public class PostBlock {
     public PostBlock(Post post, BlockType type, String content, CodeLanguage language, String title, Integer displayOrder) {
         if (type == BlockType.CODE && language == null) {
             throw new IllegalArgumentException("Code block requires a language");
+        }
+        if ((type == BlockType.TABLE || type == BlockType.ARCHITECTURE) && language != null) {
+            throw new IllegalArgumentException("Structured block must not have a code language");
         }
         if (displayOrder == null || displayOrder < 0) {
             throw new IllegalArgumentException("Display order must not be negative");

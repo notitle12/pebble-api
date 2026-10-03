@@ -83,6 +83,81 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void createsAndUpdatesTableBlocksWithoutChangingOwnershipOrHiddenRules() throws Exception {
+        String table = """
+                {"schemaVersion":1,"tableName":"member","columns":[
+                  {"name":"id","dataType":"BIGINT","nullable":false,"primaryKey":true},
+                  {"name":"nickname","dataType":"VARCHAR(30)","nullable":false,"primaryKey":false,
+                   "description":"<script>alert('text')</script>"}
+                ]}
+                """;
+        var request = mapper.createObjectNode().put("title", "테이블 명세서 검증").put("visibilityStatus", "PUBLIC");
+        request.putArray("blocks").addObject().put("type", "TABLE").put("content", table).put("title", "회원 테이블");
+        var created = mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.blocks[0].type").value("TABLE"))
+                .andExpect(jsonPath("$.data.blocks[0].content").value(table))
+                .andExpect(jsonPath("$.data.blocks[0].language").isEmpty());
+        String id = response(created).at("/data/id").asText();
+        em.flush(); em.clear();
+        assertThat(jdbc.queryForObject("select block_type from post_block where post_id=?", String.class, Long.parseLong(id))).isEqualTo("TABLE");
+        mvc.perform(get(PATH + "/" + id)).andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].content").value(table));
+        mvc.perform(patch(PATH + "/" + id).header(HttpHeaders.AUTHORIZATION, bearer(other))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"타인 수정\"}"))
+                .andExpect(status().isNotFound());
+        change(id, "{\"blocks\":[{\"type\":\"TABLE\",\"content\":\"{}\"}]}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        mvc.perform(get(PATH + "/" + id)).andExpect(jsonPath("$.data.blocks[0].content").value(table));
+        String updated = table.replace("member", "updated_member");
+        var patch = mapper.createObjectNode();
+        patch.putArray("blocks").addObject().put("type", "TABLE").put("content", updated);
+        change(id, patch.toString()).andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].content").value(updated));
+        change(id, "{\"visibilityStatus\":\"HIDDEN\"}").andExpect(status().isOk());
+        mvc.perform(get(PATH + "/" + id)).andExpect(status().isNotFound());
+        mvc.perform(get(PATH + "/" + id).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].type").value("TABLE"));
+    }
+
+    @Test
+    void createsAndUpdatesArchitectureBlocksWithoutChangingOwnershipOrHiddenRules() throws Exception {
+        String architecture = """
+                {"schemaVersion":1,"groups":[{"id":"oci","type":"ORACLE_CLOUD","label":"Oracle Cloud"}],
+                 "nodes":[{"id":"app","type":"APP","label":"Spring Boot","groupId":"oci"},
+                          {"id":"db","type":"DATABASE","label":"PostgreSQL","groupId":"oci"}],
+                 "edges":[{"id":"sql","source":"app","target":"db","label":"SQL"}]}
+                """;
+        var request = mapper.createObjectNode().put("title", "아키텍처 검증").put("visibilityStatus", "PUBLIC");
+        request.putArray("blocks").addObject().put("type", "ARCHITECTURE").put("content", architecture).put("title", "서버 구성");
+        var created = mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.blocks[0].type").value("ARCHITECTURE"))
+                .andExpect(jsonPath("$.data.blocks[0].content").value(architecture))
+                .andExpect(jsonPath("$.data.blocks[0].language").isEmpty());
+        String id = response(created).at("/data/id").asText();
+        em.flush(); em.clear();
+        assertThat(jdbc.queryForObject("select block_type from post_block where post_id=?", String.class, Long.parseLong(id))).isEqualTo("ARCHITECTURE");
+        mvc.perform(get(PATH + "/" + id)).andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].content").value(architecture));
+        mvc.perform(patch(PATH + "/" + id).header(HttpHeaders.AUTHORIZATION, bearer(other))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"타인 수정\"}"))
+                .andExpect(status().isNotFound());
+        change(id, "{\"blocks\":[{\"type\":\"ARCHITECTURE\",\"content\":\"{}\"}]}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+        mvc.perform(get(PATH + "/" + id)).andExpect(jsonPath("$.data.blocks[0].content").value(architecture));
+        var edited = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(architecture);
+        var editedNode = (com.fasterxml.jackson.databind.node.ObjectNode) edited.withArray("nodes").get(0);
+        editedNode.put("label", "사용자 정의 API").put("type", "CUSTOM").put("icon", "SPRING");
+        editedNode.putObject("position").put("x", 720).put("y", 160);
+        String updated = edited.toString();
+        var patch = mapper.createObjectNode();
+        patch.putArray("blocks").addObject().put("type", "ARCHITECTURE").put("content", updated);
+        change(id, patch.toString()).andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].content").value(updated));
+        change(id, "{\"visibilityStatus\":\"HIDDEN\"}").andExpect(status().isOk());
+        mvc.perform(get(PATH + "/" + id)).andExpect(status().isNotFound());
+        mvc.perform(get(PATH + "/" + id).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].type").value("ARCHITECTURE"));
+    }
+
+    @Test
     void patchDistinguishesOmittedNullAndReplacementArrays() throws Exception {
         Category category = category(null, CategoryStatus.ACTIVE);
         Tag tag = tag(TagStatus.ACTIVE);

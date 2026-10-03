@@ -2,5 +2,7 @@ package com.pebble.api.post.domain;
 
 public enum BlockType {
     TEXT,
-    CODE
+    CODE,
+    TABLE,
+    ARCHITECTURE
 }
