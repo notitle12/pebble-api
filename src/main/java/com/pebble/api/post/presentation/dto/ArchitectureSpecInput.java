@@ -97,13 +97,29 @@ final class ArchitectureSpecInput {
         index = 0;
         for (JsonNode edge : edges) {
             String prefix = field + ".edges[" + index++ + "]";
-            object(edge, Set.of("id", "source", "target", "label"), prefix);
+            object(edge, Set.of("id", "source", "target", "label", "sourceSide", "targetSide", "waypoint"), prefix);
             uniqueId(edge.get("id"), prefix + ".id", ids);
             String source = identifier(edge.get("source"), prefix + ".source");
             String target = identifier(edge.get("target"), prefix + ".target");
             if (!(nodeIds.contains(source) || groupTypes.containsKey(source)) || !(nodeIds.contains(target) || groupTypes.containsKey(target))) fail(prefix, "존재하는 요소 또는 그룹끼리 연결해 주세요.");
             if (source.equals(target) || !pairs.add(source + ":" + target)) fail(prefix, "자기 연결이나 같은 방향의 중복 연결은 허용하지 않습니다.");
             optionalText(edge, "label", prefix, 200);
+            for (String side : Set.of("sourceSide", "targetSide")) {
+                JsonNode value = edge.get(side);
+                if (value != null && !value.isNull() && (!value.isTextual()
+                        || !Set.of("TOP", "RIGHT", "BOTTOM", "LEFT").contains(value.textValue())))
+                    fail(prefix + "." + side, "위·오른쪽·아래·왼쪽 연결 위치를 선택해 주세요.");
+            }
+            JsonNode waypoint = edge.get("waypoint");
+            if (waypoint != null && !waypoint.isNull()) {
+                object(waypoint, Set.of("x", "y"), prefix + ".waypoint");
+                for (String axis : Set.of("x", "y")) {
+                    JsonNode value = waypoint.get(axis);
+                    if (value == null || !value.isIntegralNumber() || !value.canConvertToInt()
+                            || value.intValue() < 0 || value.intValue() > 4200)
+                        fail(prefix + ".waypoint." + axis, "0~4200 범위의 정수 좌표를 입력해 주세요.");
+                }
+            }
         }
     }
 
