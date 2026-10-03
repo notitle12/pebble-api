@@ -212,3 +212,7 @@ Pull Request는 관련 Issue에 연결하고 다음 내용을 적는다.
 공유 예시의 R2_ENDPOINT, R2_BUCKET_NAME, R2_REGION(auto), R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY를 보호된 실행 환경에 주입하고 준비가 끝나면 R2_ENABLED=true로 활성화한다. 기존 개인 로컬 YAML을 읽거나 바꾸지 않아도 application.yaml의 공통 바인딩을 사용한다. `.env`는 자동 로드하지 않으므로 기존 IDE/셸 주입 절차를 따른다. endpoint는 버킷 경로를 제외한 계정 S3 HTTPS URL이며 관할권 지정 버킷은 해당 관할권 endpoint를 사용한다. 공개 r2.dev URL·사용자 지정 도메인은 필요하지 않다.
 
 AWS SDK S3·URL Connection transport는 저장소 업로드/삭제 및 15분 SigV4 URL을 제공한다. WebP ImageIO는 Java 기본 디코더에 없는 WebP 읽기/쓰기와 macOS ARM·운영 Linux 실행을 제공한다. 원본 대신 lossy quality82 WebP 파생본만 저장한다. 테스트는 실제 R2 credentials를 사용하지 않고 이미지 변환·가짜 저장소와 독립 DB/Redis를 사용한다. 대역 성공과 실제 R2 연결 성공을 구분하며 배포 전 비공개 버킷 업로드/조회/삭제 및 삭제 큐 복구를 별도 확인한다.
+
+### 프론트 정상 화면의 실제 로컬 API 검증
+
+글·프로젝트가 없는 로컬 DB에서는 [실제 API 프론트 검증](LOCAL_FRONTEND_VERIFICATION.md)의 전용 fixture를 준비한다. `bash scripts/local-preview.sh seed` 후 Node 22의 `node scripts/verify-local-preview.mjs`로 계약을 확인하고, web을 실제 API 8080에 연결해 브라우저 동작을 검증한다. 기존 데이터를 보존하며 `clean`으로 fixture만 정리한다. 목 데이터 검증과 실제 API 검증을 구분해 인계한다.
