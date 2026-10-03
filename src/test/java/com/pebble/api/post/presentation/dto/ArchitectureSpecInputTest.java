@@ -100,6 +100,28 @@ class ArchitectureSpecInputTest {
         node.putNull("position"); validate(spec.toString());
     }
 
+    @Test void manualGroupBoundsAndGroupConnectionsPreserveAndValidateContract() throws Exception {
+        ObjectNode spec = spec();
+        var group = (ObjectNode) spec.withArray("groups").get(0);
+        var bounds = group.putObject("bounds").put("x", 0).put("y", 0).put("width", 4200).put("height", 120);
+        spec.withArray("edges").addObject().put("id", "boundary-flow").put("source", "oci").put("target", "docker");
+        spec.withArray("edges").addObject().put("id", "card-flow").put("source", "docker").put("target", "db");
+        validate(spec.toString());
+        for (String key : List.of("x", "y", "width", "height")) {
+            int original = bounds.get(key).intValue();
+            bounds.put(key, -1); reject(spec.toString());
+            bounds.put(key, 1.5); reject(spec.toString());
+            bounds.put(key, "1"); reject(spec.toString());
+            bounds.put(key, original);
+        }
+        bounds.put("width", 199); reject(spec.toString()); bounds.put("width", 4200);
+        bounds.put("height", 119); reject(spec.toString()); bounds.put("height", 120);
+        bounds.put("x", 1); reject(spec.toString()); bounds.put("x", 0);
+        bounds.put("extra", 1); reject(spec.toString()); bounds.remove("extra");
+        bounds.remove("height"); reject(spec.toString()); group.putNull("bounds"); validate(spec.toString());
+        ((ObjectNode) spec.withArray("edges").get(1)).put("target", "oci"); reject(spec.toString());
+    }
+
     private ObjectNode spec() throws Exception { return (ObjectNode) mapper.readTree(VALID); }
     private void validate(String value) { PostWriteRequest.parse(request(value), false); }
     private void reject(String value) { assertThatThrownBy(() -> validate(value)).as(value).isInstanceOf(ApplicationException.class); }
