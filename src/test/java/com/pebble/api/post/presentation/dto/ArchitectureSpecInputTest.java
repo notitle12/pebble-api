@@ -46,7 +46,7 @@ class ArchitectureSpecInputTest {
                 VALID.replace("\"DOCKER\"", "\"AWS\""), VALID.replace("\"ORACLE_CLOUD\"", "\"DOCKER\""),
                 VALID.replace("\"groupId\":\"docker\"", "\"groupId\":\"absent\""),
                 VALID.replace("\"target\":\"db\"", "\"target\":\"absent\""),
-                VALID.replace("\"target\":\"db\"", "\"target\":\"app\""), VALID.replace("\"APP\"", "\"CUSTOM\""))) reject(value);
+                VALID.replace("\"target\":\"db\"", "\"target\":\"app\""), VALID.replace("\"APP\"", "\"UNKNOWN\""))) reject(value);
         ObjectNode spec;
         try { spec = spec(); } catch (Exception e) { throw new RuntimeException(e); }
         spec.withArray("edges").addObject().put("id", "duplicate").put("source", "app").put("target", "db");
@@ -79,6 +79,25 @@ class ArchitectureSpecInputTest {
         reject(" ".repeat(50001));
         spec = spec(); var edge = (ObjectNode) spec.withArray("edges").get(0);
         edge.put("label", "가".repeat(200)); validate(spec.toString()); edge.put("label", "가".repeat(201)); reject(spec.toString());
+    }
+
+    @Test void customTechnologyAndPositionsRoundTripAndRejectUnsafeOrUnboundedFields() throws Exception {
+        ObjectNode spec = spec();
+        ((ObjectNode) spec.withArray("groups").get(0)).put("type", "CUSTOM").put("label", "우리 서버");
+        var node = (ObjectNode) spec.withArray("nodes").get(0);
+        node.put("type", "CUSTOM").put("icon", "DOCKER");
+        var position = node.putObject("position").put("x", 0).put("y", 4000);
+        validate(spec.toString());
+        for (String bad : List.of("https://example.com/icon.svg", "<svg/>", "UNKNOWN")) {
+            node.put("icon", bad); reject(spec.toString());
+        }
+        node.putNull("icon"); validate(spec.toString());
+        for (int bad : List.of(-1, 4001)) { position.put("x", bad); reject(spec.toString()); }
+        position.put("x", 1.5); reject(spec.toString());
+        position.put("x", "1"); reject(spec.toString());
+        position.put("x", 1).put("extra", 1); reject(spec.toString());
+        position.remove("extra"); position.remove("y"); reject(spec.toString());
+        node.putNull("position"); validate(spec.toString());
     }
 
     private ObjectNode spec() throws Exception { return (ObjectNode) mapper.readTree(VALID); }

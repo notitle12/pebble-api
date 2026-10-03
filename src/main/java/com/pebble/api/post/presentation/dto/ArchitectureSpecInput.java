@@ -14,14 +14,17 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-/** 제한형 아키텍처의 요소·참조를 검사한다. 사용자 좌표나 실행 코드는 받지 않는다. */
+/** 제한형 아키텍처의 요소·참조를 검사한다. 범위가 제한된 좌표와 기술 아이콘을 허용하고 실행 코드는 받지 않는다. */
 final class ArchitectureSpecInput {
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(8).maxStringLength(50000).build())
             .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-    private static final Set<String> GROUP_TYPES = Set.of("ORACLE_CLOUD", "AWS", "CLOUDFLARE", "DOCKER");
-    private static final Set<String> NODE_TYPES = Set.of("CLIENT", "APP", "DATABASE", "CACHE", "STORAGE", "PROXY");
+    private static final Set<String> GROUP_TYPES = Set.of("ORACLE_CLOUD", "AWS", "CLOUDFLARE", "DOCKER", "CUSTOM");
+    private static final Set<String> NODE_TYPES = Set.of("CLIENT", "APP", "DATABASE", "CACHE", "STORAGE", "PROXY", "CUSTOM");
+    private static final Set<String> ICONS = Set.of("AWS", "ORACLE_CLOUD", "CLOUDFLARE", "DOCKER", "SPRING",
+            "POSTGRESQL", "REDIS", "R2", "WORKERS", "NGINX", "NODEJS", "REACT", "SERVER", "DATABASE",
+            "CACHE", "STORAGE", "CLIENT", "CLOUD", "CONTAINER");
     private ArchitectureSpecInput() {}
 
     static void validate(String content, String field) {
@@ -62,11 +65,20 @@ final class ArchitectureSpecInput {
         index = 0;
         for (JsonNode node : nodes) {
             String prefix = field + ".nodes[" + index++ + "]";
-            object(node, Set.of("id", "type", "label", "groupId"), prefix);
+            object(node, Set.of("id", "type", "label", "groupId", "icon", "position"), prefix);
             nodeIds.add(uniqueId(node.get("id"), prefix + ".id", ids));
             String type = text(node.get("type"), prefix + ".type", 40, true);
             if (!NODE_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 요소입니다.");
             text(node.get("label"), prefix + ".label", 100, true);
+            JsonNode icon = node.get("icon");
+            if (icon != null && !icon.isNull() && (!icon.isTextual() || !ICONS.contains(icon.textValue())))
+                fail(prefix + ".icon", "지원하는 기술 또는 기본 아이콘을 선택해 주세요.");
+            JsonNode position = node.get("position");
+            if (position != null && !position.isNull()) {
+                object(position, Set.of("x", "y"), prefix + ".position");
+                coordinate(position.get("x"), prefix + ".position.x");
+                coordinate(position.get("y"), prefix + ".position.y");
+            }
             String group = optionalId(node, "groupId", prefix);
             if (group != null && !groupTypes.containsKey(group)) fail(prefix + ".groupId", "존재하는 그룹을 선택해 주세요.");
         }
@@ -82,6 +94,12 @@ final class ArchitectureSpecInput {
             if (source.equals(target) || !pairs.add(source + ":" + target)) fail(prefix, "자기 연결이나 같은 방향의 중복 연결은 허용하지 않습니다.");
             optionalText(edge, "label", prefix, 200);
         }
+    }
+
+    private static void coordinate(JsonNode value, String field) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToInt()
+                || value.intValue() < 0 || value.intValue() > 4000)
+            fail(field, "0~4000 범위의 정수 좌표를 입력해 주세요.");
     }
 
     private static JsonNode array(JsonNode spec, String key, String field, int min, int max) {
