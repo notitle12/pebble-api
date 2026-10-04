@@ -29,17 +29,21 @@ Wrangler 4.147.0을 이미지 Worker 전용 개발 의존성으로 고정했다.
 
 Node 테스트는 변조·만료·캐시 우회·HEAD·잘못된 설정·R2 오류·캐시 저장 오류를 확인한다. Miniflare/workerd 테스트는 로컬 R2와 실제 Cache API의 MISS→HIT·만료 차단·내부 경로 차단을 확인한다. Java와 JS는 동일한 고정 테스트 키·HMAC 벡터를 사용한다. 이 키는 테스트 전용이며 운영에서 사용하면 안 된다.
 
-## 원격 준비 상태 — 2026-10-04
+## 원격 배포 상태 — 2026-10-04
 
-Wrangler 기존 OAuth 로그인으로 계정 `25eacbdaee77c3ab75b57c40fb64d8da`를 확인하고 전용 `pebble-media` 버킷을 생성했다. `wrangler r2 bucket dev-url get pebble-media`에서 공개 접근 비활성, `wrangler r2 bucket domain list pebble-media`에서 직접 연결 도메인 없음이 확인되었다. 기존 `bangsel-cards` 버킷은 변경하지 않았다. 버킷은 생성만 했으며 이미지 업로드는 실행하지 않았다.
+사용자가 도메인 소유 계정으로 Wrangler OAuth 인증을 완료했다. `pebble-log.com`의 active 상태와 소유 계정 `ae87d49be319ec8a092f90acc9554383`을 확인했고, `wrangler.jsonc`의 account_id를 이 계정으로 고정했다. 해당 계정에 기존 `pebble-media` 버킷이 있으며 공개 r2.dev 접근은 비활성이다. 이 버킷에 연결한 `pebble-images` Worker와 `images.pebble-log.com` Custom Domain을 배포하고 독립 서명 키를 Worker Secret으로 등록했다.
 
-현재 인증으로 zone 이름 `pebble-log.com`을 조회한 결과는 비어 있다. 도메인의 실제 이름·소유 계정 또는 인증의 zone 접근 범위를 확인해야 한다. 다른 계정에 도메인이 있다면 해당 계정을 확인한 뒤 R2 버킷과 Worker의 배포 계정도 함께 확정한다. Worker·Secret·Custom Domain 배포, DNS 변경과 CDN 활성화는 아직 실행하지 않았다. 생성한 버킷을 사용한다고 운영 배포 완료로 판단하지 않는다.
+실제 HTTPS 도메인에서 임시 UUID WebP 객체 하나를 업로드해 200 MISS → 200 HIT, 이미지 바이트 일치, HEAD 본문 없음과 외부 no-store 헤더를 확인했다. 캐시가 채워진 뒤에도 만료·변조·무서명 요청은 403, 내부 캐시 경로 직접 접근은 404였다. 검증에 생성한 R2 객체는 삭제했다. 해당 테스트 바이트는 기존 정책대로 내부 캐시에 최대 900초 남을 수 있으며 새 접근 URL을 공유하지 않았다.
 
-## 실제 배포 순서 — 버킷 외 미실행
+서명 키의 로컬 원본은 Git에서 제외된 `infra/image-worker/.dev.vars`에 파일 권한 0600으로 보존했다. 비밀 값은 명령 인수·문서·Git에 기록하지 않았다. backend를 연결할 때 이 값을 보호된 환경에서 `MEDIA_CDN_SIGNING_KEY_BASE64`에 동일하게 주입한다. 기존 키 파일을 덮어쓰거나 재생성하면 현재 Worker와 값이 달라질 수 있으므로 키 교체 절차 없이 재생성하지 않는다.
+
+처음 인증되어 있던 다른 계정 `25eacbdaee77c3ab75b57c40fb64d8da`에도 준비 중 빈 `pebble-media` 버킷을 생성했으나 최종 배포에는 사용하지 않는다. 이 버킷에는 업로드·도메인 연결을 하지 않았으며 해당 계정의 기존 `bangsel-cards` 버킷은 변경하지 않았다. 다른 계정의 빈 준비 버킷은 아직 정리하지 않았다.
+
+## 재배포 및 백엔드 활성화 순서
 
 1. Cloudflare에서 실제 R2 버킷명을 확인하고 `wrangler.jsonc`의 `bucket_name`을 맞춘다. `pebble-media`는 기존 백엔드 기본값이다. 대상 계정과 `pebble-log.com` zone을 확인한다.
 2. 보호된 환경에서 독립 서명 키를 생성하고 서버의 `MEDIA_CDN_SIGNING_KEY_BASE64`와 Worker Secret에 동일하게 설정한다. `npx wrangler secret put MEDIA_CDN_SIGNING_KEY_BASE64`는 입력 프롬프트를 사용한다. 값을 인수·코드·문서에 기록하지 않는다.
-3. `WRANGLER_SEND_METRICS=false npx wrangler deploy`로 Worker와 `images.pebble-log.com` Custom Domain을 연결한다. 이 명령은 실제 계정/DNS/배포 변경이므로 현재 작업에서는 실행하지 않았다.
+3. `WRANGLER_SEND_METRICS=false npx wrangler deploy`로 Worker를 배포한다. Worker와 `images.pebble-log.com` 연결은 완료했으며 이후 재배포에도 고정된 대상 계정을 확인한다.
 4. 배포된 Worker의 테스트 이미지 조회에서 `X-Pebble-Cache: MISS` 다음 `HIT`, 변조·만료 URL 403을 확인한다. Cache API는 커스텀 도메인/route에서 확인해야 하며 workers.dev에서의 확인으로 대체하지 않는다.
 5. Oracle 백엔드에 기존 R2 설정과 아래 CDN 환경변수를 설정한 뒤 배포한다. Worker와 비밀 설정이 준비되기 전에는 CDN을 켜지 않는다.
 
@@ -52,7 +56,7 @@ MEDIA_CDN_SIGNING_KEY_BASE64=<보호된 환경에서 주입>
 
 CDN 기본값은 false다. false일 때 기존 S3의 15분 presigned URL을 계속 사용하므로 설정 준비 전 로컬 기능을 바꾸지 않는다. 프론트는 기존 thumbnailUrl/url을 그대로 사용하므로 별도 비밀이나 도메인 하드코딩을 추가하지 않는다.
 
-현재 Oracle API는 로컬에만 있으며 Cloudflare 계정 배포·R2 원격 객체·도메인/DNS 연결·운영 CPU 시간/요청량 검증은 남아 있다. 이 문서는 코드와 배포 준비이며 CDN이 운영에서 활성화되었다는 의미가 아니다.
+이미지 Worker 자체의 원격 배포와 HTTPS 검증은 완료했다. Oracle API는 로컬에만 있으며 실제 backend의 R2 저장 자격 증명·동일 서명 키 주입·CDN 활성화, 프론트에서 API 이미지 업로드부터 조회까지의 전체 검증, 운영 CPU 시간/요청량 확인은 남아 있다. 현재 실행 중인 로컬 API의 CDN 설정은 변경하지 않았다.
 
 ## 공식 근거
 
