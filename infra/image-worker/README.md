@@ -56,7 +56,11 @@ MEDIA_CDN_SIGNING_KEY_BASE64=<보호된 환경에서 주입>
 
 CDN 기본값은 false다. false일 때 기존 S3의 15분 presigned URL을 계속 사용하므로 설정 준비 전 로컬 기능을 바꾸지 않는다. 프론트는 기존 thumbnailUrl/url을 그대로 사용하므로 별도 비밀이나 도메인 하드코딩을 추가하지 않는다.
 
-이미지 Worker 자체의 원격 배포와 HTTPS 검증은 완료했다. Oracle API는 로컬에만 있으며 실제 backend의 R2 저장 자격 증명·동일 서명 키 주입·CDN 활성화, 프론트에서 API 이미지 업로드부터 조회까지의 전체 검증, 운영 CPU 시간/요청량 확인은 남아 있다. 현재 실행 중인 로컬 API의 CDN 설정은 변경하지 않았다.
+이미지 Worker 자체의 원격 배포와 HTTPS 검증은 완료했다. 기존 Git 제외 `.env`의 R2 S3 자격 증명과 endpoint가 도메인 소유 계정의 `pebble-media`를 가리키는 것을 값 노출 없이 확인했다. `.env`에 동일 CDN 서명 키·origin과 `MEDIA_CDN_ENABLED=true`를 보호해 저장하고, 현재 프론트가 연결하는 8081 로컬 API를 이 설정으로 재시작했다. 로컬 미리보기 OAuth는 기존 Naver 대역을 유지하며 실제 Naver 로그인 검증으로 해석하지 않는다. 재시작으로 이전 임시 JWT 세션은 다시 로그인해야 할 수 있다.
+
+별도 8083 검증 API와 실제 8081 API에서 각각 PNG multipart 업로드 → Java WebP 변환 → 실제 비공개 R2 저장 → API가 발급한 CDN URL의 200·WebP 바이트와 HIT를 확인했다. 글을 HIDDEN으로 바꾼 뒤 작성자 조회에서 새 thumbnailUrl=null, 썸네일 삭제 API와 임시 글의 soft-delete도 확인했다. 검증에 만든 모든 R2 객체는 삭제했다. 로컬 임시 글은 서비스 삭제 계약에 따른 soft-delete로 남고, 삭제 큐는 기존 재시도 정책을 유지한다. 기존 사용자 글·이미지는 변경하지 않았다.
+
+CDN HTTP 확인에는 Node 22 fetch를 사용했다. 같은 API URL을 Python urllib로 요청했을 때는 Worker의 `Image unavailable` 본문과 다른 Cloudflare 403을 받았으나, Java 서명과 독립 계산 서명은 일치했고 TTL도 900초였다. 외부 HTTP 클라이언트 차이의 원인은 확정하지 않았으며 보안 설정을 완화하지 않았다. 브라우저에서도 홈의 실제 공개 글 링크를 통해 상세에 진입해 이미지 host=images.pebble-log.com, complete=true, naturalWidth=8/naturalHeight=8을 확인하고 화면을 저장했다. 이후 해당 임시 글을 비공개 처리·soft-delete하고 객체를 삭제했다. 브라우저 작성기의 파일 선택 동작, Oracle API 배포, 실제 Naver 로그인, 운영 CPU 시간/요청량 확인은 별도 후속 검증이다.
 
 ## 공식 근거
 
