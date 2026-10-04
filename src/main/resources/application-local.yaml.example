@@ -65,3 +65,8 @@ pebble:
       pepper-base64: ${REFRESH_TOKEN_PEPPER_BASE64:}
       pepper-version: ${REFRESH_TOKEN_PEPPER_VERSION:v1}
       previous-peppers: {}
+
+# 이미지 CDN은 Worker 배포와 Secret 설정이 끝난 후에만 활성화한다.
+# MEDIA_CDN_ENABLED=false
+# MEDIA_CDN_BASE_URL=https://images.pebble-log.com
+# MEDIA_CDN_SIGNING_KEY_BASE64=<독립 난수 32바이트를 표준 Base64로 인코딩한 값>

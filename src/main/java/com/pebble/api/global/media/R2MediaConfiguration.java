@@ -17,7 +17,7 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @Configuration
-@EnableConfigurationProperties(R2Properties.class)
+@EnableConfigurationProperties({R2Properties.class, MediaCdnProperties.class})
 @ConditionalOnProperty(prefix = "pebble.media.r2", name = "enabled", havingValue = "true")
 public class R2MediaConfiguration {
     private static final Pattern BUCKET_NAME = Pattern.compile("(?=.{3,63}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?");
@@ -51,8 +51,9 @@ public class R2MediaConfiguration {
     }
 
     @Bean
-    R2ObjectStorage r2ObjectStorage(S3Client client, S3Presigner presigner, R2Properties properties) {
-        return new S3R2ObjectStorage(client, presigner, properties.bucketName());
+    R2ObjectStorage r2ObjectStorage(S3Client client, S3Presigner presigner, R2Properties properties, MediaCdnProperties cdn) {
+        return new S3R2ObjectStorage(client, presigner, properties.bucketName(),
+                cdn.enabled() ? new MediaCdnSigner(cdn, java.time.Clock.systemUTC()) : null);
     }
 
     private StaticCredentialsProvider credentials(R2Properties properties) {

@@ -16,11 +16,17 @@ public class S3R2ObjectStorage implements R2ObjectStorage {
     private final S3Client client;
     private final S3Presigner presigner;
     private final String bucket;
+    private final MediaCdnSigner cdn;
 
     public S3R2ObjectStorage(S3Client client, S3Presigner presigner, String bucket) {
+        this(client, presigner, bucket, null);
+    }
+
+    public S3R2ObjectStorage(S3Client client, S3Presigner presigner, String bucket, MediaCdnSigner cdn) {
         this.client = client;
         this.presigner = presigner;
         this.bucket = bucket;
+        this.cdn = cdn;
     }
 
     @Override
@@ -44,6 +50,7 @@ public class S3R2ObjectStorage implements R2ObjectStorage {
     @Override
     public String signedUrl(String key) {
         try {
+            if (cdn != null) return cdn.signedUrl(key);
             return presigner.presignGetObject(GetObjectPresignRequest.builder()
                     .signatureDuration(SIGNED_URL_DURATION)
                     .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key).build())
