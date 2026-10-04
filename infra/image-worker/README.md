@@ -29,7 +29,13 @@ Wrangler 4.147.0을 이미지 Worker 전용 개발 의존성으로 고정했다.
 
 Node 테스트는 변조·만료·캐시 우회·HEAD·잘못된 설정·R2 오류·캐시 저장 오류를 확인한다. Miniflare/workerd 테스트는 로컬 R2와 실제 Cache API의 MISS→HIT·만료 차단·내부 경로 차단을 확인한다. Java와 JS는 동일한 고정 테스트 키·HMAC 벡터를 사용한다. 이 키는 테스트 전용이며 운영에서 사용하면 안 된다.
 
-## 실제 배포 순서 — 아직 미실행
+## 원격 준비 상태 — 2026-10-04
+
+Wrangler 기존 OAuth 로그인으로 계정 `25eacbdaee77c3ab75b57c40fb64d8da`를 확인하고 전용 `pebble-media` 버킷을 생성했다. `wrangler r2 bucket dev-url get pebble-media`에서 공개 접근 비활성, `wrangler r2 bucket domain list pebble-media`에서 직접 연결 도메인 없음이 확인되었다. 기존 `bangsel-cards` 버킷은 변경하지 않았다. 버킷은 생성만 했으며 이미지 업로드는 실행하지 않았다.
+
+현재 인증으로 zone 이름 `pebble-log.com`을 조회한 결과는 비어 있다. 도메인의 실제 이름·소유 계정 또는 인증의 zone 접근 범위를 확인해야 한다. 다른 계정에 도메인이 있다면 해당 계정을 확인한 뒤 R2 버킷과 Worker의 배포 계정도 함께 확정한다. Worker·Secret·Custom Domain 배포, DNS 변경과 CDN 활성화는 아직 실행하지 않았다. 생성한 버킷을 사용한다고 운영 배포 완료로 판단하지 않는다.
+
+## 실제 배포 순서 — 버킷 외 미실행
 
 1. Cloudflare에서 실제 R2 버킷명을 확인하고 `wrangler.jsonc`의 `bucket_name`을 맞춘다. `pebble-media`는 기존 백엔드 기본값이다. 대상 계정과 `pebble-log.com` zone을 확인한다.
 2. 보호된 환경에서 독립 서명 키를 생성하고 서버의 `MEDIA_CDN_SIGNING_KEY_BASE64`와 Worker Secret에 동일하게 설정한다. `npx wrangler secret put MEDIA_CDN_SIGNING_KEY_BASE64`는 입력 프롬프트를 사용한다. 값을 인수·코드·문서에 기록하지 않는다.
