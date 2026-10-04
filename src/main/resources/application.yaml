@@ -9,6 +9,10 @@ spring:
 
 pebble:
   media:
+    cdn:
+      enabled: ${MEDIA_CDN_ENABLED:false}
+      base-url: ${MEDIA_CDN_BASE_URL:}
+      signing-key-base64: ${MEDIA_CDN_SIGNING_KEY_BASE64:}
     r2:
       enabled: ${R2_ENABLED:false}
       endpoint: ${R2_ENDPOINT:}
