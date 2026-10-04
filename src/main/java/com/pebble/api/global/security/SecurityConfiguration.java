@@ -79,7 +79,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/projects", "/api/v1/projects/search", "/api/v1/projects/{projectId:[0-9]+}",
                                 "/api/v1/projects/{projectId:[0-9]+}/posts", "/api/v1/members/{memberId:[0-9]+}/projects").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/{postId:[0-9]+}",
-                                "/api/v1/blogs/{handle}/posts", "/api/v1/blogs/{handle}/posts/{postKey}").permitAll()
+                                "/api/v1/blogs/{handle}", "/api/v1/blogs/{handle}/posts", "/api/v1/blogs/{handle}/posts/{postKey}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/{memberId:[0-9]+}/posts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/{memberId:[0-9]+}/boards",
                                 "/api/v1/members/{memberId:[0-9]+}/boards/{boardId:[0-9]+}/posts").permitAll()
@@ -242,6 +242,7 @@ public class SecurityConfiguration {
         source.registerCorsConfiguration("/api/v1/projects/{projectId:[0-9]+}/posts", getCors);
         source.registerCorsConfiguration("/api/v1/members/{memberId:[0-9]+}/projects", getCors);
         source.registerCorsConfiguration("/api/v1/members/me/projects", getCors);
+        source.registerCorsConfiguration("/api/v1/blogs/{handle}", getCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts", getCors);
         source.registerCorsConfiguration("/api/v1/blogs/{handle}/posts/{postKey}", getCors);
         source.registerCorsConfiguration("/api/v1/members/me/boards", getCors);
