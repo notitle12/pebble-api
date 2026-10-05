@@ -481,8 +481,9 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 ~~~
 
 - title은 필수, 최대 200자다. summary는 nullable이며 최대 500자다.
-- blocks는 순서 있는 배열이다. 최소 한 개를 보낸다. type은 TEXT 또는 CODE다.
+- blocks는 순서 있는 배열이다. 최소 한 개를 보낸다. type은 TEXT, CODE 또는 TABLE이다.
 - CODE 블록은 language가 필수이며 title은 선택이다. DB 제한은 content 최대 50,000자, title 최대 100자, language 최대 50자다.
+- TABLE은 `language`를 생략하거나 null로 보내며 `content`는 테이블 명세서 JSON을 직렬화한 문자열이다. `schemaVersion`은 정수 1, `tableName`은 1~100자 비공백 문자열, `description`은 선택 문자열/null(최대 500자), `columns`는 1~50개 배열이다. 각 컬럼의 `name`·`dataType`은 1~100자 비공백 문자열이고 `nullable`·`primaryKey`는 필수 boolean이다. `foreignKey`는 선택 문자열/null(최대 200자, 예: member.id), 컬럼 `description`은 선택 문자열/null(최대 500자)이다. 공백 제거·대소문자 무시 기준의 컬럼명 중복과 NULL 허용 PK는 400이다. 미지 필드·중복 JSON 키·추가 JSON 문서·미지원 버전·잘못된 Unicode/NUL도 400이다. 내부 JSON 문자열을 해석한 뒤 길이·Unicode를 다시 검사하며, content 전체의 기존 50,000자 제한도 적용한다. 명세서는 실행 가능한 SQL이나 HTML이 아니다. 생성/수정은 기존 USER 소유권·상태·프로필 계약을 유지하고, 공개 조회에서는 문자열 content와 순서를 그대로 반환한다. [표현 블록 설계](POST_VISUAL_BLOCKS.md)에 예시와 단계별 범위를 기록한다.
 - API 언어 값은 JAVA, JAVASCRIPT, TYPESCRIPT, PYTHON, HTML, CSS, SQL, JSON, YAML, MARKDOWN, BASH, SHELL이다.
 - `slug`는 생성 시 선택 입력이다. 영문 소문자·숫자와 단어 사이 하이픈만 허용하며 최대 200자다. 대문자는 소문자로 바꾼다. 숫자만으로 된 값과 `search`는 사용할 수 없다. 같은 작성자가 이미 사용한 값은 `-2`, `-3` 접미사를 붙여 첫 빈 값을 할당하며 논리 삭제한 Post의 slug도 예약된 상태로 남는다. 생략하거나 null이면 slug 없이 생성되고 주소에는 postNumber를 사용한다. PATCH에서 `slug`를 보내면 400이다.
 - `displayOrder`는 선택 입력이며 0 이상 정수다. 생성 기본값은 0이고 지정하면 본인의 미삭제 전체 Post 순서 안에 삽입한다. PATCH에서 지정하면 같은 목록 안에서 위치를 이동한다. 삭제하면 뒤의 Post 순서를 압축한다.
