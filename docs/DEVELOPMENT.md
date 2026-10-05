@@ -107,6 +107,8 @@ IntelliJ Run Configuration에서는 `SPRING_PROFILES_ACTIVE=local`을 지정하�
 
 ## 3. Git 작업 절차
 
+> Pebble 두 저장소의 최신 Git 작업 기준은 [공유 Git 작업 순서](system/projects/pebble/GIT_WORKFLOW.md)다. 아래 Git 관련 문구는 백엔드 로컬 개발 가이드의 과거 설명이며, 새 작업은 공유 문서의 Issue → 작업 브랜치 → push → PR → 검토·CI → 병합 순서를 따른다.
+
 ### 이슈
 
 기능, 버그 수정, 기술 작업은 구현 전에 GitHub Issue에 목적과 완료 조건을 적는다. 작은 문서 수정처럼 별도 Issue가 과도한 경우에는 연관된 Issue에 묶을 수 있다.
