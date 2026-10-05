@@ -243,20 +243,21 @@ Post/Project 관리자 운영은 기존 blocked 메타데이터·visibility·del
 
 ### 6.2 `post_block`
 
-Post 본문을 순서가 있는 텍스트·코드·테이블 명세서 블록으로 저장한다.
+Post 본문을 순서가 있는 텍스트·코드·테이블 명세서·아키텍처 블록으로 저장한다.
 
 | 컬럼 | PostgreSQL 타입 | NULL | 규칙 |
 |---|---|---:|---|
 | `id` | BIGINT | N | PK, TSID |
 | `post_id` | BIGINT | N | FK → `post.id` |
-| `block_type` | VARCHAR(16) | N | CHECK: `TEXT`, `CODE`, `TABLE` |
-| `content` | TEXT | N | 텍스트·코드 또는 TABLE JSON 문자열; `CHECK (char_length(content) <= 50000)` |
+| `block_type` | VARCHAR(16) | N | CHECK: `TEXT`, `CODE`, `TABLE`, `ARCHITECTURE` |
+| `content` | TEXT | N | 텍스트·코드 또는 TABLE/ARCHITECTURE JSON 문자열; `CHECK (char_length(content) <= 50000)` |
 | `language` | VARCHAR(50) | Y | 코드 언어. `CODE` 블록에서 필수 |
 | `title` | VARCHAR(100) | Y | 블록 제목 또는 설명 |
 | `display_order` | INTEGER | N | Post 내 블록 순서, 0 이상 |
 
 - UNIQUE (`post_id`, `display_order`)
-- `block_type = CODE`이면 `language`가 필수인 CHECK 제약을 둔다. TABLE의 language는 NULL이어야 한다.
+- `block_type = CODE`이면 `language`가 필수인 CHECK 제약을 둔다. TABLE/ARCHITECTURE의 language는 NULL이어야 한다.
+- V15는 ARCHITECTURE type과 language=NULL CHECK를 추가한다. 요소·그룹·연결 참조는 요청 경계에서 검증하며 기존 TEXT content에 저장한다.
 - V14는 type CHECK를 확장하고 TABLE 언어 제약을 추가한다. 기존 TEXT/CODE 행은 변환하지 않는다. TABLE의 버전·컬럼 구조는 API에서 검사하고 기존 TEXT content 컬럼에 JSON 문자열로 저장한다. 전용 테이블이나 JSONB 컬럼은 추가하지 않는다.
 - Post를 물리 삭제할 때 해당 블록은 함께 삭제할 수 있다.
 

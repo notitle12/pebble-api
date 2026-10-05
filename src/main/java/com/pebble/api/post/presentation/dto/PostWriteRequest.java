@@ -68,6 +68,10 @@ public final class PostWriteRequest {
                     if (language != null) fail(prefix + "language", "테이블 명세서에는 코드 언어를 지정할 수 없습니다.");
                     TableSpecInput.validate(content, prefix + "content");
                 }
+                if (type == BlockType.ARCHITECTURE) {
+                    if (language != null) fail(prefix + "language", "아키텍처에는 코드 언어를 지정할 수 없습니다.");
+                    ArchitectureSpecInput.validate(content, prefix + "content");
+                }
                 String blockTitle = block.has("title") ? text(block.get("title"), prefix + "title", 100, true, false) : null;
                 parsed.add(new BlockInput(type, content, language, blockTitle));
             }
