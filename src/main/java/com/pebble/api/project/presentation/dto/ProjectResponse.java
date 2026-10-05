@@ -23,11 +23,13 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                               ProjectVisibility visibilityStatus, long likeCount, boolean likedByMe,
                               Instant publishedAt, Instant createdAt, Instant updatedAt,
                               @JsonInclude(JsonInclude.Include.NON_NULL) Boolean isBlocked) {
-    public static ProjectResponse from(ProjectView view) {
+    public static ProjectResponse from(ProjectView view) { return from(view, com.pebble.api.member.domain.Member::getProfileImageUrl); }
+
+    public static ProjectResponse from(ProjectView view, java.util.function.Function<com.pebble.api.member.domain.Member, String> imageUrl) {
         var project = view.project();
         var owner = project.getOwner();
         return new ProjectResponse(project.getId().toString(), new Owner(owner.getId().toString(), owner.getHandle(),
-                owner.getBlogName(), owner.getNickname(), owner.getProfileImageUrl()), project.getName(), project.getSummary(),
+                owner.getBlogName(), owner.getNickname(), imageUrl.apply(owner)), project.getName(), project.getSummary(),
                 view.detail() ? project.getDescription() : null,
                 view.detail() ? project.getArchitectureDescription() : null,
                 view.detail() ? project.getExecutionInstructions() : null,
@@ -49,8 +51,10 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
 
     public record ProjectPage(List<ProjectResponse> content, int page, int size, long totalElements, int totalPages,
                               boolean hasNext, boolean hasPrevious) {
-        public static ProjectPage from(Page<ProjectView> page) {
-            return new ProjectPage(page.getContent().stream().map(ProjectResponse::from).toList(), page.getNumber(),
+        public static ProjectPage from(Page<ProjectView> page) { return from(page, com.pebble.api.member.domain.Member::getProfileImageUrl); }
+
+        public static ProjectPage from(Page<ProjectView> page, java.util.function.Function<com.pebble.api.member.domain.Member, String> imageUrl) {
+            return new ProjectPage(page.getContent().stream().map(item -> ProjectResponse.from(item, imageUrl)).toList(), page.getNumber(),
                     page.getSize(), page.getTotalElements(), page.getTotalPages(), page.hasNext(), page.hasPrevious());
         }
     }

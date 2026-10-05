@@ -44,6 +44,9 @@ public class Member {
     @Column(name = "profile_image_url", length = 2048)
     private String profileImageUrl;
 
+    @Column(name = "profile_image_storage_key", length = 512, unique = true)
+    private String profileImageStorageKey;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MemberStatus status;
@@ -129,6 +132,13 @@ public class Member {
 
     public String getProfileImageUrl() {
         return profileImageUrl;
+    }
+
+    public String getProfileImageStorageKey() { return profileImageStorageKey; }
+
+    public void changeProfileImage(String storageKey) {
+        this.profileImageStorageKey = storageKey;
+        this.profileImageUrl = null;
     }
 
     public MemberStatus getStatus() {

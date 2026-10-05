@@ -31,13 +31,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 public class ProjectController {
+    private final com.pebble.api.member.application.MemberProfileImages profileImages;
     private final ProjectService projects;
     private final ProjectLikeService likes;
 
     @GetMapping("/api/v1/projects/search")
     public ApiResponse<ProjectPage> search(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("q", "page", "size", "sort", "tagId", "lifecycleStatus"));
-        return ApiResponse.of(ProjectPage.from(likes.decorate(projects.search(ProjectWriteRequest.searchTerm(query.getFirst("q")),
+        return ApiResponse.of(page(likes.decorate(projects.search(ProjectWriteRequest.searchTerm(query.getFirst("q")),
                 optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
@@ -45,7 +46,7 @@ public class ProjectController {
     public ApiResponse<ProjectPage> member(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query,
                                            @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
-        return ApiResponse.of(ProjectPage.from(likes.decorate(projects.listMember(ProjectWriteRequest.id(memberId, "memberId"),
+        return ApiResponse.of(page(likes.decorate(projects.listMember(ProjectWriteRequest.id(memberId, "memberId"),
                 optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
@@ -61,13 +62,13 @@ public class ProjectController {
                 throw invalid("visibilityStatus");
             }
         }
-        return ApiResponse.of(ProjectPage.from(likes.decorate(projects.listMine(memberId(jwt), visibility, pageable(query)), requesterId(jwt))));
+        return ApiResponse.of(page(likes.decorate(projects.listMine(memberId(jwt), visibility, pageable(query)), requesterId(jwt))));
     }
 
     @PostMapping(value = "/api/v1/projects", consumes = "application/json")
     public ResponseEntity<ApiResponse<ProjectResponse>> create(@AuthenticationPrincipal Jwt jwt,
                                                                 @RequestBody JsonNode request) {
-        ProjectResponse response = ProjectResponse.from(likes.decorate(
+        ProjectResponse response = response(likes.decorate(
                 projects.create(memberId(jwt), ProjectWriteRequest.parse(request, true)), requesterId(jwt)));
         return ResponseEntity.created(org.springframework.web.util.UriComponentsBuilder.fromPath("/api/v1/projects/{id}")
                 .buildAndExpand(response.id()).encode().toUri()).body(ApiResponse.of(response));
@@ -76,7 +77,7 @@ public class ProjectController {
     @GetMapping("/api/v1/projects")
     public ApiResponse<ProjectPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
-        return ApiResponse.of(ProjectPage.from(likes.decorate(
+        return ApiResponse.of(page(likes.decorate(
                 projects.listPublic(optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
@@ -98,14 +99,14 @@ public class ProjectController {
 
     @GetMapping("/api/v1/projects/{projectId:[0-9]+}")
     public ApiResponse<ProjectResponse> detail(@PathVariable String projectId, @AuthenticationPrincipal Jwt jwt) {
-        return ApiResponse.of(ProjectResponse.from(likes.decorate(projects.detail(ProjectWriteRequest.id(projectId, "projectId"),
+        return ApiResponse.of(response(likes.decorate(projects.detail(ProjectWriteRequest.id(projectId, "projectId"),
                 jwt == null ? null : memberId(jwt)), requesterId(jwt))));
     }
 
     @PatchMapping(value = "/api/v1/projects/{projectId:[0-9]+}", consumes = "application/json")
     public ApiResponse<ProjectResponse> update(@PathVariable String projectId, @AuthenticationPrincipal Jwt jwt,
                                                 @RequestBody JsonNode request) {
-        return ApiResponse.of(ProjectResponse.from(likes.decorate(projects.update(ProjectWriteRequest.id(projectId, "projectId"),
+        return ApiResponse.of(response(likes.decorate(projects.update(ProjectWriteRequest.id(projectId, "projectId"),
                 memberId(jwt), ProjectWriteRequest.parse(request, false)), requesterId(jwt))));
     }
 
@@ -151,4 +152,7 @@ public class ProjectController {
     private ApplicationException invalid(String field) {
         return new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, field, "지원되는 요청 값을 입력해 주세요.");
     }
+    private ProjectResponse response(com.pebble.api.project.application.ProjectService.ProjectView view) { return ProjectResponse.from(view, profileImages::url); }
+    private ProjectPage page(org.springframework.data.domain.Page<com.pebble.api.project.application.ProjectService.ProjectView> view) { return ProjectPage.from(view, profileImages::url); }
+
 }

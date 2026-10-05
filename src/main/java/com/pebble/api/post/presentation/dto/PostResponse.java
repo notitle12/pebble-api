@@ -18,13 +18,15 @@ public record PostResponse(String id, String postNumber, String slug, String url
                            PostVisibility visibilityStatus, long likeCount, boolean likedByMe,
                            Instant publishedAt, Instant createdAt, Instant updatedAt,
                            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean isBlocked) {
-    public static PostResponse from(PostView view) {
+    public static PostResponse from(PostView view) { return from(view, com.pebble.api.member.domain.Member::getProfileImageUrl); }
+
+    public static PostResponse from(PostView view, java.util.function.Function<com.pebble.api.member.domain.Member, String> imageUrl) {
         var post = view.post();
         var member = post.getAuthor();
         var category = post.getCategory();
         return new PostResponse(post.getId().toString(), Long.toString(post.getPostNumber()), post.getSlug(), post.getSlug() == null ? Long.toString(post.getPostNumber()) : post.getSlug(), post.getDisplayOrder(),
                 new Author(member.getId().toString(), member.getHandle(), member.getBlogName(), member.getNickname(),
-                member.getProfileImageUrl()), post.getTitle(), post.getSummary(),
+                imageUrl.apply(member)), post.getTitle(), post.getSummary(),
                 view.blocks() == null ? null : view.blocks().stream().map(block -> new Block(block.getType(),
                         block.getContent(), block.getLanguage(), block.getTitle(), block.getDisplayOrder())).toList(),
                 category == null ? null : new Classification(category.getId().toString(), category.getName(),
@@ -42,8 +44,10 @@ public record PostResponse(String id, String postNumber, String slug, String url
 
     public record PostPage(List<PostResponse> content, int page, int size, long totalElements, int totalPages,
                            boolean hasNext, boolean hasPrevious) {
-        public static PostPage from(Page<PostView> page) {
-            return new PostPage(page.getContent().stream().map(PostResponse::from).toList(), page.getNumber(),
+        public static PostPage from(Page<PostView> page) { return from(page, com.pebble.api.member.domain.Member::getProfileImageUrl); }
+
+        public static PostPage from(Page<PostView> page, java.util.function.Function<com.pebble.api.member.domain.Member, String> imageUrl) {
+            return new PostPage(page.getContent().stream().map(item -> PostResponse.from(item, imageUrl)).toList(), page.getNumber(),
                     page.getSize(), page.getTotalElements(), page.getTotalPages(), page.hasNext(), page.hasPrevious());
         }
     }

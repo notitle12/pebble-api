@@ -41,6 +41,7 @@ public class NaverAuthController {
 
     private final NaverLoginService naverLoginService;
     private final ObjectMapper mapper;
+    private final com.pebble.api.member.application.MemberProfileImages images;
 
     @PostMapping("/authorization")
     public ResponseEntity<ApiResponse<AuthorizationResponse>> beginAuthorization() {
@@ -115,7 +116,7 @@ public class NaverAuthController {
         return new MemberResponse(
                 Long.toString(member.getId()),
                 member.getNickname(),
-                member.getProfileImageUrl(),
+                images.url(member),
                 member.getStatus().name(),
                 "USER", member.getBlogName(), member.getHandle(), member.isProfileCompleted());
     }
