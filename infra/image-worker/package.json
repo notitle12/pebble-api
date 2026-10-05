@@ -1,0 +1,16 @@
+{
+  "name": "pebble-image-worker",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "miniflare": "5.20261001.0-alpha",
+    "wrangler": "4.147.0"
+  }
+}

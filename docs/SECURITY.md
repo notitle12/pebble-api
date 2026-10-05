@@ -299,6 +299,8 @@ Pepper는 토큰의 충분한 난수성, 안전한 보관, TLS, 짧은 Access To
 
 R2는 비공개 버킷과 해당 버킷에 한정된 Object Read & Write S3 자격 증명을 사용한다. Access Key ID·Secret Access Key는 보호된 실행 환경에만 주입하고 API Token 원문을 저장소 비밀번호로 사용하지 않는다. R2_ENABLED=true인 경우에만 클라이언트를 생성하며 HTTPS 계정 루트 endpoint, region auto와 버킷명·자격 증명을 검증한다. 키 값·SDK 예외 원문을 기록하거나 응답하지 않는다. SDK API 호출은 6초, 개별 시도는 3초로 제한한다.
 
-미디어 업로드·관리 권한은 각 콘텐츠 Feature가 소유한다. 서버 생성 UUID 키와 검증·재인코딩한 WebP만 저장하며 입력 원본·EXIF는 보존하지 않는다. PUBLIC·미차단·비탈퇴 소유자 콘텐츠에만 15분 presigned GET URL을 제공한다. HIDDEN·차단 콘텐츠의 본인/관리자 조회는 미디어 메타데이터를 반환할 수 있지만 새 URL은 반환하지 않는다. 이미 발급된 URL은 만료 전까지 사용할 수 있다.
+미디어 업로드·관리 권한은 각 콘텐츠 Feature가 소유한다. 서버 생성 UUID 키와 검증·재인코딩한 WebP만 저장하며 입력 원본·EXIF는 보존하지 않는다. PUBLIC·미차단·비탈퇴 소유자 콘텐츠에만 15분 서명 GET URL을 제공한다(CDN 비활성 시 S3 presigned URL). HIDDEN·차단 콘텐츠의 본인/관리자 조회는 미디어 메타데이터를 반환할 수 있지만 새 URL은 반환하지 않는다. 이미 발급된 URL은 만료 전까지 사용할 수 있다.
 
 multipart는 파일 10MiB/요청 11MiB 한도이며 쓰기는 USER Bearer 경로다. Refresh Cookie는 미디어 인증 수단이 아니고 전역 CSRF를 비활성화하지 않는다. 비활성 R2 또는 저장소 작업 실패는 안전한 STORAGE_UNAVAILABLE 503으로 처리한다. DB 파기와 R2 파기는 삭제 큐로 조정하며 큐 성공 완료·적체·실패와 백업 복원 시 탈퇴 반영을 운영에서 점검한다.
+
+이미지 CDN은 선택적으로 전용 Worker를 사용한다. API의 기존 공개 상태 판정 이후 독립 HMAC-SHA256 키로 15분 URL을 발급하며 Worker는 캐시 HIT를 포함한 모든 요청에 서명·만료·origin·서버 UUID WebP 경로를 검사한다. 비공개 R2 바이트만 내부 Cache API에 캐시하고 외부 응답은 no-store다. 발급된 URL은 기존과 같이 숨김·차단·삭제 뒤에도 잔여 유효 시간에 사용할 수 있으나 만료 후 캐시가 있어도 차단한다. CDN 키·서명 URL·SDK 상세 오류를 로그에 남기지 않는다. 현재 구현·원격 배포 상태·백엔드 활성화 절차는 [이미지 Worker](../infra/image-worker/README.md)를 따른다.

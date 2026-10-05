@@ -62,3 +62,15 @@ jobs:
 
       - name: Run tests and build deployment JAR
         run: ./gradlew clean test bootJar
+
+      - name: Set up Node for image CDN tests
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: infra/image-worker/package-lock.json
+
+      - name: Test image CDN Worker
+        run: |
+          npm ci --prefix infra/image-worker
+          npm test --prefix infra/image-worker
