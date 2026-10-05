@@ -239,9 +239,10 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void refusesWithdrawalPendingMember() throws Exception {
+        Instant requestedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         Member member = memberRepository.saveAndFlush(new Member(
                 "pending", null, MemberStatus.WITHDRAWAL_PENDING,
-                java.time.Instant.now(), java.time.Instant.now().plusSeconds(60)));
+                requestedAt, requestedAt.plusSeconds(60)));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "pending-naver-id"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
@@ -254,7 +255,10 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody("code", state)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("WITHDRAWAL_PENDING"));
+                .andExpect(jsonPath("$.error.code").value("WITHDRAWAL_PENDING"))
+                .andExpect(jsonPath("$.error.details[0].field").value("withdrawalScheduledAt"))
+                .andExpect(jsonPath("$.error.details[0].reason").value(member.getWithdrawalScheduledAt().toString()))
+                .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     @Test
