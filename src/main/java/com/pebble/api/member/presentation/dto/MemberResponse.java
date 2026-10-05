@@ -17,8 +17,10 @@ public record MemberResponse(
         Instant nicknameChangeAvailableAt,
         Instant blogNameChangeAvailableAt) {
 
-    public static MemberResponse from(Member member) {
-        return new MemberResponse(member.getId().toString(), member.getNickname(), member.getProfileImageUrl(), member.getStatus(),
+    public static MemberResponse from(Member member) { return from(member, member.getProfileImageUrl()); }
+
+    public static MemberResponse from(Member member, String imageUrl) {
+        return new MemberResponse(member.getId().toString(), member.getNickname(), imageUrl, member.getStatus(),
                 member.getCreatedAt(), member.getBlogName(), member.getHandle(), member.isProfileCompleted(),
                 member.isProfileCompleted() ? member.getNicknameChangedAt().plus(MemberProfileService.CHANGE_COOLDOWN) : null,
                 member.isProfileCompleted() ? member.getBlogNameChangedAt().plus(MemberProfileService.CHANGE_COOLDOWN) : null);

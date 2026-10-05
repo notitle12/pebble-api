@@ -522,3 +522,10 @@ V10에서 두 테이블과 활성 부분 UNIQUE·회원 역방향 인덱스를 �
 - 테이블, 관계, 제약, 인덱스: `DB.md`
 - Endpoint, Request/Response: `API.md`
 - 인증·인가와 토큰 보안: `SECURITY.md`
+
+
+### 회원 프로필 사진 및 식별자 확장 (V16, 2026-10-05)
+
+member.profile_image_storage_key VARCHAR(512) nullable 및 고유 인덱스는 서비스가 생성한 R2 사진 키만 저장한다. 기존 profile_image_url은 SNS 기본 사진이며 업로드·초기화 시 NULL이 된다. 만료된 signed URL은 DB에 저장하지 않는다. 사진 키 변경·회원 삭제 트리거는 media_deletion_job에 이전 키를 남기며 삭제 작업은 member 참조도 검사한다.
+
+ck_member_handle은 `[a-z][a-z0-9_-]{1,28}[a-z0-9_]`로 확장한다. 예약어와 최초 생성 후 변경 금지 트리거는 유지한다. 이미 적용한 V4를 수정하지 않는다.

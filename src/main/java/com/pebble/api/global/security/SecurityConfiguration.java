@@ -70,7 +70,7 @@ public class SecurityConfiguration {
                                 "/api/v1/admin/projects/{id:[0-9]+}/block", "/api/v1/admin/posts/{id:[0-9]+}",
                                 "/api/v1/admin/projects/{id:[0-9]+}").hasAnyRole("MANAGER", "MASTER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/members/me", "/api/v1/members/me/posts", "/api/v1/members/me/boards",
-                                "/api/v1/members/me/projects").hasRole("USER")
+                                "/api/v1/members/me/projects", "/api/v1/members/me/profile/availability").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/members/me").hasRole("USER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/tags").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/members/me/profile").hasRole("USER")
@@ -211,6 +211,7 @@ public class SecurityConfiguration {
         CorsConfiguration profileCors = new CorsConfiguration(cors);
         profileCors.setAllowedMethods(List.of("POST", "PATCH"));
         source.registerCorsConfiguration("/api/v1/members/me/profile", profileCors);
+        source.registerCorsConfiguration("/api/v1/members/me/profile/availability", getCors);
         source.registerCorsConfiguration("/api/v1/members/me/posts", getCors);
         source.registerCorsConfiguration("/api/v1/members/{memberId:[0-9]+}/posts", getCors);
         CorsConfiguration postCollectionCors = new CorsConfiguration(cors);

@@ -25,10 +25,17 @@ public class MemberNames {
         validateUnicode(base, "nickname");
         String candidate = truncate(base, 30);
         for (int suffix = 2; members.existsByNickname(candidate); suffix++) {
-            String ending = "-" + suffix;
+            String ending = suffix <= 100 ? Integer.toString(java.util.concurrent.ThreadLocalRandom.current().nextInt(1000, 1000000)) : "-" + suffix;
             candidate = truncate(base, 30 - ending.length()) + ending;
         }
         return candidate;
+    }
+
+    public static String normalizeHandle(String value) {
+        String handle = normalize(value, 30, "handle").toLowerCase(java.util.Locale.ROOT);
+        if (!handle.matches("[a-z][a-z0-9_-]{1,28}[a-z0-9_]") || java.util.Set.of("admin", "api", "auth", "me", "posts", "search", "settings", "www").contains(handle))
+            throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, "handle", "영문으로 시작하는 3~30자의 영문·숫자·하이픈·언더바를 사용해 주세요. 예약어와 끝 하이픈은 사용할 수 없습니다.");
+        return handle;
     }
 
     public static String normalize(String value, int limit, String field) {
@@ -42,7 +49,7 @@ public class MemberNames {
     private static void validateUnicode(String value, String field) {
         for (int offset = 0; offset < value.length();) {
             int point = value.codePointAt(offset);
-            if (point == 0 || (point >= 0xD800 && point <= 0xDFFF)) throw invalid(field);
+            if (Character.isISOControl(point) || (point >= 0xD800 && point <= 0xDFFF)) throw invalid(field);
             offset += Character.charCount(point);
         }
     }

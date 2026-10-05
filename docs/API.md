@@ -434,14 +434,24 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 일반 회원 최초 설정과 변경:
 
-- 신규 Naver 가입의 닉네임은 공급자 별명(없거나 공백이면 `pebble`)을 기본값으로 한다. 이미 사용 중이면 `별명-2`, `별명-3`처럼 첫 빈 숫자 접미사를 붙인다. 접미사를 포함해 30 유니코드 문자 이내로 잘라 저장한다. 재로그인은 저장된 닉네임을 변경하지 않는다. Naver 로그인 member 응답에도 `blogName`, `handle`, `profileCompleted`를 포함한다.
+- 신규 Naver 가입의 닉네임은 공급자 별명(없거나 공백이면 `pebble`)을 기본값으로 한다. 이미 사용 중이면 무작위 4~6자리 숫자를 뒤에 붙여 다시 중복을 확인한다. 99회 무작위 후보 충돌 이후에는 숫자 접미사 순차 탐색으로 빈 이름을 찾는다. 접미사를 포함해 30 유니코드 문자 이내로 잘라 저장한다. 재로그인은 저장된 닉네임을 변경하지 않는다. Naver 로그인 member 응답에도 `blogName`, `handle`, `profileCompleted`를 포함한다.
 - `POST /members/me/profile` 요청은 `{blogName, handle, nickname?}`이다. 200과 위 회원 응답을 반환한다. 최초 설정 전에 기본 닉네임을 직접 바꿀 수 있으며 생략하면 현재 기본값을 사용한다. `blogName`은 최대 100자, `nickname`은 최대 30자이고 공백만 있는 값은 거부한다. 앞뒤 공백을 제거하고 NFC로 정규화한다. 두 표시 이름은 한글·영문을 허용하며 정규화한 저장 값의 정확한 일치로 중복을 검사한다.
-- `handle`은 Naver 식별자와 별개의 영구 공개 아이디다. 영문 소문자로 시작하고 영문 소문자·숫자·하이픈 3~30자를 사용한다. 대문자는 소문자로 정규화하고 끝 하이픈 및 예약어 `admin`, `api`, `auth`, `me`, `posts`, `search`, `settings`, `www`를 거부한다. 최초 설정 후 변경할 수 없으며 DB에서도 변경을 막는다.
+- `handle`은 Naver 식별자와 별개의 영구 공개 아이디다. 영문 소문자로 시작하고 영문 소문자·숫자·하이픈·언더바 3~30자를 사용한다. 대문자는 소문자로 정규화하고 끝 하이픈 및 예약어 `admin`, `api`, `auth`, `me`, `posts`, `search`, `settings`, `www`를 거부한다. 최초 설정 후 변경할 수 없으며 DB에서도 변경을 막는다.
 - 블로그명·닉네임·handle은 서비스 전체에서 각각 고유하다. 최종 저장까지 같은 이름 공간의 PostgreSQL 트랜잭션 잠금과 고유 제약으로 조정한다. 직접 선택한 이름은 자동으로 수정하지 않고 `DUPLICATE_NICKNAME`, `DUPLICATE_BLOG_NAME`, `DUPLICATE_HANDLE` 409를 반환한다. 기본 Naver 닉네임에만 자동 접미사를 사용한다.
 - 최초 설정은 한 번만 가능하고 재요청은 `PROFILE_ALREADY_COMPLETED` 409다. 로그인 직후 `profileCompleted=false`이면 최초 설정이 필요하다. 미설정 회원도 설정·본인 조회·기존 인증 API는 사용할 수 있고, 후속 콘텐츠 쓰기는 member의 완료 상태 검증을 적용한다.
-- `PATCH /members/me/profile`은 `{blogName?, nickname?}`만 허용한다. 생략은 유지하고 명시 null·비문자열·미지원 필드는 400이다. handle을 포함하면 값이 같아도 400이다. 최초 설정 전 PATCH는 `PROFILE_REQUIRED` 409다.
+- `PATCH /members/me/profile`은 `{blogName?, nickname?, removeProfileImage?}`만 허용한다. 생략은 유지하고 명시 null·비문자열·미지원 필드는 400이다. handle을 포함하면 값이 같아도 400이다. 최초 설정 전 PATCH는 `PROFILE_REQUIRED` 409다.
 - 최초 설정일부터 각 표시 이름의 마지막 실제 변경 시각을 기준으로 독립적인 7일(168시간) 쿨타임을 적용한다. 같은 값 또는 빈 PATCH는 성공하며 시각을 갱신하지 않는다. 제한 중 변경은 `NICKNAME_CHANGE_COOLDOWN` 또는 `BLOG_NAME_CHANGE_COOLDOWN` 409다. 변경 가능 시각은 위 응답의 두 `*ChangeAvailableAt` UTC 필드로 확인한다. 여러 필드를 보낸 요청은 모두 성공하거나 모두 취소된다.
 - 두 쓰기 API는 검증된 USER Bearer JWT와 DB ACTIVE 상태를 요구하며 같은 회원 행을 잠가 최초 설정·쿨타임을 검증한다. Refresh Cookie나 세션 쿠키로 인증하지 않는다. 허용 Origin에 POST/PATCH와 Authorization·Content-Type CORS를 제공한다. 별도 프로필 GET은 제공하지 않고 `GET /members/me`를 사용한다.
+
+프로필 생성·편집 확장 (2026-10-05):
+
+- `GET /members/me/profile/availability?field=blogName|nickname|handle&value=...`는 ACTIVE USER Bearer를 요구하며 `{data:{available,value}}`를 반환한다. value는 저장과 동일하게 정규화하며 본인의 현재 값은 사용 가능하다. 정확히 field·value 각 1개만 허용한다. 중복 검사는 예약이 아니며 최종 쓰기 시 고유 제약을 다시 적용한다.
+- 표시 이름은 한글·영문·숫자·공백·일반 특수문자·이모지를 허용한다. 공백만 있는 값, 제어 문자, 잘못된 Unicode를 거부하며 길이는 정규화 후 유니코드 코드 포인트 수로 검사한다.
+- 생성 JSON에도 선택적인 `removeProfileImage` boolean을 허용한다. true는 SNS 기본 사진 또는 업로드 사진을 제거하며 false·생략은 유지한다. null·비boolean은 거부한다.
+- 사진을 함께 저장할 때 같은 POST/PATCH 경로에 multipart/form-data를 전송한다. `profile` 문자열 파라미터 1개에 위 JSON을 넣고 `file` 파일 1개를 넣는다. 추가 파일·파라미터·query·중복 JSON 필드·후행 JSON은 거부한다. 파일과 removeProfileImage=true는 함께 사용할 수 없다.
+- 파일은 기존 미디어와 동일하게 PNG/JPEG/WebP 정지 이미지만 10MiB·2천만 픽셀·한 변 8천 픽셀 이내로 허용한다. 480px WebP로 재인코딩해 R2 비공개 저장소에 저장한다. 클라이언트가 URL·storage key를 지정할 수 없다.
+- 이름·생성 완료 상태·사진 참조는 한 DB 트랜잭션에서 저장한다. 실패한 업로드는 사전 커밋한 삭제 작업이 회수하고, 교체·초기화·회원 물리 삭제로 제거한 사진도 삭제 큐에 등록한다. 사진에는 이름의 7일 변경 제한을 적용하지 않는다.
+- 본인 조회·로그인·공개 블로그·게시글/프로젝트/댓글 작성자 응답은 저장 사진의 만료 signed URL을 반환한다. 사진을 선택하거나 초기화한 UI 초안은 저장 전 서버를 변경하지 않는다.
 
 `DELETE /members/me`는 ACTIVE USER Bearer를 요구하고 본문·query를 받지 않는다. 회원 쓰기 잠금 안에서 모든 기존 Refresh Family를 폐기하고 `WITHDRAWAL_PENDING` 및 요청 시각·요청 시각 + 정확히 7일인 삭제 예정 시각을 기록한다. 응답은 202와 `{withdrawalScheduledAt}`이며 Refresh Cookie를 만료시킨다. 정지는 403 ACCOUNT_SUSPENDED, 이미 탈퇴 대기는 403 ACCOUNT_WITHDRAWAL_PENDING으로 거부하고 최초 예정 시각을 연장하지 않는다. 미존재 회원은 404다. 허용 Origin의 GET·DELETE·Authorization CORS를 지원한다.
 
