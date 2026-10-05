@@ -556,7 +556,7 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
 
 `urlKey`는 slug가 있으면 slug, 없으면 `postNumber` 문자열이다. `GET /api/v1/blogs/{handle}/posts/{postKey}`에서 숫자 키는 작성자별 번호, 그 외 키는 slug로 해석한다. 본인 블로그 기본 목록은 displayOrder 오름차순이고 공개 전체 목록 기본 순서는 publishedAt 내림차순이다. 공개 주소 경로는 공개 handle과 postNumber 또는 slug를 사용하며 Naver 식별자와 내부 TSID를 경로에 사용하지 않는다. 응답의 `id`는 TSID 문자열이다.
 
-Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 현재 항상 null이다. `likeCount`와 `likedByMe`는 6.7절의 공개 집계·요청 회원 규칙을 따른다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 검수 응답은 6.5절을 따른다.
+Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 R2 저장소가 활성화되어 있고 썸네일이 저장되어 있으며 PUBLIC·미차단·소유자 비탈퇴 대기 조건을 만족할 때 15분 유효한 signed URL을 반환한다. 썸네일이 없거나 URL 발급 조건을 만족하지 않으면 null이다. 미디어 세부 계약은 6.8절을 따른다. `likeCount`와 `likedByMe`는 6.7절의 공개 집계·요청 회원 규칙을 따른다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 검수 응답은 6.5절을 따른다.
 
 ### 6.4 Project
 
