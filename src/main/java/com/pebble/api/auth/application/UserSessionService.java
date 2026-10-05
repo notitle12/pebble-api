@@ -26,7 +26,7 @@ public class UserSessionService {
     public LoginGrant login(long memberId) {
         Member member = members.findForAuthentication(memberId)
                 .orElseThrow(() -> new AuthException(AuthError.INVALID_CREDENTIALS));
-        requireActive(member.getStatus());
+        requireActive(member);
         Instant now = clock.instant();
         String accessToken = accessTokens.issueForMember(memberId, now);
         IssuedRefreshToken refresh = refreshTokens.issue(memberId, now);
@@ -58,9 +58,13 @@ public class UserSessionService {
         refreshTokens.logout(token);
     }
 
-    private void requireActive(MemberStatus status) {
+    private void requireActive(Member member) {
+        MemberStatus status = member.getStatus();
         if (status == MemberStatus.SUSPENDED) throw new AuthException(AuthError.ACCOUNT_SUSPENDED);
-        if (status == MemberStatus.WITHDRAWAL_PENDING) throw new AuthException(AuthError.WITHDRAWAL_PENDING);
+        if (status == MemberStatus.WITHDRAWAL_PENDING) {
+            throw new AuthException(AuthError.WITHDRAWAL_PENDING, "withdrawalScheduledAt",
+                    member.getWithdrawalScheduledAt().toString());
+        }
     }
 
     public record LoginGrant(String accessToken, String refreshToken, Duration cookieTtl, Member member) {
