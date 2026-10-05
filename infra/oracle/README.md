@@ -36,3 +36,12 @@ Oracle에서도 `docker load`가 완료됐고 `linux/arm64 user=10001:10001`과 
 HTTPS reverse proxy는 서버 조건을 확인한 뒤 선택한다. Caddy를 선택하면 도메인과 외부 접속 조건에 따라 인증서 발급·갱신을 자동 관리할 수 있다. Cloudflare SSL/TLS는 origin HTTPS 확인 후 Full (strict)을 사용하고 Flexible로 바꾸지 않는다.
 
 공식 참고: [Ubuntu Docker 설치](https://docs.docker.com/engine/install/ubuntu/), [Java 21 이미지](https://hub.docker.com/_/eclipse-temurin), [Caddy HTTPS](https://caddyserver.com/docs/quick-starts/https), [reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
+
+
+## 백업·복원 검증 도구
+
+`backup-postgres.sh`는 운영 DB를 custom format으로 덤프하고 목록 검증·SHA256을 기록한다. 실행·설치는 별도 운영 작업이며 포함된 타이머가 설치되었다는 의미는 아니다.
+
+`sudo bash verify-restore.sh /opt/pebble/runtime/backups/<파일>.dump <기대 성공 마이그레이션 수>`는 별도 임시 DB에 복원한 뒤 검증하며 해당 임시 DB만 삭제한다. 예를 들어 V16 이후 백업에는 16을 명시하며 V16 이전 백업에는 15를 명시한다. 운영 DB를 덮어쓰지 않는다. 예상 릴리스는 해당 백업의 메타데이터로 확인해야 한다.
+
+대역 도구 검사 `python3 infra/oracle/test_backup_restore.py`는 실제 DB/비밀 없이 정상·실패·버전 불일치의 임시 DB 정리와 잘못된 입력 거부를 검증한다. `verify-runtime.py`는 서버 비밀을 내부에서 읽으므로 사용자 제한을 확인하기 전 자동 실행하지 않는다. 이번 Git 사후 통합에서는 문법만 확인했다.
