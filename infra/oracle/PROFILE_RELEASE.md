@@ -11,3 +11,5 @@ V16은 handle CHECK를 확장하고 member.profile_image_storage_key와 제거 �
 Oracle staging에서 JAR만 포함한 ARM64 이미지 `pebble-api:profile-20261005`를 빌드했다. 이미지 manifest `sha256:07508fca00341cd2858ef561b8368ebbaf489041d094b207b05e7d91a6863829`. 운영 compose의 API 이미지 태그만 교체했고 이전 compose는 같은 backups 폴더에 보존했다. DB·Redis·비밀 값·방화벽은 변경하지 않았다. V16 success=true, categories 200, Guest 중복 검사 401, 운영 Origin 중복 검사 CORS GET 200을 확인했다.
 
 외부 Issue/PR는 기존 승인 검토 제한으로 이번 작업에서 발급하지 않았다. 작업 기록과 로컬 커밋으로 변경을 보존한다. 실제 Naver 계정으로 생성/편집·R2 사진 저장 확인은 사용자의 로그인 상태에서 후속 검증이 필요하다.
+
+최종 CDN 점검에서 기존 서명기/Worker 허용 경로가 post/project만 지원함을 발견하여 `member/<uuid>/profile.webp`를 엄격한 허용 목록에 추가했다. HMAC·만료·비공개 버킷 정책은 유지한다. Java 서명기 4개 테스트와 이미지 Worker 8개 테스트(실제 workerd 포함)를 통과했다. Oracle API를 `pebble-api:profile-cdn-20261005`로 재배포 후 공개 categories 200을 확인했다. 이미지 Worker 배포 버전은 `ca9b113f-b9d8-4ccc-8e90-28f2c40934e1`이다. 운영 계정 사진 업로드 성공은 아직 확인하지 않았다.

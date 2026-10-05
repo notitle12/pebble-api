@@ -30,3 +30,14 @@ test('R2 errors and missing objects do not create cached successes or leak error
  s.env.MEDIA_BUCKET.get=async()=>{throw new Error('secret detail');};const r=await s.call();assert.equal(r.status,503);assert.equal((await r.text()).includes('secret detail'),false);assert.equal(s.entries.size,0);
 });
 test('cache write failure does not make a valid image unavailable',async()=>{const s=setup();s.cache.put=async()=>{throw new Error('cache failed');};assert.equal((await s.call()).status,200);await Promise.all(s.pending);});
+
+// 프로필도 동일한 서명을 검증한 뒤에만 저장소를 조회한다.
+test('member profile photos use signed authorization before R2 access',async()=>{
+ const key='member/12345678-1234-1234-1234-123456789abc/profile.webp',path=Buffer.from(key).toString('base64url');
+ const s=setup();let reads=0;s.env.MEDIA_BUCKET.get=async value=>{assert.equal(value,key);reads++;return {body:new Uint8Array([1,2,3])};};
+ assert.equal((await s.call(signed(undefined,path))).status,200);assert.equal(reads,1);
+ const tampered=signed(undefined,path).replace(/signature=[^&]+/,'signature='+Buffer.alloc(32).toString('base64url'));
+ assert.equal((await s.call(tampered)).status,403);assert.equal(reads,1);
+ const unexpected=Buffer.from(key.replace('profile.webp','original.png')).toString('base64url');
+ assert.equal((await s.call(signed(undefined,unexpected))).status,403);assert.equal(reads,1);
+});
