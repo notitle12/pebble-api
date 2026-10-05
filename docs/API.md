@@ -457,6 +457,8 @@ Refresh 성공 응답 data는 `{accessToken, tokenType: "Bearer", accessTokenExp
 
 탈퇴 대기 중에는 기존 Access JWT의 만료 여부와 관계없이 보호된 USER 업무 요청을 현재 회원 상태 검사로 거부하고 회원의 콘텐츠·댓글·좋아요를 일반 조회·검색·집계에서 숨긴다. 콘텐츠 자체의 상태와 상호작용 이력은 보존한다. 일반 Naver 로그인은 WITHDRAWAL_PENDING 409를 반환하며 예약을 자동 취소하지 않는다.
 
+Naver 본인 인증과 일회용 state 검증을 마친 로그인에서 WITHDRAWAL_PENDING이면 `error.details`에 `{field: "withdrawalScheduledAt", reason: "<ISO-8601 Instant>"}` 한 항목으로 실제 삭제 예정 시각을 전달한다. 회원 ID·OAuth subject·토큰은 반환하지 않는다. Refresh 및 관리자 상태 변경 오류에는 이 정보를 추가하지 않는다. 프론트는 한국 시간으로 `YYYY-MM-DD HH:MM:SS`를 표시하고 기존 Naver 재인증 기반 예약 취소로 안내한다.
+
 `POST /auth/naver/withdrawal/cancel`은 `{authorizationCode, state}`만 받는다. JSON 중복·추가 필드·null·후행 값·잘못된 Unicode·query는 400 INVALID_REQUEST다. code/state는 공백만인 값을 거부하고 길이는 각각 4096/256 UTF-16 단위 이하다. 로그인과 동일한 일회용 state 및 HttpOnly state Cookie를 검증하며 허용 목록의 단일 Origin이 필수다. 누락·null·중복·불허 Origin은 403이다. Naver 재인증 후 기존 OAuth 연결의 회원만 취소하며 신규 계정을 생성하지 않는다. 외부 공급자 통신은 DB 트랜잭션 밖에서 수행하고 회원 쓰기 잠금 뒤 현재 상태와 기한을 다시 확인한다. ACTIVE/SUSPENDED는 409 WITHDRAWAL_NOT_PENDING, 예정 시각 이상은 409 WITHDRAWAL_EXPIRED, 미존재 연결/회원은 404다.
 
 취소 성공은 200과 `{ "data": { "status": "ACTIVE" } }`를 반환하고 예약 시각을 NULL로 되돌린다. 모든 기존 Refresh Family를 다시 폐기하고 state·Refresh Cookie를 만료시키며 새 토큰을 발급하지 않는다. Refresh 세션을 복구하지 않아 다시 로그인해야 한다. 기존 USER Access JWT는 요청별 Redis 조회를 하지 않는 900초 정책을 유지하므로 ACTIVE 복구 후 만료 전 토큰은 다시 사용할 수 있다.
@@ -554,7 +556,7 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
 
 `urlKey`는 slug가 있으면 slug, 없으면 `postNumber` 문자열이다. `GET /api/v1/blogs/{handle}/posts/{postKey}`에서 숫자 키는 작성자별 번호, 그 외 키는 slug로 해석한다. 본인 블로그 기본 목록은 displayOrder 오름차순이고 공개 전체 목록 기본 순서는 publishedAt 내림차순이다. 공개 주소 경로는 공개 handle과 postNumber 또는 slug를 사용하며 Naver 식별자와 내부 TSID를 경로에 사용하지 않는다. 응답의 `id`는 TSID 문자열이다.
 
-Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 현재 항상 null이다. `likeCount`와 `likedByMe`는 6.7절의 공개 집계·요청 회원 규칙을 따른다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 검수 응답은 6.5절을 따른다.
+Post 응답의 `boardId`와 `projectId`는 각각 연결 ID 문자열 또는 null이다. `thumbnailUrl`은 R2 저장소가 활성화되어 있고 썸네일이 저장되어 있으며 PUBLIC·미차단·소유자 비탈퇴 대기 조건을 만족할 때 15분 유효한 signed URL을 반환한다. 썸네일이 없거나 URL 발급 조건을 만족하지 않으면 null이다. 미디어 세부 계약은 6.8절을 따른다. `likeCount`와 `likedByMe`는 6.7절의 공개 집계·요청 회원 규칙을 따른다. 작성자 응답에는 `isBlocked`가 포함되며 Guest·다른 회원 응답에서는 생략된다. 관리자 검수 응답은 6.5절을 따른다.
 
 ### 6.4 Project
 
