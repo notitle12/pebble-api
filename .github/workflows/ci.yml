@@ -74,3 +74,8 @@ jobs:
         run: |
           npm ci --prefix infra/image-worker
           npm test --prefix infra/image-worker
+
+      - name: Validate Oracle backup helper tools
+        run: |
+          bash -n infra/oracle/backup-postgres.sh infra/oracle/verify-restore.sh infra/oracle/postgres-init.sh
+          python3 infra/oracle/test_backup_restore.py
