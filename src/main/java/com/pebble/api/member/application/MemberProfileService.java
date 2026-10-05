@@ -19,6 +19,8 @@ public class MemberProfileService {
     private final MemberRepository members;
     private final MemberNames names;
 
+    private final MemberProfileImages images;
+
     public Member complete(long memberId, String blogName, String handle, String nickname) {
         Member member = memberQueries.findActiveForWrite(memberId);
         if (member.isProfileCompleted()) throw new ApplicationException(MemberError.PROFILE_ALREADY_COMPLETED);
@@ -53,6 +55,33 @@ public class MemberProfileService {
         members.flush();
         return member;
     }
+
+    public Member save(long memberId, String blogName, String handle, String nickname, boolean removeImage,
+                       boolean initial, byte[] image) {
+        if (image != null && removeImage) throw new ApplicationException(com.pebble.api.global.exception.GlobalErrorCode.INVALID_REQUEST);
+        Member member = initial ? complete(memberId, blogName, handle, nickname)
+                : update(memberId, blogName, nickname);
+        if (image != null) images.replace(member, image);
+        else if (removeImage) member.changeProfileImage(null);
+        members.flush();
+        return member;
+    }
+
+    @Transactional(readOnly = true)
+    public Availability availability(long memberId, String field, String input) {
+        Member member = memberQueries.findActiveById(memberId);
+        String value;
+        boolean taken;
+        switch (field) {
+            case "blogName" -> { value = MemberNames.normalize(input, 100, field); taken = !value.equals(member.getBlogName()) && members.existsByBlogName(value); }
+            case "nickname" -> { value = MemberNames.normalize(input, 30, field); taken = !value.equals(member.getNickname()) && members.existsByNickname(value); }
+            case "handle" -> { value = MemberNames.normalizeHandle(input); taken = !value.equals(member.getHandle()) && members.existsByHandle(value); }
+            default -> throw new ApplicationException(com.pebble.api.global.exception.GlobalErrorCode.INVALID_REQUEST);
+        }
+        return new Availability(!taken, value);
+    }
+
+    public record Availability(boolean available, String value) { }
 
     private void checkNickname(Member member, String chosen) {
         if (!chosen.equals(member.getNickname()) && members.existsByNickname(chosen)) {

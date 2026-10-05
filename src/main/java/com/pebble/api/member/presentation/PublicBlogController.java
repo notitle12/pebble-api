@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class PublicBlogController {
     private final MemberQueryService members;
+    private final com.pebble.api.member.application.MemberProfileImages images;
 
     @GetMapping("/api/v1/blogs/{handle}")
     public ApiResponse<PublicBlogResponse> profile(@PathVariable String handle, HttpServletRequest request,
@@ -23,9 +24,10 @@ public class PublicBlogController {
         if (request.getQueryString() != null || body != null) {
             throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR);
         }
-        if (!handle.matches("^[a-z][a-z0-9-]{1,28}[a-z0-9]$")) {
+        if (!handle.matches("^[a-z][a-z0-9_-]{1,28}[a-z0-9_]$")) {
             throw new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
         }
-        return ApiResponse.of(PublicBlogResponse.from(members.findPublicBlog(handle)));
+        var member = members.findPublicBlog(handle);
+        return ApiResponse.of(PublicBlogResponse.from(member, images.url(member)));
     }
 }

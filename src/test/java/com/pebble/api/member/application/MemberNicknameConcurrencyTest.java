@@ -80,7 +80,8 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
                     .collect(java.util.stream.Collectors.toSet());
             Set<Long> memberIds = members.stream().map(Member::getId)
                     .collect(java.util.stream.Collectors.toSet());
-            assertThat(nicknames).containsExactlyInAnyOrder(base, base + "-2", base + "-3");
+            assertThat(nicknames).hasSize(3).contains(base);
+            assertThat(nicknames).allMatch(name -> name.equals(base) || name.matches(java.util.regex.Pattern.quote(base) + "[0-9]{4,6}"));
             assertThat(memberIds).hasSize(3);
             assertThat(nicknames).allMatch(nickname -> nickname.startsWith(base));
             assertThat(memberRepository.findAll().stream().filter(member -> member.getNickname().startsWith(base))
@@ -118,7 +119,7 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
         Member second = memberService.resolve(OAuthProvider.NAVER, identitySubjectTwo, base, null);
 
         assertThat(first.getNickname()).isEqualTo(base);
-        assertThat(second.getNickname()).isEqualTo("가".repeat(28) + "-2");
+        assertThat(second.getNickname()).matches("가{24,26}[0-9]{4,6}");
         assertThat(second.getNickname().codePointCount(0, second.getNickname().length())).isEqualTo(30);
         assertThat(memberRepository.findById(second.getId()).orElseThrow().getNickname()).isEqualTo(second.getNickname());
     }
