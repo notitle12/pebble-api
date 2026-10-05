@@ -8,6 +8,10 @@ public class AuthException extends ApplicationException {
         super(error);
     }
 
+    public AuthException(AuthError error, String field, String reason) {
+        super(error, field, reason);
+    }
+
     @Override
     public AuthError error() {
         return (AuthError) super.error();
