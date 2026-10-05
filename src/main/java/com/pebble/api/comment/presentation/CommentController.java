@@ -24,13 +24,14 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/{resource:posts|projects}/{contentId:[0-9]+}/comments")
 public class CommentController {
+    private final com.pebble.api.member.application.MemberProfileImages profileImages;
     private final CommentService comments;
 
     @PostMapping(consumes = "application/json")
     public ResponseEntity<ApiResponse<CommentResponse>> create(@PathVariable String resource, @PathVariable String contentId,
             @AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query, @RequestBody JsonNode body) {
         checkQuery(query, Set.of());
-        var response = CommentResponse.from(comments.create(target(resource), CommentWriteRequest.id(contentId),
+        var response = response(comments.create(target(resource), CommentWriteRequest.id(contentId),
                 requester(jwt), CommentWriteRequest.parse(body, true)));
         return ResponseEntity.created(UriComponentsBuilder.fromPath("/api/v1/{resource}/{id}/comments/{commentId}")
                 .buildAndExpand(resource, contentId, response.id()).encode().toUri()).body(ApiResponse.of(response));
@@ -40,7 +41,7 @@ public class CommentController {
     public ApiResponse<CommentPage> list(@PathVariable String resource, @PathVariable String contentId,
             @AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
         checkQuery(query, Set.of("page", "size", "sort"));
-        return ApiResponse.of(CommentPage.from(comments.list(target(resource), CommentWriteRequest.id(contentId),
+        return ApiResponse.of(page(comments.list(target(resource), CommentWriteRequest.id(contentId),
                 requester(jwt), pageable(query))));
     }
 
@@ -48,7 +49,7 @@ public class CommentController {
     public ApiResponse<CommentResponse> detail(@PathVariable String resource, @PathVariable String contentId,
             @PathVariable String commentId, @AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
         checkQuery(query, Set.of());
-        return ApiResponse.of(CommentResponse.from(comments.detail(target(resource), CommentWriteRequest.id(contentId),
+        return ApiResponse.of(response(comments.detail(target(resource), CommentWriteRequest.id(contentId),
                 CommentWriteRequest.id(commentId), requester(jwt))));
     }
 
@@ -57,7 +58,7 @@ public class CommentController {
             @PathVariable String commentId, @AuthenticationPrincipal Jwt jwt,
             @RequestParam MultiValueMap<String, String> query, @RequestBody JsonNode body) {
         checkQuery(query, Set.of());
-        return ApiResponse.of(CommentResponse.from(comments.update(target(resource), CommentWriteRequest.id(contentId),
+        return ApiResponse.of(response(comments.update(target(resource), CommentWriteRequest.id(contentId),
                 CommentWriteRequest.id(commentId), requester(jwt), CommentWriteRequest.parse(body, false))));
     }
 
@@ -101,4 +102,7 @@ public class CommentController {
     private ApplicationException invalid(String field) {
         return new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, field, "지원되는 요청 값을 입력해 주세요.");
     }
+    private CommentResponse response(com.pebble.api.comment.domain.Comment view) { return CommentResponse.from(view, profileImages::url); }
+    private CommentPage page(org.springframework.data.domain.Page<com.pebble.api.comment.domain.Comment> view) { return CommentPage.from(view, profileImages::url); }
+
 }
