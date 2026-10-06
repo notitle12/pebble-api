@@ -56,8 +56,9 @@ public class MediaDeletionQueue {
                 key);
         if (locked.isEmpty()) return;
         Boolean referenced = jdbc.queryForObject(
-                "select exists(select 1 from post where thumbnail_storage_key=? union all select 1 from project_media where storage_key=? or thumbnail_storage_key=? union all select 1 from member where profile_image_storage_key=?)",
+                "select exists(select 1 from post where thumbnail_storage_key=? union all select 1 from project_media where storage_key=? or thumbnail_storage_key=? union all select 1 from member where profile_image_storage_key=? union all select 1 from post_body_image where storage_key=?)",
                 Boolean.class,
+                key,
                 key,
                 key,
                 key,
