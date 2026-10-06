@@ -17,14 +17,13 @@ import java.util.Locale;
 /** JSON 필드 존재 여부와 형식을 검증하고 업무 입력으로 변환한다. */
 public final class PostWriteRequest {
     private static final Set<String> FIELDS = Set.of("title", "summary", "blocks", "categoryId",
-            "tagIds", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder");
+            "tagIds", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft");
 
     private PostWriteRequest() {
     }
 
     public static PostChanges parse(JsonNode json, boolean create) {
         object(json, FIELDS);
-        if (!create && json.has("slug")) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
         Set<String> supplied = new HashSet<>();
         json.fieldNames().forEachRemaining(supplied::add);
         String title = null;
@@ -72,6 +71,7 @@ public final class PostWriteRequest {
                     if (language != null) fail(prefix + "language", "아키텍처에는 코드 언어를 지정할 수 없습니다.");
                     ArchitectureSpecInput.validate(content, prefix + "content");
                 }
+                if ((type == BlockType.HTML || type == BlockType.MARKDOWN) && language != null) fail(prefix + "language", "서식 본문에는 코드 언어를 지정할 수 없습니다.");
                 String blockTitle = block.has("title") ? text(block.get("title"), prefix + "title", 100, true, false) : null;
                 parsed.add(new BlockInput(type, content, language, blockTitle));
             }
@@ -89,7 +89,12 @@ public final class PostWriteRequest {
             if (!node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() < 0) fail("displayOrder", "0 이상의 정수 위치를 입력해 주세요.");
             order = node.intValue();
         }
-        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order, boardId, projectId);
+        Boolean draft = null;
+        if (json.has("draft")) {
+            if (!json.get("draft").isBoolean()) fail("draft", "boolean 값을 지정해 주세요.");
+            draft = json.get("draft").booleanValue();
+        }
+        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order, boardId, projectId, draft);
     }
 
     public static long id(String value, String field) {

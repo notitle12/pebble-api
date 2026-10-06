@@ -47,8 +47,11 @@ public class Post {
     @Column(name = "thumbnail_storage_key", length = 512)
     private String thumbnailStorageKey;
 
-    @Column(length = 200, updatable = false)
+    @Column(length = 200)
     private String slug;
+
+    @Column(name = "is_draft", nullable = false)
+    private boolean draft;
 
     @Column(name = "post_number", nullable = false, updatable = false)
     private long postNumber;
@@ -121,6 +124,20 @@ public class Post {
         if (visibility == PostVisibility.PUBLIC && publishedAt == null) {
             publishedAt = Instant.now();
         }
+    }
+
+    public boolean isDraft() { return draft; }
+
+    public void initializeDraft(boolean value) {
+        if (value && visibility != PostVisibility.HIDDEN) throw new IllegalArgumentException("Draft must be hidden");
+        draft = value;
+    }
+
+    public void finalizeDraft(String slug) {
+        ensureNotDeleted();
+        if (!draft) throw new IllegalStateException("Finalized address cannot change");
+        this.slug = slug;
+        draft = false;
     }
 
     public void changeThumbnail(String key) {
