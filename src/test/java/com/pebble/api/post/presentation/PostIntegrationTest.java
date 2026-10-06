@@ -64,6 +64,39 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void writerDraftFinalizesAddressOnceAndPreservesExplicitContentFormats() throws Exception {
+        var request=mapper.createObjectNode().put("title","초안").put("visibilityStatus","HIDDEN").put("draft",true);
+        request.putArray("blocks").addObject().put("type","HTML").put("content","<p><strong>본문</strong></p>");
+        var result=mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.draft").value(true));
+        String id=response(result).at("/data/id").asText();
+        mvc.perform(get(PATH+"/"+id)).andExpect(status().isNotFound());
+        change(id,"{\"visibilityStatus\":\"PUBLIC\"}").andExpect(status().isBadRequest());
+        change(id,"{\"slug\":\"too-early\"}").andExpect(status().isBadRequest());
+        change(id,"{\"draft\":false,\"visibilityStatus\":\"PUBLIC\",\"slug\":\"Hello-Writer\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.draft").value(false)).andExpect(jsonPath("$.data.urlKey").value("hello-writer"));
+        mvc.perform(get(blogPath(owner,"hello-writer"))).andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].content").value("<p><strong>본문</strong></p>"));
+        change(id,"{\"draft\":true}").andExpect(status().isBadRequest());
+        change(id,"{\"slug\":\"different\"}").andExpect(status().isBadRequest());
+        change(id,"{\"blocks\":[{\"type\":\"MARKDOWN\",\"content\":\"# 제목\"}]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].type").value("MARKDOWN"));
+        change(id,"{\"blocks\":[{\"type\":\"HTML\",\"content\":\"text\",\"language\":\"HTML\"}]}").andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void writerDraftRejectsPublicCreationAndFinalizationReusesSlugCollisionRules() throws Exception {
+        var request=mapper.createObjectNode().put("title","초안").put("visibilityStatus","PUBLIC").put("draft",true);
+        request.putArray("blocks").addObject().put("type","TEXT").put("content","");
+        mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(request.toString())).andExpect(status().isBadRequest());
+        request.put("visibilityStatus","HIDDEN");
+        String first=response(mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(request.toString())).andExpect(status().isCreated())).at("/data/id").asText();
+        String second=response(mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(request.toString())).andExpect(status().isCreated())).at("/data/id").asText();
+        change(first,"{\"draft\":false,\"slug\":\"same-writer\"}").andExpect(status().isOk()).andExpect(jsonPath("$.data.urlKey").value("same-writer"));
+        change(second,"{\"draft\":false,\"slug\":\"same-writer\"}").andExpect(status().isOk()).andExpect(jsonPath("$.data.urlKey").value("same-writer-2"));
+        mvc.perform(patch(PATH+"/"+first).header(HttpHeaders.AUTHORIZATION,bearer(other)).contentType(MediaType.APPLICATION_JSON).content("{\"draft\":false}")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void createsStructuredPostWithStringIdsAndOwnerOnlyMetadata() throws Exception {
         Category category = category(null, CategoryStatus.ACTIVE);
         Tag tag = tag(TagStatus.ACTIVE);

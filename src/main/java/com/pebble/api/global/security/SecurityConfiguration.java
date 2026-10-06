@@ -86,6 +86,10 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/boards").hasRole("USER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/boards/{boardId:[0-9]+}").hasRole("USER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts/{postId:[0-9]+}/images/{imageId:[0-9]+}/content").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts/{postId:[0-9]+}/images").hasRole("USER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/images").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}/images/{imageId:[0-9]+}").hasRole("USER")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/posts/{postId:[0-9]+}/thumbnail").hasRole("USER")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}/thumbnail").hasRole("USER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/media").hasRole("USER")
@@ -255,6 +259,13 @@ public class SecurityConfiguration {
         CorsConfiguration boardDetailCors = new CorsConfiguration(cors);
         boardDetailCors.setAllowedMethods(List.of("PATCH", "DELETE"));
         source.registerCorsConfiguration("/api/v1/boards/{boardId:[0-9]+}", boardDetailCors);
+        CorsConfiguration postBodyImageCors = new CorsConfiguration(cors);
+        postBodyImageCors.setAllowedMethods(List.of("GET","POST"));
+        source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}/images",postBodyImageCors);
+        CorsConfiguration postBodyImageDeleteCors = new CorsConfiguration(cors);
+        postBodyImageDeleteCors.setAllowedMethods(List.of("DELETE"));
+        source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}/images/{imageId:[0-9]+}",postBodyImageDeleteCors);
+        source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}/images/{imageId:[0-9]+}/content",getCors);
         CorsConfiguration postMediaCors = new CorsConfiguration(cors);
         postMediaCors.setAllowedMethods(List.of("PUT", "DELETE"));
         source.registerCorsConfiguration("/api/v1/posts/{postId:[0-9]+}/thumbnail", postMediaCors);
