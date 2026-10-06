@@ -68,8 +68,10 @@ public class PostService {
         if (position > ordered.size()) throw invalidOrder();
         long lastNumber = posts.findLastNumber(memberId);
         if (lastNumber == Long.MAX_VALUE) throw invalidOrder();
+        if (Boolean.TRUE.equals(input.draft()) && input.visibilityStatus() != PostVisibility.HIDDEN) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
         String slug = allocateSlug(memberId, input.slug());
         Post post = posts.saveAndFlush(new Post(author, category, input.title(), input.summary(), input.visibilityStatus(), slug, lastNumber + 1));
+        post.initializeDraft(Boolean.TRUE.equals(input.draft()));
         post.changeBoard(input.boardId());
         post.changeProject(input.projectId());
         ordered.add(position, post);
@@ -116,7 +118,19 @@ public class PostService {
     @Transactional
     public PostView update(long postId, long memberId, PostChanges input) {
         members.findProfileCompletedForWrite(memberId);
+        // 주소 확정도 새 글 생성과 같은 회원 잠금 순서로 직렬화한다.
         Post post = ownedForUpdate(postId, memberId);
+        if (!post.isDraft() && (input.has("slug") || Boolean.TRUE.equals(input.draft()))) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        if (post.isDraft()) {
+            boolean finalize = Boolean.FALSE.equals(input.draft());
+            PostVisibility nextVisibility = input.has("visibilityStatus") ? input.visibilityStatus() : post.getVisibility();
+            if (!finalize && (input.has("slug") || nextVisibility != PostVisibility.HIDDEN)) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+            if (finalize) {
+                String address = input.has("slug") ? input.slug() : post.getSlug();
+                if (!java.util.Objects.equals(address, post.getSlug())) address = allocateSlug(memberId, address);
+                post.finalizeDraft(address);
+            }
+        }
         if (input.has("boardId")) {
             if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);
             post.changeBoard(input.boardId());

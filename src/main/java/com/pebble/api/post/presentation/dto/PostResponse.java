@@ -14,7 +14,7 @@ import org.springframework.data.domain.Page;
 public record PostResponse(String id, String postNumber, String slug, String urlKey, int displayOrder, Author author, String title, String summary,
                            @JsonInclude(JsonInclude.Include.NON_NULL) List<Block> blocks,
                            Classification category, List<Technology> tags,
-                           String boardId, String projectId, String thumbnailUrl,
+                           String boardId, String projectId, String thumbnailUrl, boolean draft,
                            PostVisibility visibilityStatus, long likeCount, boolean likedByMe,
                            Instant publishedAt, Instant createdAt, Instant updatedAt,
                            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean isBlocked) {
@@ -33,7 +33,7 @@ public record PostResponse(String id, String postNumber, String slug, String url
                         category.getSlug(), category.getStatus()),
                 view.tags().stream().map(tag -> new Technology(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getStatus())).toList(),
                 post.getBoardId() == null ? null : post.getBoardId().toString(),
-                post.getProjectId() == null ? null : post.getProjectId().toString(), view.thumbnailUrl(), post.getVisibility(), view.likeCount(), view.likedByMe(), post.getPublishedAt(), post.getCreatedAt(),
+                post.getProjectId() == null ? null : post.getProjectId().toString(), view.thumbnailUrl(), post.isDraft(), post.getVisibility(), view.likeCount(), view.likedByMe(), post.getPublishedAt(), post.getCreatedAt(),
                 post.getUpdatedAt(), view.owner() ? post.isBlocked() : null);
     }
 

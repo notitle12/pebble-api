@@ -529,3 +529,7 @@ V10에서 두 테이블과 활성 부분 UNIQUE·회원 역방향 인덱스를 �
 member.profile_image_storage_key VARCHAR(512) nullable 및 고유 인덱스는 서비스가 생성한 R2 사진 키만 저장한다. 기존 profile_image_url은 SNS 기본 사진이며 업로드·초기화 시 NULL이 된다. 만료된 signed URL은 DB에 저장하지 않는다. 사진 키 변경·회원 삭제 트리거는 media_deletion_job에 이전 키를 남기며 삭제 작업은 member 참조도 검사한다.
 
 ck_member_handle은 `[a-z][a-z0-9_-]{1,28}[a-z0-9_]`로 확장한다. 예약어와 최초 생성 후 변경 금지 트리거는 유지한다. 이미 적용한 V4를 수정하지 않는다.
+
+## V17 글쓰기 본문 확장
+
+post.is_draft는 기존 데이터 false이며 true는 HIDDEN/DELETED만 허용한다. 주소 변경은 애플리케이션에서 초안 확정 때 한 번 허용하고 기존 발행 주소는 보존한다. post_block은 HTML/MARKDOWN을 추가하며 두 타입의 language는 NULL이다. post_body_image(id,post_id,storage_key,created_at)는 Post 소유 파일을 연결하고 외부 키는 유일하다. 행 삭제 시 media_deletion_job을 기록하고, Post DELETED 전이 시 이미지 연결을 지우며 회원/글 물리 삭제는 FK CASCADE로 회수한다. 삭제 큐의 참조 검사에도 post_body_image를 포함한다.

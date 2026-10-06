@@ -57,6 +57,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class MediaIntegrationTest extends AuthenticationTestSupport {
     @Autowired PostMediaService postMedia;
+    @Autowired com.pebble.api.post.application.PostBodyImageService bodyImages;
     @Autowired ProjectMediaService projectMedia;
     @Autowired MemberRepository members;
     @Autowired MemberProfileService profiles;
@@ -119,6 +120,41 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
             for (long id : fixtureMembers) jdbc.update("delete from member where id=?", id);
             for (String key : objectKeys) jdbc.update("delete from media_deletion_job where storage_key=?", key);
         });
+    }
+
+    @Test
+    void bodyImagesCheckVisibilityOwnerAndDeletionQueue() throws Exception {
+        var image=bodyImages.upload(owner.getId(),postId,png());
+        assertThat(image.url()).startsWith("https://media.test/post/").endsWith("/body.webp");
+        assertThat(bodyImages.list(owner.getId(),postId)).hasSize(1);
+        assertThatThrownBy(()->bodyImages.list(other.getId(),postId)).isInstanceOf(ApplicationException.class);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/posts/"+postId+"/images/"+image.id()+"/content"))
+                .andExpect(status().isNotFound());
+        jdbc.update("insert into post_block(id,post_id,block_type,content,display_order) values (?,?, 'HTML',?,0)",TsidGenerator.generate(),postId,
+                "<img src=\"https://api.pebble-log.com/api/v1/posts/"+postId+"/images/"+image.id()+"/content\" />");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/posts/"+postId+"/images/"+image.id()+"/content"))
+                .andExpect(status().isFound()).andExpect(header().string("Cache-Control","no-store"));
+        jdbc.update("update post set visibility_status='HIDDEN' where id=?",postId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/posts/"+postId+"/images/"+image.id()+"/content"))
+                .andExpect(status().isNotFound());
+        assertThat(bodyImages.list(owner.getId(),postId)).hasSize(1);
+        assertThatThrownBy(()->bodyImages.upload(other.getId(),postId,png())).isInstanceOf(ApplicationException.class);
+        bodyImages.delete(owner.getId(),postId,Long.parseLong(image.id()));
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key=?",Long.class,objectKeys.getLast())).isEqualTo(1);
+    }
+
+    @Test
+    void bodyImageUploadRollbackLeavesCleanupAndLogicalPostDeletionQueuesFiles() throws Exception {
+        failPut=true;
+        assertThatThrownBy(()->bodyImages.upload(owner.getId(),postId,png())).isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForObject("select count(*) from post_body_image where post_id=?",Long.class,postId)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key=?",Long.class,objectKeys.getLast())).isEqualTo(1);
+        failPut=false;
+        bodyImages.upload(owner.getId(),postId,png());
+        String key=objectKeys.getLast();
+        jdbc.update("update post set visibility_status='DELETED',deleted_at=now() where id=?",postId);
+        assertThat(jdbc.queryForObject("select count(*) from post_body_image where post_id=?",Long.class,postId)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key=?",Long.class,key)).isEqualTo(1);
     }
 
     @Test
