@@ -773,3 +773,7 @@ Post 생성/수정은 선택 boolean `draft`를 받으며 응답에 해당 상�
 ## 개발용 생성 API 문서
 
 컨트롤러·DTO 기반 OpenAPI JSON과 회원/관리자 Swagger UI를 개발 환경에서 선택적으로 제공한다. [OPENAPI.md](OPENAPI.md)에 실행·인증·프론트 협업 방법을 정리했다. 오류 코드·상태 전이는 이 API 계약이 기준이며 생성 스키마와 함께 확인한다. 운영에는 문서를 공개하지 않는다.
+
+## OAuth 공통화와 기존 네이버 API
+
+네이버 authorization/login/withdrawal-cancel 경로·요청·응답·state 쿠키와 Refresh 쿠키는 유지한다. 내부 처리는 공급자를 명시하는 공통 OAuthLoginService로 위임한다. 이 변경은 카카오/구글 로그인 API를 추가하지 않는다. 새로운 공급자는 서버 등록과 정확한 HTTP·쿠키·CORS/Origin/CSRF 및 프론트 callback 계약을 별도 작업에서 추가한다.

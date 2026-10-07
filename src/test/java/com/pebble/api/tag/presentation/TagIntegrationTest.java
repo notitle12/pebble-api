@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.support.AuthenticationTestSupport;
 import com.pebble.api.tag.domain.Tag;
 import com.pebble.api.tag.domain.TagStatus;
@@ -35,8 +35,8 @@ class TagIntegrationTest extends AuthenticationTestSupport {
     @Autowired
     private TagRepository tags;
 
-    @MockitoBean
-    private NaverOAuthGateway naverOAuthGateway;
+    @MockitoBean(name = "naverOAuthClient")
+    private OAuthProviderClient naverOAuthGateway;
 
     @BeforeEach
     void clearTagsWithinRollbackTransaction() {

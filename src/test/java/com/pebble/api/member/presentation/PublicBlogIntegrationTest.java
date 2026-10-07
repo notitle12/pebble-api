@@ -3,7 +3,7 @@ package com.pebble.api.member.presentation;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
 import com.pebble.api.member.infrastructure.persistence.MemberRepository;
@@ -29,7 +29,7 @@ class PublicBlogIntegrationTest extends AuthenticationTestSupport {
     @Autowired MemberRepository members;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
 
     @Test
     void emptyBlogHasPublicProfileWithoutPrivateMemberInformation() throws Exception {

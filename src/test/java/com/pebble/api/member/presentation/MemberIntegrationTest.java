@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.pebble.api.auth.application.AccessTokenService;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.global.security.JwtProperties;
 import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
@@ -63,8 +63,8 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
     @Autowired
     private EntityManager entityManager;
 
-    @MockitoBean
-    private NaverOAuthGateway naverOAuthGateway;
+    @MockitoBean(name = "naverOAuthClient")
+    private OAuthProviderClient naverOAuthGateway;
 
     @Test
     void returnsOnlyJwtMembersAccountEvenWhenAnotherIdIsRequested() throws Exception {
