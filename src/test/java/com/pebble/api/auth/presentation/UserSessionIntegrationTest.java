@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -49,8 +49,8 @@ class UserSessionIntegrationTest extends AuthenticationTestSupport {
     @Autowired
     private JwtDecoder jwtDecoder;
 
-    @MockitoBean
-    private NaverOAuthGateway naverOAuthGateway;
+    @MockitoBean(name = "naverOAuthClient")
+    private OAuthProviderClient naverOAuthGateway;
 
     @Test
     void refreshRotatesCookieAndRejectsReusedFamilyTokens() throws Exception {

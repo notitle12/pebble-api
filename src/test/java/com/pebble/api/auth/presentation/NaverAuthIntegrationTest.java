@@ -14,8 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pebble.api.auth.domain.AuthError;
 import com.pebble.api.auth.domain.AuthException;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway.NaverProfile;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient.OAuthProfile;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.auth.infrastructure.redis.RefreshTokenProperties;
 import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberOAuthIdentity;
@@ -72,8 +72,8 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
     @Autowired
     private RefreshTokenProperties refreshTokenProperties;
 
-    @MockitoBean
-    private NaverOAuthGateway naverOAuthGateway;
+    @MockitoBean(name = "naverOAuthClient")
+    private OAuthProviderClient naverOAuthGateway;
 
     @Test
     void firstLoginCreatesMemberAndReturnsPebbleTokens() throws Exception {
@@ -82,7 +82,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         Cookie stateCookie = beginAuthorizationAndGetCookie();
         String state = stateCookie.getValue();
         when(naverOAuthGateway.authenticate("one-time-code", state))
-                .thenReturn(new NaverProfile("naver-id-1", "pebble", "https://example.com/profile.webp"));
+                .thenReturn(new OAuthProfile("naver-id-1", "pebble", "https://example.com/profile.webp"));
         MvcResult result = login("one-time-code", state, stateCookie);
 
         Map<String, Object> data = dataFrom(result);
@@ -142,7 +142,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
         Cookie cookie = beginAuthorizationAndGetCookie();
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
-                .thenReturn(new NaverProfile("existing-subject", "changed-naver-name", null));
+                .thenReturn(new OAuthProfile("existing-subject", "changed-naver-name", null));
         Map<String, Object> data = dataFrom(login("code", cookie.getValue(), cookie));
         assertThat(data.get("member")).isInstanceOf(Map.class);
         assertThat(((Map<?, ?>) data.get("member")).get("id")).isEqualTo(member.getId().toString());
@@ -157,7 +157,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
         Cookie cookie = beginAuthorizationAndGetCookie();
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
-                .thenReturn(new NaverProfile("no-profile-subject", null, null));
+                .thenReturn(new OAuthProfile("no-profile-subject", null, null));
         Map<String, Object> data = dataFrom(login("code", cookie.getValue(), cookie));
         assertThat(((Map<?, ?>) data.get("member")).get("nickname")).isEqualTo("pebble");
         assertThat(((Map<?, ?>) data.get("member")).get("profileImageUrl")).isNull();
@@ -224,7 +224,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         String issuedState = stateCookie.getValue();
         stateCookie.setValue(issuedState);
         when(naverOAuthGateway.authenticate("code", issuedState))
-                .thenReturn(new NaverProfile("naver-id-reused", "pebble", null));
+                .thenReturn(new OAuthProfile("naver-id-reused", "pebble", null));
 
         login("code", issuedState, stateCookie);
         mockMvc.perform(post("/api/v1/auth/naver/login")
@@ -249,7 +249,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         Cookie stateCookie = beginAuthorizationAndGetCookie();
         String state = stateCookie.getValue();
         when(naverOAuthGateway.authenticate("code", state))
-                .thenReturn(new NaverProfile("pending-naver-id", "pending", null));
+                .thenReturn(new OAuthProfile("pending-naver-id", "pending", null));
         mockMvc.perform(post("/api/v1/auth/naver/login")
                         .cookie(stateCookie)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -286,7 +286,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
         Cookie cookie = beginAuthorizationAndGetCookie();
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
-                .thenReturn(new NaverProfile("suspended-subject", "suspended", null));
+                .thenReturn(new OAuthProfile("suspended-subject", "suspended", null));
         MvcResult result = mockMvc.perform(post("/api/v1/auth/naver/login")
                         .cookie(cookie).contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody("code", cookie.getValue())))

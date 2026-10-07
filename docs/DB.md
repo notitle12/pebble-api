@@ -94,7 +94,7 @@ handle은 영문으로 시작하는 3~30자 영문 소문자·숫자·하이픈�
 |---|---|---:|---|
 | `id` | BIGINT | N | PK, TSID |
 | `member_id` | BIGINT | N | FK → `member.id` |
-| `provider` | VARCHAR(20) | N | MVP 허용 값: `NAVER` |
+| `provider` | VARCHAR(20) | N | 허용 값: `NAVER`, `KAKAO`, `GOOGLE` (현재 로그인 활성은 NAVER만) |
 | `provider_subject` | VARCHAR(255) | N | OAuth 공급자가 제공하는 고유 회원 식별자 |
 | `created_at` | TIMESTAMPTZ | N | 연결 시각 |
 
@@ -533,3 +533,5 @@ ck_member_handle은 `[a-z][a-z0-9_-]{1,28}[a-z0-9_]`로 확장한다. 예약어�
 ## V17 글쓰기 본문 확장
 
 post.is_draft는 기존 데이터 false이며 true는 HIDDEN/DELETED만 허용한다. 주소 변경은 애플리케이션에서 초안 확정 때 한 번 허용하고 기존 발행 주소는 보존한다. post_block은 HTML/MARKDOWN을 추가하며 두 타입의 language는 NULL이다. post_body_image(id,post_id,storage_key,created_at)는 Post 소유 파일을 연결하고 외부 키는 유일하다. 행 삭제 시 media_deletion_job을 기록하고, Post DELETED 전이 시 이미지 연결을 지우며 회원/글 물리 삭제는 FK CASCADE로 회수한다. 삭제 큐의 참조 검사에도 post_body_image를 포함한다.
+
+`V18__expand_oauth_provider_names.sql`은 OAuth 공급자 CHECK만 확장한다. 기존 데이터·Provider/subject 고유 제약·회원당 Provider 고유 제약은 유지한다. 실제 계정 연결은 등록된 서버 클라이언트를 통해서만 수행한다. 카카오/구글 HTTP 로그인은 아직 제공하지 않는다.
