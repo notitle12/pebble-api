@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.admin.application.AdminCommentService;
 import com.pebble.api.comment.domain.CommentTarget;
 import com.pebble.api.comment.presentation.dto.CommentWriteRequest;
@@ -47,7 +47,7 @@ class CommentTransactionTest extends AuthenticationTestSupport {
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate transactions;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
     final List<Long> fixtures = new ArrayList<>();
 
     @AfterEach

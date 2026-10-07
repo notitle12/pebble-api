@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.board.application.BoardChanges;
 import com.pebble.api.board.application.BoardService;
 import com.pebble.api.member.application.MemberProfileService;
@@ -40,7 +40,7 @@ class BoardPostQueryTest extends AuthenticationTestSupport {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
 
     @Test
     void filtersBeforePagingAndIncludesOnlyDirectBoardPostsInAuthorOrder() throws Exception {

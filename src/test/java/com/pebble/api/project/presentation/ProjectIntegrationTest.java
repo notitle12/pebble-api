@@ -15,7 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.pebble.api.auth.application.AccessTokenService;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
@@ -57,7 +57,7 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     @Autowired TagRepository tags;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
     Member owner;
     Member other;
 
