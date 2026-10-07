@@ -7,6 +7,13 @@ spring:
       max-file-size: 10MB
       max-request-size: 11MB
 
+# 개발 문서는 api-docs 프로필에서만 켠다. 기본 실행/운영은 비활성이다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 pebble:
   media:
     cdn:

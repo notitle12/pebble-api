@@ -109,6 +109,8 @@ IntelliJ Run Configuration에서는 `SPRING_PROFILES_ACTIVE=local`을 지정하�
 
 > Pebble 두 저장소의 최신 Git 작업 기준은 [공유 Git 작업 순서](system/projects/pebble/GIT_WORKFLOW.md)다. 아래 Git 관련 문구는 백엔드 로컬 개발 가이드의 과거 설명이며, 새 작업은 공유 문서의 Issue → 작업 브랜치 → push → PR → 검토·CI → 병합 순서를 따른다.
 
+> 최신 공유 Git 절차는 [로컬 공통 문서](../../docs/projects/pebble/GIT_WORKFLOW.md)에서 관리한다. 신규 작업은 이슈 → 번호가 있는 작업 브랜치 → 검증·push → PR → 검토·CI → 병합 순서를 반드시 따른다. 아래 설명과 충돌하면 공유 문서를 우선한다.
+
 ### 이슈
 
 기능, 버그 수정, 기술 작업은 구현 전에 GitHub Issue에 목적과 완료 조건을 적는다. 작은 문서 수정처럼 별도 Issue가 과도한 경우에는 연관된 Issue에 묶을 수 있다.
@@ -214,3 +216,9 @@ Pull Request는 관련 Issue에 연결하고 다음 내용을 적는다.
 공유 예시의 R2_ENDPOINT, R2_BUCKET_NAME, R2_REGION(auto), R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY를 보호된 실행 환경에 주입하고 준비가 끝나면 R2_ENABLED=true로 활성화한다. 기존 개인 로컬 YAML을 읽거나 바꾸지 않아도 application.yaml의 공통 바인딩을 사용한다. `.env`는 자동 로드하지 않으므로 기존 IDE/셸 주입 절차를 따른다. endpoint는 버킷 경로를 제외한 계정 S3 HTTPS URL이며 관할권 지정 버킷은 해당 관할권 endpoint를 사용한다. 공개 r2.dev URL·사용자 지정 도메인은 필요하지 않다.
 
 AWS SDK S3·URL Connection transport는 저장소 업로드/삭제 및 15분 SigV4 URL을 제공한다. WebP ImageIO는 Java 기본 디코더에 없는 WebP 읽기/쓰기와 macOS ARM·운영 Linux 실행을 제공한다. 원본 대신 lossy quality82 WebP 파생본만 저장한다. 테스트는 실제 R2 credentials를 사용하지 않고 이미지 변환·가짜 저장소와 독립 DB/Redis를 사용한다. 대역 성공과 실제 R2 연결 성공을 구분하며 배포 전 비공개 버킷 업로드/조회/삭제 및 삭제 큐 복구를 별도 확인한다.
+
+## 개발용 API 문서와 DB 포트
+
+[OpenAPI / Swagger 사용 안내](OPENAPI.md)에 따라 `local,api-docs` 프로필에서 요청·응답 스키마를 확인한다. 기본 실행과 운영에서는 문서를 비활성화하며, `prod` 프로필은 문서 접근을 차단한다.
+
+로컬 Compose의 PostgreSQL과 Redis는 `127.0.0.1`에만 포트를 바인딩한다. 운영 `infra/oracle/compose.yaml`은 DB·Redis 호스트 포트를 공개하지 않고 내부 datastore 네트워크를 사용한다. `0.0.0.0`으로 바꾸거나 운영 방화벽에 5432/6379를 추가하지 않는다.

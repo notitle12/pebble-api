@@ -1,0 +1,10 @@
+# 명시적으로 local,api-docs를 선택한 개발 실행에서만 사용한다.
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    persist-authorization: false
+    supported-submit-methods: []
+    operations-sorter: alpha
+    tags-sorter: alpha
