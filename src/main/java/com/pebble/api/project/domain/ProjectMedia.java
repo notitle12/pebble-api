@@ -1,5 +1,6 @@
 package com.pebble.api.project.domain;
 
+import com.pebble.api.global.persistence.BaseCreatedEntity;
 import com.pebble.api.global.id.TsidGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.EnumType;
@@ -11,7 +12,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "project_media")
-public class ProjectMedia {
+public class ProjectMedia extends BaseCreatedEntity {
     @Id
     private Long id;
 
@@ -33,9 +34,6 @@ public class ProjectMedia {
 
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
 
     protected ProjectMedia() { }
 
@@ -86,9 +84,5 @@ public class ProjectMedia {
 
     public int getDisplayOrder() {
         return displayOrder;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 }

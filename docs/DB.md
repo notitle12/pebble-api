@@ -535,3 +535,5 @@ ck_member_handle은 `[a-z][a-z0-9_-]{1,28}[a-z0-9_]`로 확장한다. 예약어�
 post.is_draft는 기존 데이터 false이며 true는 HIDDEN/DELETED만 허용한다. 주소 변경은 애플리케이션에서 초안 확정 때 한 번 허용하고 기존 발행 주소는 보존한다. post_block은 HTML/MARKDOWN을 추가하며 두 타입의 language는 NULL이다. post_body_image(id,post_id,storage_key,created_at)는 Post 소유 파일을 연결하고 외부 키는 유일하다. 행 삭제 시 media_deletion_job을 기록하고, Post DELETED 전이 시 이미지 연결을 지우며 회원/글 물리 삭제는 FK CASCADE로 회수한다. 삭제 큐의 참조 검사에도 post_body_image를 포함한다.
 
 `V18__expand_oauth_provider_names.sql`은 OAuth 공급자 CHECK만 확장한다. 기존 데이터·Provider/subject 고유 제약·회원당 Provider 고유 제약은 유지한다. 실제 계정 연결은 등록된 서버 클라이언트를 통해서만 수행한다. 카카오/구글 HTTP 로그인은 아직 제공하지 않는다.
+
+시간 필드는 Java의 BaseCreatedEntity/BaseTimeEntity에서 공통 매핑하지만 각 기존 테이블의 created_at/updated_at 컬럼과 TIMESTAMPTZ 제약을 유지한다. 새 공통 테이블이나 created_by/updated_by 컬럼은 만들지 않는다. 생성 전용 연결/미디어 엔티티에 updated_at을 추가하지 않는다. 시간 필드 리팩터링 자체는 DB migration이 없다.

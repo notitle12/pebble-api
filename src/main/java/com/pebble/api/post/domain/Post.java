@@ -1,5 +1,6 @@
 package com.pebble.api.post.domain;
 
+import com.pebble.api.global.persistence.BaseTimeEntity;
 import com.pebble.api.category.domain.Category;
 import com.pebble.api.global.id.TsidGenerator;
 import com.pebble.api.member.domain.Member;
@@ -12,7 +13,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import org.hibernate.annotations.Check;
@@ -22,7 +22,7 @@ import org.hibernate.annotations.Check;
 @Check(name = "ck_post_summary_length", constraints = "summary is null or char_length(summary) <= 500")
 @Check(name = "ck_post_visibility", constraints = "visibility_status in ('PUBLIC', 'HIDDEN', 'DELETED')")
 @Check(name = "ck_post_blocked_metadata", constraints = "((is_blocked = true and blocked_at is not null and blocked_by_admin_id is not null) or (is_blocked = false and blocked_at is null and blocked_by_admin_id is null))")
-public class Post {
+public class Post extends BaseTimeEntity {
 
     @Id
     private Long id;
@@ -80,12 +80,6 @@ public class Post {
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
     protected Post() {
     }
@@ -189,24 +183,13 @@ public class Post {
 
     @PrePersist
     void prePersist() {
-        Instant now = Instant.now();
+        Instant now = creationTime();
         if (id == null) {
             id = TsidGenerator.generate();
-        }
-        if (createdAt == null) {
-            createdAt = now;
-        }
-        if (updatedAt == null) {
-            updatedAt = now;
         }
         if (visibility == PostVisibility.PUBLIC && publishedAt == null) {
             publishedAt = now;
         }
-    }
-
-    @PreUpdate
-    void preUpdate() {
-        updatedAt = Instant.now();
     }
 
     public Long getId() { return id; }
@@ -225,6 +208,4 @@ public class Post {
     public Long getBlockedByAdminId() { return blockedByAdminId; }
     public Instant getPublishedAt() { return publishedAt; }
     public Instant getDeletedAt() { return deletedAt; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
 }
