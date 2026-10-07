@@ -311,3 +311,11 @@ multipart는 파일 10MiB/요청 11MiB 한도이며 쓰기는 USER Bearer 경로
 중복 확인은 ACTIVE USER Bearer와 명시된 프론트 Origin의 GET CORS만 허용한다. 계정 존재 여부 대신 해당 표시 이름의 사용 가능 여부만 반환하며 본인 이름은 제외한다. 검사는 예약·최종 권한 판단이 아니다.
 
 프로필 사진은 본인 회원 행 잠금과 기존 파일 형식·크기·픽셀 제한 및 WebP 재인코딩을 사용한다. 임의 URL/객체 키 연결은 받지 않는다. 사진은 비공개 R2에 저장하고 기존 CDN signed URL 정책으로 공개 프로필·작성자 화면에 표시한다. 초기화·탈퇴 후 이미 발급된 URL은 기존 최대 유효기간 동안 접근 가능할 수 있다. 이름·사진 쓰기는 원자 저장하며 실패 객체와 제거 객체는 삭제 큐가 회수한다.
+
+## 보안 설정의 책임과 개발 문서
+
+- `SecurityConfiguration`: 필터 체인, JWT 역할 변환과 관리자 온라인 세션 검증.
+- `SecurityEndpoints`: HTTP 메서드·경로·역할 목록과 제한된 POST CSRF 예외. 미등록 요청은 거부.
+- `CorsConfiguration`: 정확한 Origin 검증과 엔드포인트 목록에서 생성하는 메서드별 CORS.
+
+Swagger/OpenAPI는 기본 비활성이다. 명시적인 `api-docs` 프로필이 필요하며 `prod`를 함께 선택해도 문서 경로를 허용하지 않는다. 개발 UI에서 요청 실행과 토큰 영구 저장을 끄고 회원/관리자 문서를 분리한다. 자세한 방법은 [OPENAPI.md](OPENAPI.md)를 확인한다.
