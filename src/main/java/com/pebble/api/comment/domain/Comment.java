@@ -1,5 +1,6 @@
 package com.pebble.api.comment.domain;
 
+import com.pebble.api.global.persistence.BaseTimeEntity;
 import com.pebble.api.global.id.TsidGenerator;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
@@ -8,7 +9,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @MappedSuperclass
-public abstract class Comment {
+public abstract class Comment extends BaseTimeEntity {
     @Id
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -19,10 +20,6 @@ public abstract class Comment {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private CommentVisibility visibility;
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
@@ -53,18 +50,14 @@ public abstract class Comment {
     @PrePersist
     void initialize() {
         id = TsidGenerator.generate();
-        createdAt = Instant.now();
+        createdAt = creationTime();
         updatedAt = createdAt;
     }
-    @PreUpdate
-    void touch() { updatedAt = Instant.now(); }
 
     public abstract long getContentId();
     public Long getId() { return id; }
     public Member getAuthor() { return author; }
     public String getBody() { return body; }
     public CommentVisibility getVisibility() { return visibility; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
     public Instant getDeletedAt() { return deletedAt; }
 }
