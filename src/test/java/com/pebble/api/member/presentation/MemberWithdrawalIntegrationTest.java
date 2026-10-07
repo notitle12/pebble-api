@@ -13,9 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.pebble.api.auth.application.AccessTokenService;
 import com.pebble.api.auth.application.UserSessionService;
-import com.pebble.api.auth.application.NaverLoginService;
+import com.pebble.api.auth.application.OAuthLoginService;
 import com.pebble.api.auth.application.UserRefreshTokenService;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.application.MemberWithdrawalService;
 import com.pebble.api.member.domain.Member;
@@ -56,7 +56,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     @Autowired MemberRepository members;
     @Autowired AccessTokenService tokens;
     @Autowired UserSessionService sessions;
-    @Autowired NaverLoginService naverLogin;
+    @Autowired OAuthLoginService naverLogin;
     @Autowired MemberOAuthIdentityRepository identities;
     @Autowired MemberProfileService profiles;
     @Autowired MemberWithdrawalService withdrawals;
@@ -64,7 +64,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
     @Autowired UserRefreshTokenService refreshTokens;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
 
     private Member member;
     private UserSessionService.LoginGrant login;
@@ -137,9 +137,9 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + oldLogin.accessToken()))
                 .andExpect(status().isAccepted());
 
-        var authorization = naverLogin.beginAuthorization();
+        var authorization = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", authorization.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         var cancellation = mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel")
                         .header(HttpHeaders.ORIGIN, "http://localhost:3000")
                         .cookie(new Cookie("naver_oauth_state", authorization.state()))
@@ -168,9 +168,9 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         String subject = "withdrawal-subject-" + UUID.randomUUID();
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
         withdrawalsRequest();
-        var authorization = naverLogin.beginAuthorization();
+        var authorization = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", authorization.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         String path = "/api/v1/auth/naver/withdrawal/cancel";
         for (String invalid : java.util.List.of(
                 "{}", "null", "[]", "{\"authorizationCode\":null,\"state\":\"s\"}",
@@ -211,9 +211,9 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
         withdrawalsRequest();
         String path = "/api/v1/auth/naver/withdrawal/cancel";
-        var authorization = naverLogin.beginAuthorization();
+        var authorization = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", authorization.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         String body = "{\"authorizationCode\":\"valid-code\",\"state\":\"" + authorization.state() + "\"}";
         Cookie stateCookie = new Cookie("naver_oauth_state", authorization.state());
         mvc.perform(post(path).header(HttpHeaders.ORIGIN, "https://untrusted.example").cookie(stateCookie)
@@ -231,9 +231,9 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(stateCookie)
                         .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
 
-        var activeState = naverLogin.beginAuthorization();
+        var activeState = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", activeState.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
                         .cookie(new Cookie("naver_oauth_state", activeState.state())).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + activeState.state() + "\"}"))
@@ -241,9 +241,9 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
 
         jdbc.update("update member set status='SUSPENDED' where id=?", member.getId());
         emClear();
-        var suspendedState = naverLogin.beginAuthorization();
+        var suspendedState = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", suspendedState.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         mvc.perform(post(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
                         .cookie(new Cookie("naver_oauth_state", suspendedState.state())).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + suspendedState.state() + "\"}"))
@@ -255,18 +255,18 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         String subject = "withdrawal-subject-" + UUID.randomUUID();
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
         withdrawalsRequest();
-        var loginState = naverLogin.beginAuthorization();
+        var loginState = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("login-code", loginState.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         mvc.perform(post("/api/v1/auth/naver/login").cookie(new Cookie("naver_oauth_state", loginState.state()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"authorizationCode\":\"login-code\",\"state\":\"" + loginState.state() + "\"}"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_PENDING"));
 
-        var unknownState = naverLogin.beginAuthorization();
+        var unknownState = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         String unknownSubject = "unregistered-" + UUID.randomUUID();
         when(naver.authenticate("valid-code", unknownState.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(unknownSubject, "unknown", null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(unknownSubject, "unknown", null));
         long count = members.count();
         mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel").header(HttpHeaders.ORIGIN, "http://localhost:3000")
                         .cookie(new Cookie("naver_oauth_state", unknownState.state())).contentType(MediaType.APPLICATION_JSON)
@@ -282,9 +282,9 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         withdrawalsRequest();
         jdbc.update("update member set withdrawal_scheduled_at=current_timestamp - interval '1 second' where id=?", member.getId());
         em.clear();
-        var state = naverLogin.beginAuthorization();
+        var state = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", state.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel").header(HttpHeaders.ORIGIN, "http://localhost:3000")
                         .cookie(new Cookie("naver_oauth_state", state.state())).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + state.state() + "\"}"))
@@ -328,9 +328,9 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get("/api/v1/posts/" + postId + "/comments")).andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/posts/" + postId + "/comments/" + commentId)).andExpect(status().isNotFound());
 
-        var state = naverLogin.beginAuthorization();
+        var state = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", state.state()))
-                .thenReturn(new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null));
         mvc.perform(post("/api/v1/auth/naver/withdrawal/cancel").header(HttpHeaders.ORIGIN, "http://localhost:3000")
                         .cookie(new Cookie("naver_oauth_state", state.state())).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"authorizationCode\":\"valid-code\",\"state\":\"" + state.state() + "\"}"))
@@ -367,12 +367,12 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         String subject = "withdrawal-subject-" + UUID.randomUUID();
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
         withdrawalsRequest();
-        var state = naverLogin.beginAuthorization();
+        var state = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", state.state())).thenAnswer(invocation -> {
             assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-            return new NaverOAuthGateway.NaverProfile(subject, member.getNickname(), null);
+            return new OAuthProviderClient.OAuthProfile(subject, member.getNickname(), null);
         });
-        naverLogin.cancelWithdrawal("valid-code", state.state(), state.state());
+        naverLogin.cancelWithdrawal(OAuthProvider.NAVER, "valid-code", state.state(), state.state());
         assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.ACTIVE);
     }
 

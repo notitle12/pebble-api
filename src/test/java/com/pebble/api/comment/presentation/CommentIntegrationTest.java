@@ -14,7 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pebble.api.auth.application.AccessTokenService;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
@@ -51,7 +51,7 @@ class CommentIntegrationTest extends AuthenticationTestSupport {
     @Autowired AccessTokenService tokens;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
     Member owner;
     Member writer;
     Member stranger;
