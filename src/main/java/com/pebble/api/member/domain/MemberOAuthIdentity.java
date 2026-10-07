@@ -16,7 +16,7 @@ import org.hibernate.annotations.Check;
 
 @Entity
 @Table(name = "member_oauth_identity")
-@Check(name = "ck_member_oauth_identity_provider", constraints = "provider in ('NAVER')")
+@Check(name = "ck_member_oauth_identity_provider", constraints = "provider in ('NAVER', 'KAKAO', 'GOOGLE')")
 public class MemberOAuthIdentity {
 
     @Id

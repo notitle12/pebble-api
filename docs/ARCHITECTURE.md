@@ -988,3 +988,11 @@ Pebble Backend의 Architecture는 다음 원칙을 최우선으로 한다.
 13. **Architecture는 현재 문제를 해결하기 위한 수단이며 목적 자체가 아니다.**
 
 이 원칙을 통해 Pebble Backend는 프로젝트 규모에 맞는 명확한 구조를 유지하면서도, 실제 복잡성이 증가할 경우 필요한 방향으로 확장할 수 있도록 한다.
+
+## OAuth 공급자 확장 경계
+
+`OAuthLoginService`가 공급자 선택, 일회용 state/쿠키 검증, 회원 연결, 자체 세션 발급과 탈퇴 취소를 조정한다. `auth.application.oauth.OAuthProviderClient`는 authorization URL 생성과 검증된 공통 `OAuthProfile` 반환 계약이다. 외부 HTTP·응답 파싱은 공급자별 infrastructure에 둔다.
+
+현재 실제 클라이언트는 `NaverOAuthClient`만 등록한다. `OAuthProviderRegistration`은 공급자 식별자·state TTL·클라이언트를 연결하며 중복 등록은 시작 단계에서 거부한다. 등록되지 않은 공급자는 서비스에서 거부한다. 새 공급자는 클라이언트 및 등록 Bean, 공급자별 HTTP/쿠키/Origin·CSRF 정책, 프론트 callback을 검증해 연결한다. enum 추가만으로 인증 경로를 공개하지 않는다.
+
+기존 `/api/v1/auth/naver/**`는 호환 어댑터로 유지한다. 일반화된 wildcard 인증 허용 경로를 추가하지 않는다. 공급자별 프로필·token/OIDC 검증은 해당 클라이언트가 책임지고 회원/세션 상태 및 DB 동시성 정책은 기존 서비스가 소유한다.

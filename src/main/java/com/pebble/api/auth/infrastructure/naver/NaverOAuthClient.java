@@ -1,9 +1,11 @@
 package com.pebble.api.auth.infrastructure.naver;
 
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.pebble.api.auth.domain.AuthError;
 import com.pebble.api.auth.domain.AuthException;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -13,12 +15,16 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriComponentsBuilder;
 
-@Component
-@RequiredArgsConstructor
-public class RestClientNaverOAuthGateway implements NaverOAuthGateway {
+@Component("naverOAuthClient")
+public class NaverOAuthClient implements OAuthProviderClient {
 
     private final RestClient restClient;
     private final NaverOAuthProperties properties;
+
+    public NaverOAuthClient(@Qualifier("naverRestClient") RestClient restClient, NaverOAuthProperties properties) {
+        this.restClient = restClient;
+        this.properties = properties;
+    }
 
     @Override
     public String authorizationUrl(String state) {
@@ -34,7 +40,7 @@ public class RestClientNaverOAuthGateway implements NaverOAuthGateway {
     }
 
     @Override
-    public NaverProfile authenticate(String authorizationCode, String state) {
+    public OAuthProfile authenticate(String authorizationCode, String state) {
         requireClientConfiguration();
         try {
             NaverTokenResponse token = restClient.post()
@@ -68,7 +74,7 @@ public class RestClientNaverOAuthGateway implements NaverOAuthGateway {
                     || (profile.profileImage() != null && characterCount(profile.profileImage()) > 2048)) {
                 throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
             }
-            return new NaverProfile(profile.id(), profile.nickname(), profile.profileImage());
+            return new OAuthProfile(profile.id(), profile.nickname(), profile.profileImage());
         } catch (HttpClientErrorException exception) {
             throw new AuthException(AuthError.INVALID_CREDENTIALS);
         } catch (RestClientException exception) {

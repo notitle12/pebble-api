@@ -2,6 +2,10 @@ package com.pebble.api.auth.infrastructure.naver;
 
 import com.pebble.api.auth.infrastructure.redis.RefreshTokenProperties;
 import java.time.Duration;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
+import com.pebble.api.auth.application.oauth.OAuthProviderRegistration;
+import com.pebble.api.member.domain.OAuthProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,6 +15,12 @@ import org.springframework.web.client.RestClient;
 @Configuration
 @EnableConfigurationProperties({NaverOAuthProperties.class, RefreshTokenProperties.class})
 public class NaverOAuthConfiguration {
+
+    @Bean
+    OAuthProviderRegistration naverRegistration(@Qualifier("naverOAuthClient") OAuthProviderClient client,
+                                                NaverOAuthProperties properties) {
+        return new OAuthProviderRegistration(OAuthProvider.NAVER, properties.stateTtl(), client);
+    }
 
     @Bean
     RestClient naverRestClient(RestClient.Builder builder) {

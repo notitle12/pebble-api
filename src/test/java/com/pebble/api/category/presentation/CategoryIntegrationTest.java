@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.pebble.api.auth.application.AccessTokenService;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.category.domain.Category;
 import com.pebble.api.category.domain.CategoryStatus;
 import com.pebble.api.category.infrastructure.persistence.CategoryRepository;
@@ -45,8 +45,8 @@ class CategoryIntegrationTest extends AuthenticationTestSupport {
     @Autowired
     private AccessTokenService accessTokens;
 
-    @MockitoBean
-    private NaverOAuthGateway naverOAuthGateway;
+    @MockitoBean(name = "naverOAuthClient")
+    private OAuthProviderClient naverOAuthGateway;
 
     @BeforeEach
     void clearTreeWithinRollbackTransaction() {
