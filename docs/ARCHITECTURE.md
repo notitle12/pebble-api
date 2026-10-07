@@ -996,3 +996,11 @@ Pebble Backend의 Architecture는 다음 원칙을 최우선으로 한다.
 현재 실제 클라이언트는 `NaverOAuthClient`만 등록한다. `OAuthProviderRegistration`은 공급자 식별자·state TTL·클라이언트를 연결하며 중복 등록은 시작 단계에서 거부한다. 등록되지 않은 공급자는 서비스에서 거부한다. 새 공급자는 클라이언트 및 등록 Bean, 공급자별 HTTP/쿠키/Origin·CSRF 정책, 프론트 callback을 검증해 연결한다. enum 추가만으로 인증 경로를 공개하지 않는다.
 
 기존 `/api/v1/auth/naver/**`는 호환 어댑터로 유지한다. 일반화된 wildcard 인증 허용 경로를 추가하지 않는다. 공급자별 프로필·token/OIDC 검증은 해당 클라이언트가 책임지고 회원/세션 상태 및 DB 동시성 정책은 기존 서비스가 소유한다.
+
+## 엔티티 시간 필드 공통화
+
+`global.persistence.BaseCreatedEntity`는 `createdAt`, `BaseTimeEntity`는 추가로 `updatedAt`을 가진 `@MappedSuperclass`다. 식별자·작성자/소유자·삭제 상태·게시/탈퇴/쿨타임 시각은 각 엔티티에 남긴다. createdBy/updatedBy 감사는 이번 변경에서 도입하지 않는다.
+
+생성 전용은 OAuth 연결·게시글 태그/본문 이미지·프로젝트 태그/링크/미디어에, 생성·수정은 회원·관리자·게시글·프로젝트·분류·게시판·댓글·프로젝트 기능에 적용한다. 기존 `Instant`/TIMESTAMPTZ와 컬럼 제약을 유지하며 시간 필드를 위한 DB migration은 없다.
+
+공통 생성 콜백은 기존 시각이 있으면 보존하고, persist 이벤트의 동일한 기준 시각을 초기 수정 시각 및 필요한 업무 시각 초기화에 제공한다. 그 기준은 `@Transient` 기술 필드로 DB에 저장하지 않는다. ID 생성과 업무 시각 초기화는 각 엔티티 콜백이 담당한다. 생성자에서 설정한 미디어/게시 시각, 명시적 수정 시각과 댓글·게시판의 기존 생성 초기화 규칙은 보존한다. JPQL bulk update는 콜백을 거치지 않으므로 기존 명시적 updatedAt 갱신을 유지한다.
