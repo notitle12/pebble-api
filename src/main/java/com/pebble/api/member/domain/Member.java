@@ -1,5 +1,6 @@
 package com.pebble.api.member.domain;
 
+import com.pebble.api.global.persistence.BaseTimeEntity;
 import com.pebble.api.global.id.TsidGenerator;
 import com.pebble.api.global.exception.ApplicationException;
 import jakarta.persistence.Column;
@@ -8,7 +9,6 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.Duration;
@@ -18,7 +18,7 @@ import org.hibernate.annotations.Check;
 @Table(name = "member")
 @Check(name = "ck_member_status", constraints = "status in ('ACTIVE', 'SUSPENDED', 'WITHDRAWAL_PENDING')")
 @Check(name = "ck_member_withdrawal_timestamps", constraints = "((status = 'WITHDRAWAL_PENDING' and withdrawal_requested_at is not null and withdrawal_scheduled_at is not null) or (status <> 'WITHDRAWAL_PENDING' and withdrawal_requested_at is null and withdrawal_scheduled_at is null))")
-public class Member {
+public class Member extends BaseTimeEntity {
 
     @Id
     private Long id;
@@ -57,12 +57,6 @@ public class Member {
     @Column(name = "withdrawal_scheduled_at")
     private Instant withdrawalScheduledAt;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
     protected Member() {
     }
 
@@ -77,22 +71,11 @@ public class Member {
 
     @PrePersist
     void prePersist() {
-        Instant now = Instant.now();
+        Instant now = creationTime();
         if (id == null) {
             id = TsidGenerator.generate();
         }
-        if (createdAt == null) {
-            createdAt = now;
-        }
         if (nicknameChangedAt == null) nicknameChangedAt = now;
-        if (updatedAt == null) {
-            updatedAt = now;
-        }
-    }
-
-    @PreUpdate
-    void preUpdate() {
-        updatedAt = Instant.now();
     }
 
     public Long getId() {
@@ -175,13 +158,5 @@ public class Member {
 
     public Instant getWithdrawalScheduledAt() {
         return withdrawalScheduledAt;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
     }
 }

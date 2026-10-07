@@ -1,17 +1,17 @@
 package com.pebble.api.board.domain;
 
+import com.pebble.api.global.persistence.BaseTimeEntity;
 import com.pebble.api.global.id.TsidGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
 @Entity
 @Table(name = "board")
-public class Board {
+public class Board extends BaseTimeEntity {
     @Id
     private Long id;
     @Column(name = "owner_member_id", nullable = false, updatable = false)
@@ -24,10 +24,6 @@ public class Board {
     private int displayOrder;
     @Column(name = "deleted_at")
     private Instant deletedAt;
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
     protected Board() { }
 
@@ -54,11 +50,8 @@ public class Board {
     @PrePersist
     void prePersist() {
         if (id == null) id = TsidGenerator.generate();
-        if (createdAt == null) createdAt = Instant.now();
         updatedAt = createdAt;
     }
-    @PreUpdate
-    void preUpdate() { updatedAt = Instant.now(); }
 
     public Long getId() { return id; }
     public Long getOwnerMemberId() { return ownerMemberId; }

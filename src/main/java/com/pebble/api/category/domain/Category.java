@@ -1,5 +1,6 @@
 package com.pebble.api.category.domain;
 
+import com.pebble.api.global.persistence.BaseTimeEntity;
 import com.pebble.api.global.id.TsidGenerator;
 import com.pebble.api.global.exception.ApplicationException;
 import jakarta.persistence.Column;
@@ -11,13 +12,11 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.Instant;
 
 @Entity
 @Table(name = "category")
-public class Category {
+public class Category extends BaseTimeEntity {
 
     @Id
     private Long id;
@@ -39,12 +38,6 @@ public class Category {
     @Column(nullable = false, length = 20)
     private CategoryStatus status;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
     protected Category() {
     }
 
@@ -61,15 +54,8 @@ public class Category {
 
     @PrePersist
     void prePersist() {
-        Instant now = Instant.now();
         if (id == null) {
             id = TsidGenerator.generate();
-        }
-        if (createdAt == null) {
-            createdAt = now;
-        }
-        if (updatedAt == null) {
-            updatedAt = now;
         }
     }
 
@@ -82,11 +68,6 @@ public class Category {
         this.slug = slug;
         this.displayOrder = displayOrder;
         this.status = status;
-    }
-
-    @PreUpdate
-    void preUpdate() {
-        updatedAt = Instant.now();
     }
 
     public Long getId() {
@@ -111,13 +92,5 @@ public class Category {
 
     public CategoryStatus getStatus() {
         return status;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
     }
 }
