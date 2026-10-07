@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.domain.Member;
@@ -40,7 +40,7 @@ class ProjectTransactionTest extends AuthenticationTestSupport {
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate transactions;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
     private final List<Long> owners = new ArrayList<>();
 
     @AfterEach

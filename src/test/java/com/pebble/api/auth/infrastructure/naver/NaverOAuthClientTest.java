@@ -1,5 +1,7 @@
 package com.pebble.api.auth.infrastructure.naver;
 
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -23,7 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-class RestClientNaverOAuthGatewayTest {
+class NaverOAuthClientTest {
 
     @Test
     void exchangesAuthorizationCodeAndLoadsNaverProfile() {
@@ -47,8 +49,8 @@ class RestClientNaverOAuthGatewayTest {
                         "{\"resultcode\":\"00\",\"response\":{\"id\":\"naver-subject\",\"nickname\":\"pebble\",\"profile_image\":\"https://example.com/avatar.webp\"}}",
                         MediaType.APPLICATION_JSON));
 
-        NaverOAuthGateway gateway = new RestClientNaverOAuthGateway(builder.build(), properties);
-        NaverOAuthGateway.NaverProfile profile = gateway.authenticate("authorization-code", "verified-state");
+        OAuthProviderClient gateway = new NaverOAuthClient(builder.build(), properties);
+        OAuthProviderClient.OAuthProfile profile = gateway.authenticate("authorization-code", "verified-state");
 
         assertThat(profile.subject()).isEqualTo("naver-subject");
         assertThat(profile.nickname()).isEqualTo("pebble");
@@ -68,7 +70,7 @@ class RestClientNaverOAuthGatewayTest {
         server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(
                 "{\"resultcode\":\"00\",\"response\":{\"id\":\"subject\",\"nickname\":" + nicknameJson + "}}",
                 MediaType.APPLICATION_JSON));
-        var profile = new RestClientNaverOAuthGateway(builder.build(), properties).authenticate("code", "state");
+        var profile = new NaverOAuthClient(builder.build(), properties).authenticate("code", "state");
         assertThat(profile.nickname()).isEqualTo(nickname);
         assertThat(profile.profileImageUrl()).isNull();
         server.verify();
@@ -82,7 +84,7 @@ class RestClientNaverOAuthGatewayTest {
         NaverOAuthProperties properties = properties();
         server.expect(requestTo(properties.tokenUri())).andRespond(withStatus(status));
         AuthException exception = catchThrowableOfType(AuthException.class,
-                () -> new RestClientNaverOAuthGateway(builder.build(), properties).authenticate("code", "state"));
+                () -> new NaverOAuthClient(builder.build(), properties).authenticate("code", "state"));
         assertThat(exception.error()).isEqualTo(status.is4xxClientError()
                 ? AuthError.INVALID_CREDENTIALS : AuthError.OAUTH_PROVIDER_UNAVAILABLE);
         server.verify();

@@ -3,7 +3,7 @@ package com.pebble.api.post.application;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pebble.api.auth.infrastructure.naver.NaverOAuthGateway;
+import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.domain.Member;
@@ -37,7 +37,7 @@ class PostConcurrencyTest extends AuthenticationTestSupport {
     @Autowired ObjectMapper mapper;
     @Autowired TransactionTemplate transactions;
     @Autowired JdbcTemplate jdbc;
-    @MockitoBean NaverOAuthGateway naver;
+    @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
     private final List<Long> authorIds = new ArrayList<>();
 
     @AfterEach

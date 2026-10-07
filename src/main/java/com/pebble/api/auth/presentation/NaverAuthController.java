@@ -1,9 +1,9 @@
 package com.pebble.api.auth.presentation;
 
-import com.pebble.api.auth.application.NaverLoginService.AuthorizationGrant;
-import com.pebble.api.auth.application.NaverLoginService.LoginGrant;
+import com.pebble.api.auth.application.OAuthLoginService.AuthorizationGrant;
+import com.pebble.api.auth.application.OAuthLoginService.LoginGrant;
 import com.pebble.api.auth.application.AccessTokenService;
-import com.pebble.api.auth.application.NaverLoginService;
+import com.pebble.api.auth.application.OAuthLoginService;
 import com.pebble.api.auth.presentation.dto.NaverLoginResponse;
 import com.pebble.api.auth.presentation.dto.NaverLoginResponse.MemberResponse;
 import com.pebble.api.auth.presentation.dto.NaverWithdrawalRequest;
@@ -15,6 +15,7 @@ import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
 import com.pebble.api.member.domain.Member;
+import com.pebble.api.member.domain.OAuthProvider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -39,13 +40,13 @@ public class NaverAuthController {
     static final String REFRESH_COOKIE = "refresh_token";
     private static final String COOKIE_PATH = "/api/v1/auth";
 
-    private final NaverLoginService naverLoginService;
+    private final OAuthLoginService oauthLoginService;
     private final ObjectMapper mapper;
     private final com.pebble.api.member.application.MemberProfileImages images;
 
     @PostMapping("/authorization")
     public ResponseEntity<ApiResponse<AuthorizationResponse>> beginAuthorization() {
-        AuthorizationGrant grant = naverLoginService.beginAuthorization();
+        AuthorizationGrant grant = oauthLoginService.beginAuthorization(OAuthProvider.NAVER);
         ResponseCookie stateCookie = ResponseCookie.from(STATE_COOKIE, grant.state())
                 .httpOnly(true)
                 .secure(true)
@@ -62,7 +63,7 @@ public class NaverAuthController {
     public ResponseEntity<ApiResponse<NaverLoginResponse>> login(
             @Valid @RequestBody NaverLoginRequest request,
             @CookieValue(name = STATE_COOKIE, required = false) String cookieState) {
-        LoginGrant grant = naverLoginService.login(request.authorizationCode(), request.state(), cookieState);
+        LoginGrant grant = oauthLoginService.login(OAuthProvider.NAVER, request.authorizationCode(), request.state(), cookieState);
         ResponseCookie expiredStateCookie = ResponseCookie.from(STATE_COOKIE, "")
                 .httpOnly(true)
                 .secure(true)
@@ -100,7 +101,7 @@ public class NaverAuthController {
         } catch (JsonProcessingException exception) {
             throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
         }
-        naverLoginService.cancelWithdrawal(body.authorizationCode(), body.state(), cookieState);
+        oauthLoginService.cancelWithdrawal(OAuthProvider.NAVER, body.authorizationCode(), body.state(), cookieState);
         ResponseCookie expiredStateCookie = ResponseCookie.from(STATE_COOKIE, "")
                 .httpOnly(true).secure(true).sameSite("Lax")
                 .path(COOKIE_PATH + "/naver").maxAge(Duration.ZERO).build();
