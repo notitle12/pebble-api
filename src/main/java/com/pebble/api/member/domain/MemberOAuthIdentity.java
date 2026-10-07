@@ -1,5 +1,6 @@
 package com.pebble.api.member.domain;
 
+import com.pebble.api.global.persistence.BaseCreatedEntity;
 import com.pebble.api.global.id.TsidGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -11,13 +12,12 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.Instant;
 import org.hibernate.annotations.Check;
 
 @Entity
 @Table(name = "member_oauth_identity")
 @Check(name = "ck_member_oauth_identity_provider", constraints = "provider in ('NAVER')")
-public class MemberOAuthIdentity {
+public class MemberOAuthIdentity extends BaseCreatedEntity {
 
     @Id
     private Long id;
@@ -33,9 +33,6 @@ public class MemberOAuthIdentity {
     @Column(name = "provider_subject", nullable = false, length = 255, updatable = false)
     private String providerSubject;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
     protected MemberOAuthIdentity() {
     }
 
@@ -49,9 +46,6 @@ public class MemberOAuthIdentity {
     void prePersist() {
         if (id == null) {
             id = TsidGenerator.generate();
-        }
-        if (createdAt == null) {
-            createdAt = Instant.now();
         }
     }
 
@@ -69,9 +63,5 @@ public class MemberOAuthIdentity {
 
     public String getProviderSubject() {
         return providerSubject;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 }

@@ -1,5 +1,6 @@
 package com.pebble.api.project.domain;
 
+import com.pebble.api.global.persistence.BaseCreatedEntity;
 import com.pebble.api.tag.domain.Tag;
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
@@ -8,13 +9,11 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.MapsId;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.Instant;
 
 @Entity
 @Table(name = "project_tag")
-public class ProjectTag {
+public class ProjectTag extends BaseCreatedEntity {
     @EmbeddedId
     private ProjectTagId id;
     @MapsId("projectId")
@@ -27,8 +26,6 @@ public class ProjectTag {
     private Tag tag;
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
 
     protected ProjectTag() { }
     public ProjectTag(Project project, Tag tag, int displayOrder) {
@@ -37,7 +34,6 @@ public class ProjectTag {
         this.displayOrder = displayOrder;
         this.id = new ProjectTagId(project.getId(), tag.getId());
     }
-    @PrePersist void prePersist() { if (createdAt == null) createdAt = Instant.now(); }
     public Project getProject() { return project; }
     public Tag getTag() { return tag; }
     public int getDisplayOrder() { return displayOrder; }

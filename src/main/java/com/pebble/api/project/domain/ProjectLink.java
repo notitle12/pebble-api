@@ -1,5 +1,6 @@
 package com.pebble.api.project.domain;
 
+import com.pebble.api.global.persistence.BaseCreatedEntity;
 import com.pebble.api.global.id.TsidGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -11,11 +12,10 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import java.time.Instant;
 
 @Entity
 @Table(name = "project_link")
-public class ProjectLink {
+public class ProjectLink extends BaseCreatedEntity {
     @Id
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -30,8 +30,6 @@ public class ProjectLink {
     private String url;
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
 
     protected ProjectLink() { }
     public ProjectLink(Project project, ProjectLinkType type, String label, String url, int displayOrder) {
@@ -43,7 +41,6 @@ public class ProjectLink {
     }
     @PrePersist void prePersist() {
         if (id == null) id = TsidGenerator.generate();
-        if (createdAt == null) createdAt = Instant.now();
     }
     public Long getId() { return id; }
     public Project getProject() { return project; }
