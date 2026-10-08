@@ -786,3 +786,12 @@ Post 생성/수정은 선택 boolean `draft`를 받으며 응답에 해당 상�
 ## 블로그 방문·검색·외부 링크
 
 공개 방문 통계·작성자 q 검색, 본인 GitHub/사이트 로고 저장은 [BLOG_TOOLS.md](BLOG_TOOLS.md)를 따른다.
+
+### 5.4.1 게시판 초안 트리 전체 저장
+
+`PUT /members/me/boards` (USER, ACTIVE). JSON `base`와 `boards` 필수, 다른 필드·query 거부.
+
+- `base`: 편집 시작 시 전체 게시판을 평탄화한 `{id: string, name: string, parentId: string|null, displayOrder: integer}` 배열. 순서는 무관하다. 최신 트리와 ID·이름·부모·순서가 다르면 409 `BOARD_TREE_CHANGED`로 거부한다.
+- `boards`: 최종 루트 배열. 각 항목은 `{id: string|null, name: string, children: [...]}`다. 기존 ID는 본인 활성 게시판만 허용(그 외 404), 신규는 null. 배열 위치가 표시 순서이며 최대 3단계, 동일 부모의 이름 중복/기존 ID 반복 거부. 각 배열 및 총 노드는 최대 1000개다. 이름은 기존 1~50자·유니코드 검증을 사용한다.
+- base에는 있지만 boards에서 빠진 게시판은 논리 삭제한다. 연결된 글은 삭제하지 않고 게시판만 해제한다. 회원 쓰기 잠금 아래 하나의 트랜잭션으로 신규·이름·계층·순서·삭제를 적용한다. 부분 저장 없음.
+- 200 `{data: [...]}` 응답은 GET /members/me/boards와 같은 본인 전체 트리(신규 ID 포함). 네트워크 실패 뒤 자동 반복하지 말고 최신 목록을 확인한다. 새 게시판 ID를 재발급하는 중복 저장을 피한다.
