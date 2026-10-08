@@ -327,3 +327,7 @@ Swagger/OpenAPI는 기본 비활성이다. 명시적인 `api-docs` 프로필이 
 서버가 등록한 공급자만 `OAuthLoginService`에서 사용한다. state는 `pebble:auth:oauth:<provider>:state:<SHA-256 digest>` 키에 공급자별 TTL로 저장하고 `GETDEL`로 한 번 소비한다. state·쿠키가 일치해도 공급자가 다르면 인증하지 않으며 외부 token 요청 전에 거부한다. NAVER 키/TTL 설정과 브라우저 쿠키·응답/API 계약은 유지한다.
 
 NAVER/KAKAO/GOOGLE 식별자와 DB 허용 값은 준비하지만 실제 클라이언트와 공개 HTTP 경로는 NAVER만 활성이다. 추가 공급자는 code 교환·PKCE 지원 여부, redirect URI, 공급자별 프로필/OIDC ID token 검증, cookie/state/Origin 정책을 별도로 검증한 후 연결한다. 로그인 공급자 토큰은 Pebble JWT로 사용하지 않으며 이메일·닉네임으로 서로 다른 공급자 계정을 자동 통합하지 않는다.
+
+## 블로그 도구 공개 경계
+
+공개 방문 POST는 CookieOriginFilter 필수 단일 Origin 검증을 적용하는 명시적 CSRF 예외다. 회원 링크 PUT은 ACTIVE USER 본인·프로필 완료와 서버 URL/이미지 검증을 요구한다. 방문 익명 쿠키·집계/속도 제한 해시·로고 CDN 허용 범위는 [BLOG_TOOLS.md](BLOG_TOOLS.md)를 따른다. 기존 OAuth/refresh/JWT 정책은 변경하지 않는다.
