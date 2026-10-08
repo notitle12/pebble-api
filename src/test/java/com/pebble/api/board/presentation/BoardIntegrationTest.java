@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -229,6 +230,85 @@ class BoardIntegrationTest extends AuthenticationTestSupport {
                 Long.parseLong(hidden), Long.parseLong(deleted), Long.parseLong(blocked)))
                 .containsExactlyInAnyOrder("HIDDEN", "DELETED", "PUBLIC");
         assertThat(jdbc.queryForObject("select is_blocked from post where id=?", Boolean.class, Long.parseLong(blocked))).isTrue();
+    }
+
+
+    @Test
+    void replacesWholeTreeWithNewParentsRenamesAndDeletionWithoutDeletingPosts() throws Exception {
+        String a = create(owner, "a", null, 0);
+        String b = create(owner, "b", a, 0);
+        String removed = create(owner, "removed", null, 1);
+        String postId = createPost(owner, "PUBLIC", "\"" + removed + "\"");
+        JsonNode base = baseline();
+        // 부모/자식 반전과 새 부모 생성은 중간 트리의 상태와 무관하게 최종 트리로 검증한다.
+        String draft = "[{\"id\":null,\"name\":\"new\",\"children\":[{\"id\":\"" + b
+                + "\",\"name\":\"a\",\"children\":[{\"id\":\"" + a + "\",\"name\":\"b\",\"children\":[]}]}]}]";
+        saveTree(base, draft).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("new"))
+                .andExpect(jsonPath("$.data[0].children[0].id").value(b))
+                .andExpect(jsonPath("$.data[0].children[0].children[0].id").value(a));
+        assertThat(jdbc.queryForObject("select deleted_at is not null from board where id=?", Boolean.class, Long.parseLong(removed))).isTrue();
+        assertThat(jdbc.queryForObject("select board_id from post where id=?", Long.class, Long.parseLong(postId))).isNull();
+        assertThat(jdbc.queryForObject("select visibility_status from post where id=?", String.class, Long.parseLong(postId))).isEqualTo("PUBLIC");
+    }
+
+    @Test
+    void refusesStaleTreeWithoutOverwritingOtherChanges() throws Exception {
+        String a = create(owner, "first", null, 0);
+        JsonNode base = baseline();
+        writePatch(a, "{\"name\":\"changed elsewhere\"}").andExpect(status().isOk());
+        saveTree(base, "[]").andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("BOARD_TREE_CHANGED"));
+        assertThat(baseline().get(0).get("name").asText()).isEqualTo("changed elsewhere");
+    }
+
+    @Test
+    void rejectsUnknownDuplicateOrTooDeepNodesBeforeAnyModification() throws Exception {
+        String a = create(owner, "unchanged", null, 0);
+        String foreign = create(other, "foreign", null, 0);
+        JsonNode base = baseline();
+        saveTree(base, "[{\"id\":\"" + foreign + "\",\"name\":\"bad\",\"children\":[]}]").andExpect(status().isNotFound());
+        String node = "{\"id\":\"" + a + "\",\"name\":\"changed\",\"children\":[]}";
+        saveTree(base, "[" + node + "," + node + "]").andExpect(status().isBadRequest());
+        saveTree(base, "[{\"id\":null,\"name\":\"x\",\"children\":[]},{\"id\":null,\"name\":\"x\",\"children\":[]}]").andExpect(status().isBadRequest());
+        String deep = "[]";
+        for (int depth = 0; depth < 4; depth++) deep = "[{\"id\":null,\"name\":\"new\",\"children\":" + deep + "}]";
+        saveTree(base, deep).andExpect(status().isBadRequest());
+        assertThat(baseline()).isEqualTo(base);
+    }
+
+    @Test
+    void treeSaveUsesAuthenticatedOwnerAndAllowsOnlyItsPutPreflight() throws Exception {
+        mvc.perform(put("/api/v1/members/me/boards").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"base\":[],\"boards\":[]}")).andExpect(status().isForbidden());
+        mvc.perform(put("/api/v1/members/me/boards").header(HttpHeaders.AUTHORIZATION, "Bearer invalid").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"base\":[],\"boards\":[]}")).andExpect(status().isUnauthorized());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options("/api/v1/members/me/boards")
+                .header("Origin", "http://localhost:3000").header("Access-Control-Request-Method", "PUT"))
+                .andExpect(status().isOk());
+        for (String body : new String[]{"{}", "{\"base\":[],\"boards\":[],\"ownerId\":\"1\"}",
+                "{\"base\":[],\"boards\":[{\"id\":null,\"name\":\"x\"}]}",
+                "{\"base\":[],\"boards\":[{\"id\":1,\"name\":\"x\",\"children\":[]}]}"}) {
+            mvc.perform(put("/api/v1/members/me/boards").header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                    .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+        }
+    }
+
+    private JsonNode baseline() {
+        var result = mapper.createArrayNode();
+        jdbc.queryForList("select id,name,parent_id,display_order from board where owner_member_id=? and deleted_at is null order by id", owner.getId())
+                .forEach(row -> {
+                    var node = result.addObject();
+                    node.put("id", row.get("id").toString()); node.put("name", row.get("name").toString());
+                    if (row.get("parent_id") == null) node.putNull("parentId"); else node.put("parentId", row.get("parent_id").toString());
+                    node.put("displayOrder", ((Number) row.get("display_order")).intValue());
+                });
+        return result;
+    }
+
+    private ResultActions saveTree(JsonNode base, String draft) throws Exception {
+        var body = mapper.createObjectNode();body.set("base", base);body.set("boards", mapper.readTree(draft));
+        return mvc.perform(put("/api/v1/members/me/boards").header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(body)));
     }
 
     private String create(Member member, String name, String parentId, Integer order) throws Exception {

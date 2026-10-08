@@ -138,6 +138,45 @@ class BoardConcurrencyTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select count(*) from post where author_member_id=?", Long.class, owner)).isZero();
     }
 
+    @Test
+    void treeSaveSerializesWithAnotherWriterAndRejectsStaleBaseline() throws Exception {
+        long owner = member();
+        long id = create(owner, "before");
+        var input = new BoardTreeChanges(List.of(new BoardTreeChanges.Existing(id, "before", null, 0)),
+                List.of(new BoardTreeChanges.Node(id, "draft", List.of())));
+        CountDownLatch changed = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var writer = executor.submit(() -> transactions.executeWithoutResult(status -> {
+                boards.update(id, owner, new BoardChanges(Set.of("name"), "elsewhere", null, null));
+                changed.countDown(); await(release);
+            }));
+            assertThat(changed.await(5, TimeUnit.SECONDS)).isTrue();
+            var save = executor.submit(() -> {
+                try { boards.replaceTree(owner, input); return "OK"; }
+                catch (ApplicationException exception) { return exception.error().code(); }
+            });
+            try { assertThatThrownBy(() -> save.get(200, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class); }
+            finally { release.countDown(); }
+            writer.get(10, TimeUnit.SECONDS);
+            assertThat(save.get(10, TimeUnit.SECONDS)).isEqualTo("BOARD_TREE_CHANGED");
+        }
+        assertThat(jdbc.queryForObject("select name from board where id=?", String.class, id)).isEqualTo("elsewhere");
+    }
+
+    @Test
+    void treeSaveRollsBackEarlierChangesIfALaterWriteFails() {
+        long owner = member();
+        long id = create(owner, "before");
+        var input = new BoardTreeChanges(List.of(new BoardTreeChanges.Existing(id, "before", null, 0)),
+                List.of(new BoardTreeChanges.Node(id, "modified", List.of()),
+                        new BoardTreeChanges.Node(null, "valid new", List.of()),
+                        new BoardTreeChanges.Node(null, "", List.of())));
+        assertThatThrownBy(() -> boards.replaceTree(owner, input)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(jdbc.queryForObject("select name from board where id=?", String.class, id)).isEqualTo("before");
+        assertThat(jdbc.queryForObject("select count(*) from board where owner_member_id=?", Long.class, owner)).isEqualTo(1L);
+    }
+
     private String move(long owner, long board, long parent) {
         try { boards.update(board, owner, new BoardChanges(Set.of("parentId"), null, parent, null)); return "OK"; }
         catch (ApplicationException exception) { return exception.error().code(); }
