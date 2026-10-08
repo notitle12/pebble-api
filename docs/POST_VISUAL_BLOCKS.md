@@ -1,5 +1,7 @@
 # 게시글 표현 블록 확장
 
+각 Post 블록은 별도 `alignment` 값(`LEFT`, `CENTER`, `RIGHT`)을 보존한다. 요청에서 생략한 값과 마이그레이션 전 데이터는 `LEFT`이며 상세 API 응답은 정렬값을 포함한다. 텍스트/구조화된 content의 형식·검증에는 영향을 주지 않는다.
+
 TABLE: API #60 / Web #14 · ARCHITECTURE: API #62 / Web #16 · 2026-10-03
 
 ## 단계와 사용자 입력

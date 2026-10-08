@@ -254,8 +254,10 @@ Post 본문을 순서가 있는 텍스트·코드·테이블 명세서·아키�
 | `language` | VARCHAR(50) | Y | 코드 언어. `CODE` 블록에서 필수 |
 | `title` | VARCHAR(100) | Y | 블록 제목 또는 설명 |
 | `display_order` | INTEGER | N | Post 내 블록 순서, 0 이상 |
+| `alignment` | VARCHAR(10) | N | 블록 정렬: `LEFT`, `CENTER`, `RIGHT`; 생략·기존 데이터는 `LEFT` |
 
 - UNIQUE (`post_id`, `display_order`)
+- V21은 기존 행에 `LEFT`를 채우고 alignment 허용값 CHECK를 추가한다.
 - `block_type = CODE`이면 `language`가 필수인 CHECK 제약을 둔다. TABLE/ARCHITECTURE의 language는 NULL이어야 한다.
 - V15는 ARCHITECTURE type과 language=NULL CHECK를 추가한다. 요소·그룹·연결 참조는 요청 경계에서 검증하며 기존 TEXT content에 저장한다.
 - V14는 type CHECK를 확장하고 TABLE 언어 제약을 추가한다. 기존 TEXT/CODE 행은 변환하지 않는다. TABLE의 버전·컬럼 구조는 API에서 검사하고 기존 TEXT content 컬럼에 JSON 문자열로 저장한다. 전용 테이블이나 JSONB 컬럼은 추가하지 않는다.
