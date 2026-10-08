@@ -6,6 +6,7 @@ import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.post.application.PostChanges;
 import com.pebble.api.post.application.PostChanges.BlockInput;
 import com.pebble.api.post.domain.BlockType;
+import com.pebble.api.post.domain.BlockAlignment;
 import com.pebble.api.post.domain.CodeLanguage;
 import com.pebble.api.post.domain.PostVisibility;
 import java.util.ArrayList;
@@ -56,7 +57,7 @@ public final class PostWriteRequest {
             List<BlockInput> parsed = new ArrayList<>();
             int index = 0;
             for (JsonNode block : node) {
-                object(block, Set.of("type", "content", "language", "title"));
+                object(block, Set.of("type", "content", "language", "title", "alignment"));
                 String prefix = "blocks[" + index++ + "].";
                 BlockType type = enumValue(block.get("type"), BlockType.class, prefix + "type");
                 String content = text(block.get("content"), prefix + "content", 50000, false, false);
@@ -73,7 +74,9 @@ public final class PostWriteRequest {
                 }
                 if ((type == BlockType.HTML || type == BlockType.MARKDOWN) && language != null) fail(prefix + "language", "서식 본문에는 코드 언어를 지정할 수 없습니다.");
                 String blockTitle = block.has("title") ? text(block.get("title"), prefix + "title", 100, true, false) : null;
-                parsed.add(new BlockInput(type, content, language, blockTitle));
+                BlockAlignment alignment = block.has("alignment")
+                        ? enumValue(block.get("alignment"), BlockAlignment.class, prefix + "alignment") : BlockAlignment.LEFT;
+                parsed.add(new BlockInput(type, content, language, blockTitle, alignment));
             }
             blocks = List.copyOf(parsed);
         }

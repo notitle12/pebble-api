@@ -308,7 +308,8 @@ public class PostService {
         List<PostBlock> replacement = new ArrayList<>();
         for (int order = 0; order < input.size(); order++) {
             BlockInput block = input.get(order);
-            replacement.add(new PostBlock(post, block.type(), block.content(), block.language(), block.title(), order));
+            replacement.add(new PostBlock(post, block.type(), block.content(), block.language(), block.title(), order,
+                    block.alignment()));
         }
         blocks.saveAll(replacement);
     }

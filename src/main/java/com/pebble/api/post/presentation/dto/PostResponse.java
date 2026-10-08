@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.pebble.api.category.domain.CategoryStatus;
 import com.pebble.api.post.application.PostService.PostView;
 import com.pebble.api.post.domain.BlockType;
+import com.pebble.api.post.domain.BlockAlignment;
 import com.pebble.api.post.domain.CodeLanguage;
 import com.pebble.api.post.domain.PostVisibility;
 import com.pebble.api.tag.domain.TagStatus;
@@ -28,7 +29,7 @@ public record PostResponse(String id, String postNumber, String slug, String url
                 new Author(member.getId().toString(), member.getHandle(), member.getBlogName(), member.getNickname(),
                 imageUrl.apply(member)), post.getTitle(), post.getSummary(),
                 view.blocks() == null ? null : view.blocks().stream().map(block -> new Block(block.getType(),
-                        block.getContent(), block.getLanguage(), block.getTitle(), block.getDisplayOrder())).toList(),
+                        block.getContent(), block.getLanguage(), block.getTitle(), block.getDisplayOrder(), block.getAlignment())).toList(),
                 category == null ? null : new Classification(category.getId().toString(), category.getName(),
                         category.getSlug(), category.getStatus()),
                 view.tags().stream().map(tag -> new Technology(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getStatus())).toList(),
@@ -38,7 +39,8 @@ public record PostResponse(String id, String postNumber, String slug, String url
     }
 
     public record Author(String id, String handle, String blogName, String nickname, String profileImageUrl) { }
-    public record Block(BlockType type, String content, CodeLanguage language, String title, int displayOrder) { }
+    public record Block(BlockType type, String content, CodeLanguage language, String title, int displayOrder,
+                        BlockAlignment alignment) { }
     public record Classification(String id, String name, String slug, CategoryStatus status) { }
     public record Technology(String id, String name, String slug, TagStatus status) { }
 

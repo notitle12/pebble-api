@@ -1,6 +1,7 @@
 package com.pebble.api.post.application;
 
 import com.pebble.api.post.domain.BlockType;
+import com.pebble.api.post.domain.BlockAlignment;
 import com.pebble.api.post.domain.CodeLanguage;
 import com.pebble.api.post.domain.PostVisibility;
 import java.util.List;
@@ -14,6 +15,9 @@ public record PostChanges(Set<String> supplied, String title, String summary, Lo
         return supplied.contains(field);
     }
 
-    public record BlockInput(BlockType type, String content, CodeLanguage language, String title) {
+    public record BlockInput(BlockType type, String content, CodeLanguage language, String title, BlockAlignment alignment) {
+        public BlockInput(BlockType type, String content, CodeLanguage language, String title) {
+            this(type, content, language, title, BlockAlignment.LEFT);
+        }
     }
 }

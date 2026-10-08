@@ -18,6 +18,7 @@ import org.hibernate.annotations.Check;
 @Check(name = "ck_post_block_type", constraints = "block_type in ('TEXT', 'CODE', 'TABLE', 'ARCHITECTURE', 'HTML', 'MARKDOWN')")
 @Check(name = "ck_post_block_content_length", constraints = "char_length(content) <= 50000")
 @Check(name = "ck_post_block_order", constraints = "display_order >= 0")
+@Check(name = "ck_post_block_alignment", constraints = "alignment in ('LEFT', 'CENTER', 'RIGHT')")
 @Check(name = "ck_post_block_table_language", constraints = "block_type <> 'TABLE' or language is null")
 @Check(name = "ck_post_block_architecture_language", constraints = "block_type <> 'ARCHITECTURE' or language is null")
 @Check(name = "ck_post_block_rich_language", constraints = "block_type not in ('HTML', 'MARKDOWN') or language is null")
@@ -45,6 +46,10 @@ public class PostBlock {
     @Column(length = 100)
     private String title;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "alignment", nullable = false, length = 10)
+    private BlockAlignment alignment;
+
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder;
 
@@ -52,6 +57,11 @@ public class PostBlock {
     }
 
     public PostBlock(Post post, BlockType type, String content, CodeLanguage language, String title, Integer displayOrder) {
+        this(post, type, content, language, title, displayOrder, BlockAlignment.LEFT);
+    }
+
+    public PostBlock(Post post, BlockType type, String content, CodeLanguage language, String title, Integer displayOrder,
+                     BlockAlignment alignment) {
         if (type == BlockType.CODE && language == null) {
             throw new IllegalArgumentException("Code block requires a language");
         }
@@ -67,6 +77,7 @@ public class PostBlock {
         this.language = language;
         this.title = title;
         this.displayOrder = displayOrder;
+        this.alignment = alignment == null ? BlockAlignment.LEFT : alignment;
     }
 
     @PrePersist
@@ -82,5 +93,6 @@ public class PostBlock {
     public String getContent() { return content; }
     public CodeLanguage getLanguage() { return language; }
     public String getTitle() { return title; }
+    public BlockAlignment getAlignment() { return alignment; }
     public Integer getDisplayOrder() { return displayOrder; }
 }

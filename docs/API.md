@@ -477,7 +477,8 @@ Naver 본인 인증과 일회용 state 검증을 마친 로그인에서 WITHDRAW
   "blocks": [
     {
       "type": "TEXT",
-      "content": "인증 처리 흐름을 설명합니다."
+      "content": "인증 처리 흐름을 설명합니다.",
+      "alignment": "LEFT"
     },
     {
       "type": "CODE",
@@ -495,6 +496,7 @@ Naver 본인 인증과 일회용 state 검증을 마친 로그인에서 WITHDRAW
 
 - title은 필수, 최대 200자다. summary는 nullable이며 최대 500자다.
 - blocks는 순서 있는 배열이다. 최소 한 개를 보낸다. type은 TEXT, CODE, TABLE 또는 ARCHITECTURE이다.
+- 각 블록의 `alignment`는 선택 입력이며 `LEFT`, `CENTER`, `RIGHT`를 허용한다. 생략하거나 기존 글을 조회하면 `LEFT`다. 응답은 이 값을 항상 반환한다. PATCH에서 blocks는 전체 교체이므로 정렬도 함께 저장된다.
 - CODE 블록은 language가 필수이며 title은 선택이다. DB 제한은 content 최대 50,000자, title 최대 100자, language 최대 50자다.
 - TABLE은 `language`를 생략하거나 null로 보내며 `content`는 테이블 명세서 JSON을 직렬화한 문자열이다. `schemaVersion`은 정수 1, `tableName`은 1~100자 비공백 문자열, `description`은 선택 문자열/null(최대 500자), `columns`는 1~50개 배열이다. 각 컬럼의 `name`·`dataType`은 1~100자 비공백 문자열이고 `nullable`·`primaryKey`는 필수 boolean이다. `foreignKey`는 선택 문자열/null(최대 200자, 예: member.id), 컬럼 `description`은 선택 문자열/null(최대 500자)이다. 공백 제거·대소문자 무시 기준의 컬럼명 중복과 NULL 허용 PK는 400이다. 미지 필드·중복 JSON 키·추가 JSON 문서·미지원 버전·잘못된 Unicode/NUL도 400이다. 내부 JSON 문자열을 해석한 뒤 길이·Unicode를 다시 검사하며, content 전체의 기존 50,000자 제한도 적용한다. 명세서는 실행 가능한 SQL이나 HTML이 아니다. 생성/수정은 기존 USER 소유권·상태·프로필 계약을 유지하고, 공개 조회에서는 문자열 content와 순서를 그대로 반환한다. [표현 블록 설계](POST_VISUAL_BLOCKS.md)에 예시와 단계별 범위를 기록한다.
 - ARCHITECTURE는 `language` 생략/null, `content`는 JSON 문자열이다. 루트는 `schemaVersion: 1`, 필수 배열 `groups`(0~10), `nodes`(1~30), `edges`(0~60)만 허용한다. 그룹은 `{id,type,label,parentId?,bounds?}`, type은 ORACLE_CLOUD/AWS/CLOUDFLARE/DOCKER/CUSTOM이다. Docker만 기존 비-Docker 그룹(클라우드 또는 CUSTOM)을 parentId로 지정할 수 있다(최대 2단계); 최상위 Docker도 허용한다. 노드는 `{id,type,label,groupId?,icon?,position?}`, type은 CLIENT/APP/DATABASE/CACHE/STORAGE/PROXY/CUSTOM이다. 직접 만든 요소의 이름은 label로 자유롭게 입력한다. `icon`은 생략/null 또는 AWS/ORACLE_CLOUD/CLOUDFLARE/DOCKER/SPRING/POSTGRESQL/REDIS/R2/WORKERS/NGINX/NODEJS/REACT/SERVER/DATABASE/CACHE/STORAGE/CLIENT/CLOUD/CONTAINER다. 외부 아이콘 URL이나 SVG 문자열을 받지 않는다. `position`은 생략/null 또는 정확히 `{x,y}` 객체이며 각각 0~4000 정수, 캔버스 카드 좌상단 절대 좌표다. 위치가 없는 기존 version 1은 자동 배치하고 좌표를 지정한 블록은 저장한 배치를 유지한다. 그룹 `bounds`는 생략/null 또는 정확히 `{x,y,width,height}`다. x/y는 0~4000, width는 200~4200, height는 120~4200 정수이며 x+width/y+height는 4200 이하다. 없는 경계는 기존 자동 배치를 유지한다. 연결은 `{id,source,target,label?,sourceSide?,targetSide?,waypoint?}`로 기존 노드 또는 그룹 사이에 방향을 지정한다. `sourceSide`/`targetSide`는 생략/null(자동) 또는 TOP/RIGHT/BOTTOM/LEFT다. `waypoint`는 생략/null(자동) 또는 정확히 `{x,y}`이며 0~4200 정수 캔버스 좌표다. 지정한 연결 변과 경로 지점은 저장 후 공개 도식에서도 유지한다. 모든 ID는 전체 컬렉션에서 유일하고 `[a-z][a-z0-9-]{0,39}`다. groupId/parentId는 생략/null 또는 기존 그룹 ID다. 필수 label은 비공백 1~100자, 선택 연결 label은 생략/null 또는 최대 200자다. 자기 연결·같은 방향 중복 연결은 400이며 반대 방향/순환 연결은 허용한다. 미지 필드·중복 JSON 키·추가 문서·미지원 버전·잘못된 Unicode/NUL·없는 참조는 400이다. 길이는 Unicode code point 기준이며 전체 content 50,000자와 기존 회원 소유권/상태 규칙을 유지한다. 범위를 벗어난 좌표·HTML·URL·스크립트는 구조 필드로 받지 않는다; label은 실행하지 않는 텍스트다.
@@ -537,7 +539,8 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
         "content": "http.oauth2Login();",
         "language": "JAVA",
         "title": "Security 설정",
-        "displayOrder": 0
+        "displayOrder": 0,
+        "alignment": "LEFT"
       }
     ],
     "category": null,
