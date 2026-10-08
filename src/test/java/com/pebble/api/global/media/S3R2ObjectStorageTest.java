@@ -6,19 +6,25 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.pebble.api.global.exception.ApplicationException;
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
@@ -55,17 +61,45 @@ class S3R2ObjectStorageTest {
     }
 
     @Test
+    void readsSavedObjectBytesFromThePrivateBucket() {
+        S3Client client = mock(S3Client.class);
+        byte[] expected = {4, 5, 6};
+        when(client.getObject(any(GetObjectRequest.class))).thenReturn(response(expected));
+
+        try (S3Presigner presigner = presigner()) {
+            S3R2ObjectStorage storage = new S3R2ObjectStorage(client, presigner, PRIVATE_BUCKET);
+            assertThat(storage.get(PRIVATE_KEY, 10)).containsExactly(expected);
+        }
+
+        ArgumentCaptor<GetObjectRequest> get = ArgumentCaptor.forClass(GetObjectRequest.class);
+        verify(client).getObject(get.capture());
+        assertThat(get.getValue().bucket()).isEqualTo(PRIVATE_BUCKET);
+        assertThat(get.getValue().key()).isEqualTo(PRIVATE_KEY);
+        byte[] tooLarge = new byte[11];
+        when(client.getObject(any(GetObjectRequest.class))).thenReturn(response(tooLarge));
+        try (S3Presigner presigner = presigner()) {
+            S3R2ObjectStorage storage = new S3R2ObjectStorage(client, presigner, PRIVATE_BUCKET);
+            assertThatThrownBy(() -> storage.get(PRIVATE_KEY, 10))
+                    .isInstanceOf(ApplicationException.class)
+                    .hasMessage("이미지 저장소를 사용할 수 없습니다.");
+        }
+    }
+
+    @Test
     void storageFailuresDoNotExposeProviderMessagesOrSignedUrls() {
         S3Client client = mock(S3Client.class);
         doThrow(SdkClientException.create("secret=https://provider.invalid/?token=private-token"))
                 .when(client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
         doThrow(SdkClientException.create("secret=https://provider.invalid/?token=private-token"))
                 .when(client).deleteObject(any(DeleteObjectRequest.class));
+        doThrow(SdkClientException.create("secret=https://provider.invalid/?token=private-token"))
+                .when(client).getObject(any(GetObjectRequest.class));
 
         try (S3Presigner presigner = presigner()) {
             S3R2ObjectStorage storage = new S3R2ObjectStorage(client, presigner, PRIVATE_BUCKET);
             assertSafeStorageError(() -> storage.put(PRIVATE_KEY, new byte[]{1}));
             assertSafeStorageError(() -> storage.delete(PRIVATE_KEY));
+            assertSafeStorageError(() -> storage.get(PRIVATE_KEY, 10));
         }
     }
 
@@ -84,5 +118,10 @@ class S3R2ObjectStorageTest {
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("test-access", "test-secret")))
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .build();
+    }
+
+    private ResponseInputStream<GetObjectResponse> response(byte[] bytes) {
+        return new ResponseInputStream<>(GetObjectResponse.builder().build(),
+                AbortableInputStream.create(new ByteArrayInputStream(bytes), () -> {}));
     }
 }

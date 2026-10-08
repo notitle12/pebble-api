@@ -18,7 +18,8 @@ import java.util.Locale;
 /** JSON 필드 존재 여부와 형식을 검증하고 업무 입력으로 변환한다. */
 public final class PostWriteRequest {
     private static final Set<String> FIELDS = Set.of("title", "summary", "blocks", "categoryId",
-            "tagIds", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft");
+            "tagIds", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft",
+            "thumbnailImageId");
 
     private PostWriteRequest() {
     }
@@ -97,7 +98,13 @@ public final class PostWriteRequest {
             if (!json.get("draft").isBoolean()) fail("draft", "boolean 값을 지정해 주세요.");
             draft = json.get("draft").booleanValue();
         }
-        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order, boardId, projectId, draft);
+        Long thumbnailImageId = json.hasNonNull("thumbnailImageId")
+                ? id(json.get("thumbnailImageId"), "thumbnailImageId") : null;
+        if (create && thumbnailImageId != null) {
+            fail("thumbnailImageId", "초안 생성 후 본문 이미지를 업로드한 다음 수정 요청에서 선택해 주세요.");
+        }
+        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order,
+                boardId, projectId, draft, thumbnailImageId);
     }
 
     public static long id(String value, String field) {

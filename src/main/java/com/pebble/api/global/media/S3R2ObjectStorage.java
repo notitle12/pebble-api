@@ -2,7 +2,9 @@ package com.pebble.api.global.media;
 
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
+import java.io.IOException;
 import java.time.Duration;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -33,6 +35,24 @@ public class S3R2ObjectStorage implements R2ObjectStorage {
     public void put(String key, byte[] data) {
         try {
             client.putObject(PutObjectRequest.builder().bucket(bucket).key(key).contentType("image/webp").build(), RequestBody.fromBytes(data));
+        } catch (RuntimeException exception) {
+            throw storageUnavailable();
+        }
+    }
+
+    @Override
+    public byte[] get(String key, int maxBytes) {
+        if (maxBytes <= 0 || maxBytes == Integer.MAX_VALUE) throw new IllegalArgumentException("maxBytes is out of range");
+        try {
+            try (ResponseInputStream<?> stream = client.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
+                byte[] data = stream.readNBytes(maxBytes + 1);
+                if (data.length > maxBytes) throw storageUnavailable();
+                return data;
+            }
+        } catch (ApplicationException exception) {
+            throw exception;
+        } catch (IOException exception) {
+            throw storageUnavailable();
         } catch (RuntimeException exception) {
             throw storageUnavailable();
         }

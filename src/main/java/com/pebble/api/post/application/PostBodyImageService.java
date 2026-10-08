@@ -50,8 +50,14 @@ public class PostBodyImageService {
 
     @Transactional
     public void delete(long memberId,long postId,long imageId) {
-        owned(memberId,postId,true);
-        images.delete(images.findByIdAndPostId(imageId,postId).orElseThrow(PostBodyImageService::notFound));
+        Post post=owned(memberId,postId,true);
+        PostBodyImage image=images.findByIdAndPostId(imageId,postId).orElseThrow(PostBodyImageService::notFound);
+        if(java.util.Objects.equals(post.getThumbnailImageId(),imageId)) {
+            post.changeThumbnailImageId(null);
+            post.changeThumbnail(null);
+            posts.flush();
+        }
+        images.delete(image);
         images.flush();
     }
 
