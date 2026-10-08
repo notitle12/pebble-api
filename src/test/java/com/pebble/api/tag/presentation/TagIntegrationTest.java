@@ -72,12 +72,12 @@ class TagIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void permitsFrontendGetPreflightButNotOtherOriginsOrMethods() throws Exception {
+    void permitsFrontendGetAndPostPreflightButNotOtherOriginsOrMethods() throws Exception {
         mockMvc.perform(options(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET"));
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET,POST"));
         mockMvc.perform(get(PATH).header(HttpHeaders.ORIGIN, ORIGIN))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN));
@@ -86,6 +86,9 @@ class TagIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(options(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
+                .andExpect(status().isOk());
+        mockMvc.perform(options(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE"))
                 .andExpect(status().isForbidden());
     }
 }

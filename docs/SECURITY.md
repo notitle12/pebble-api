@@ -68,7 +68,9 @@
 
 인증 성공은 모든 동작이 허용되었다는 뜻이 아니다. URL 역할 검사는 소유권·계정 상태·콘텐츠 공개 상태 검사를 대체하지 않는다. 다른 Feature의 Domain 상태를 관리자 API에서 직접 변경하지 않고 소유 Feature의 책임을 통해 처리한다.
 
-`GET /api/v1/categories`와 `GET /api/v1/tags`는 Guest 공개 탐색 조회다. 정확히 이 두 GET 경로만 미인증 접근을 허용하며, 프런트엔드 허용 Origin의 GET CORS를 지원한다. Category·Tag 관리자 목록 GET·생성 POST·숫자 ID PATCH는 현재 ACTIVE MANAGER/MASTER Bearer와 온라인 sid 검증을 요구한다. 관리자 읽기 잠금 뒤 Category 구조 변경 잠금/분류 행 쓰기 잠금을 사용하고 콘텐츠 신규 선택은 분류 행 읽기 잠금으로 조정한다. 정확한 운영 경로 CORS와 내부 ID·결과 감사만 추가하며 일반 회원 쓰기·관리자 상세 GET·DELETE는 계속 거부한다. 분류 조회를 위해 기존 OAuth·Refresh·logout의 쿠키 Origin 방어나 전역 CSRF 정책을 변경하지 않는다.
+`GET /api/v1/categories`와 `GET /api/v1/tags`는 Guest 공개 탐색 조회다. 정확히 이 두 GET 경로만 미인증 접근을 허용하며, 프런트엔드 허용 Origin의 GET CORS를 지원한다. Category·Tag 관리자 목록 GET·생성 POST·숫자 ID PATCH는 현재 ACTIVE MANAGER/MASTER Bearer와 온라인 sid 검증을 요구한다. 관리자 읽기 잠금 뒤 Category 구조 변경 잠금/분류 행 쓰기 잠금을 사용하고 콘텐츠 신규 선택은 분류 행 읽기 잠금으로 조정한다. 정확한 운영 경로 CORS와 내부 ID·결과 감사만 추가하며 일반 회원의 Category 쓰기·Tag 수정 및 관리자 상세 GET·DELETE는 계속 거부한다. 분류 조회를 위해 기존 OAuth·Refresh·logout의 쿠키 Origin 방어나 전역 CSRF 정책을 변경하지 않는다.
+
+`POST /api/v1/tags`는 정확한 USER Bearer 경로로 등록하고 허용 Origin의 POST·Authorization·Content-Type CORS를 제공한다. 회원 행 쓰기 잠금 안에서 ACTIVE 및 최초 프로필 완료를 확인한다. 기존 이름 재사용은 Tag 읽기 잠금으로 관리자 비활성화와 조정하고 INACTIVE를 재활성화하지 않는다. 신규 slug 고유 제약과 `INSERT ... ON CONFLICT (slug) DO NOTHING`으로 서로 다른 회원의 동시 등록을 원자적으로 재사용한다. 새 CSRF 예외나 Cookie 인증은 추가하지 않는다.
 
 현재 `GET /api/v1/members/me`는 검증된 USER JWT의 role을 `ROLE_USER`로 변환해 HTTP 접근을 허용하고, member Application이 본인 계정을 조회해 현재 DB 상태가 ACTIVE인지 확인한다. 정지·탈퇴 대기 상태는 각각 `ACCOUNT_SUSPENDED`·`ACCOUNT_WITHDRAWAL_PENDING` 403으로 거부한다. 토큰에 포함된 회원 ID 외에 요청으로 조회 대상을 지정할 수 없으며, Refresh Cookie는 이 조회의 인증 수단이 아니다. JWT 서명·claim 검증과 Redis 세션 정책은 그대로 유지한다.
 
