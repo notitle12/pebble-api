@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.pebble.api.category.domain.CategoryStatus;
 import com.pebble.api.post.application.PostService.PostView;
 import com.pebble.api.post.domain.BlockType;
+import com.pebble.api.post.domain.BlockAlignment;
 import com.pebble.api.post.domain.CodeLanguage;
 import com.pebble.api.post.domain.PostVisibility;
 import com.pebble.api.tag.domain.TagStatus;
@@ -14,7 +15,7 @@ import org.springframework.data.domain.Page;
 public record PostResponse(String id, String postNumber, String slug, String urlKey, int displayOrder, Author author, String title, String summary,
                            @JsonInclude(JsonInclude.Include.NON_NULL) List<Block> blocks,
                            Classification category, List<Technology> tags,
-                           String boardId, String projectId, String thumbnailUrl, boolean draft,
+                           String boardId, String projectId, String thumbnailUrl, String thumbnailImageId, boolean draft,
                            PostVisibility visibilityStatus, long likeCount, boolean likedByMe,
                            Instant publishedAt, Instant createdAt, Instant updatedAt,
                            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean isBlocked) {
@@ -28,17 +29,19 @@ public record PostResponse(String id, String postNumber, String slug, String url
                 new Author(member.getId().toString(), member.getHandle(), member.getBlogName(), member.getNickname(),
                 imageUrl.apply(member)), post.getTitle(), post.getSummary(),
                 view.blocks() == null ? null : view.blocks().stream().map(block -> new Block(block.getType(),
-                        block.getContent(), block.getLanguage(), block.getTitle(), block.getDisplayOrder())).toList(),
+                        block.getContent(), block.getLanguage(), block.getTitle(), block.getDisplayOrder(), block.getAlignment())).toList(),
                 category == null ? null : new Classification(category.getId().toString(), category.getName(),
                         category.getSlug(), category.getStatus()),
                 view.tags().stream().map(tag -> new Technology(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getStatus())).toList(),
                 post.getBoardId() == null ? null : post.getBoardId().toString(),
-                post.getProjectId() == null ? null : post.getProjectId().toString(), view.thumbnailUrl(), post.isDraft(), post.getVisibility(), view.likeCount(), view.likedByMe(), post.getPublishedAt(), post.getCreatedAt(),
+                post.getProjectId() == null ? null : post.getProjectId().toString(), view.thumbnailUrl(),
+                post.getThumbnailImageId() == null ? null : post.getThumbnailImageId().toString(), post.isDraft(), post.getVisibility(), view.likeCount(), view.likedByMe(), post.getPublishedAt(), post.getCreatedAt(),
                 post.getUpdatedAt(), view.owner() ? post.isBlocked() : null);
     }
 
     public record Author(String id, String handle, String blogName, String nickname, String profileImageUrl) { }
-    public record Block(BlockType type, String content, CodeLanguage language, String title, int displayOrder) { }
+    public record Block(BlockType type, String content, CodeLanguage language, String title, int displayOrder,
+                        BlockAlignment alignment) { }
     public record Classification(String id, String name, String slug, CategoryStatus status) { }
     public record Technology(String id, String name, String slug, TagStatus status) { }
 

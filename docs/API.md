@@ -477,7 +477,8 @@ Naver 본인 인증과 일회용 state 검증을 마친 로그인에서 WITHDRAW
   "blocks": [
     {
       "type": "TEXT",
-      "content": "인증 처리 흐름을 설명합니다."
+      "content": "인증 처리 흐름을 설명합니다.",
+      "alignment": "LEFT"
     },
     {
       "type": "CODE",
@@ -495,6 +496,8 @@ Naver 본인 인증과 일회용 state 검증을 마친 로그인에서 WITHDRAW
 
 - title은 필수, 최대 200자다. summary는 nullable이며 최대 500자다.
 - blocks는 순서 있는 배열이다. 최소 한 개를 보낸다. type은 TEXT, CODE, TABLE 또는 ARCHITECTURE이다.
+- 각 블록의 `alignment`는 선택 입력이며 `LEFT`, `CENTER`, `RIGHT`를 허용한다. 생략하거나 기존 글을 조회하면 `LEFT`다. 응답은 이 값을 항상 반환한다. PATCH에서 blocks는 전체 교체이므로 정렬도 함께 저장된다.
+- PATCH의 `thumbnailImageId`는 선택한 대표 본문 이미지 ID 문자열 또는 null이다. 생략하면 현재 선택을 유지하고 null은 대표 이미지와 생성된 썸네일을 제거한다. 설정하려면 현재 Post의 첨부 이미지이며 저장할 HTML/MARKDOWN 블록의 고정 본문 이미지 경로에 포함되어야 한다. 새 초안 생성 뒤 본문 이미지 업로드와 편집을 마친 수정 요청에서 함께 저장한다. POST 생성 요청은 이 값을 받을 수 없다. Post 응답은 `thumbnailImageId` 문자열/null을 반환한다. 같은 ID를 다시 보내도 썸네일을 재생성하지 않는다.
 - CODE 블록은 language가 필수이며 title은 선택이다. DB 제한은 content 최대 50,000자, title 최대 100자, language 최대 50자다.
 - TABLE은 `language`를 생략하거나 null로 보내며 `content`는 테이블 명세서 JSON을 직렬화한 문자열이다. `schemaVersion`은 정수 1, `tableName`은 1~100자 비공백 문자열, `description`은 선택 문자열/null(최대 500자), `columns`는 1~50개 배열이다. 각 컬럼의 `name`·`dataType`은 1~100자 비공백 문자열이고 `nullable`·`primaryKey`는 필수 boolean이다. `foreignKey`는 선택 문자열/null(최대 200자, 예: member.id), 컬럼 `description`은 선택 문자열/null(최대 500자)이다. 공백 제거·대소문자 무시 기준의 컬럼명 중복과 NULL 허용 PK는 400이다. 미지 필드·중복 JSON 키·추가 JSON 문서·미지원 버전·잘못된 Unicode/NUL도 400이다. 내부 JSON 문자열을 해석한 뒤 길이·Unicode를 다시 검사하며, content 전체의 기존 50,000자 제한도 적용한다. 명세서는 실행 가능한 SQL이나 HTML이 아니다. 생성/수정은 기존 USER 소유권·상태·프로필 계약을 유지하고, 공개 조회에서는 문자열 content와 순서를 그대로 반환한다. [표현 블록 설계](POST_VISUAL_BLOCKS.md)에 예시와 단계별 범위를 기록한다.
 - ARCHITECTURE는 `language` 생략/null, `content`는 JSON 문자열이다. 루트는 `schemaVersion: 1`, 필수 배열 `groups`(0~10), `nodes`(1~30), `edges`(0~60)만 허용한다. 그룹은 `{id,type,label,parentId?,bounds?}`, type은 ORACLE_CLOUD/AWS/CLOUDFLARE/DOCKER/CUSTOM이다. Docker만 기존 비-Docker 그룹(클라우드 또는 CUSTOM)을 parentId로 지정할 수 있다(최대 2단계); 최상위 Docker도 허용한다. 노드는 `{id,type,label,groupId?,icon?,position?}`, type은 CLIENT/APP/DATABASE/CACHE/STORAGE/PROXY/CUSTOM이다. 직접 만든 요소의 이름은 label로 자유롭게 입력한다. `icon`은 생략/null 또는 AWS/ORACLE_CLOUD/CLOUDFLARE/DOCKER/SPRING/POSTGRESQL/REDIS/R2/WORKERS/NGINX/NODEJS/REACT/SERVER/DATABASE/CACHE/STORAGE/CLIENT/CLOUD/CONTAINER다. 외부 아이콘 URL이나 SVG 문자열을 받지 않는다. `position`은 생략/null 또는 정확히 `{x,y}` 객체이며 각각 0~4000 정수, 캔버스 카드 좌상단 절대 좌표다. 위치가 없는 기존 version 1은 자동 배치하고 좌표를 지정한 블록은 저장한 배치를 유지한다. 그룹 `bounds`는 생략/null 또는 정확히 `{x,y,width,height}`다. x/y는 0~4000, width는 200~4200, height는 120~4200 정수이며 x+width/y+height는 4200 이하다. 없는 경계는 기존 자동 배치를 유지한다. 연결은 `{id,source,target,label?,sourceSide?,targetSide?,waypoint?}`로 기존 노드 또는 그룹 사이에 방향을 지정한다. `sourceSide`/`targetSide`는 생략/null(자동) 또는 TOP/RIGHT/BOTTOM/LEFT다. `waypoint`는 생략/null(자동) 또는 정확히 `{x,y}`이며 0~4200 정수 캔버스 좌표다. 지정한 연결 변과 경로 지점은 저장 후 공개 도식에서도 유지한다. 모든 ID는 전체 컬렉션에서 유일하고 `[a-z][a-z0-9-]{0,39}`다. groupId/parentId는 생략/null 또는 기존 그룹 ID다. 필수 label은 비공백 1~100자, 선택 연결 label은 생략/null 또는 최대 200자다. 자기 연결·같은 방향 중복 연결은 400이며 반대 방향/순환 연결은 허용한다. 미지 필드·중복 JSON 키·추가 문서·미지원 버전·잘못된 Unicode/NUL·없는 참조는 400이다. 길이는 Unicode code point 기준이며 전체 content 50,000자와 기존 회원 소유권/상태 규칙을 유지한다. 범위를 벗어난 좌표·HTML·URL·스크립트는 구조 필드로 받지 않는다; label은 실행하지 않는 텍스트다.
@@ -537,7 +540,8 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
         "content": "http.oauth2Login();",
         "language": "JAVA",
         "title": "Security 설정",
-        "displayOrder": 0
+        "displayOrder": 0,
+        "alignment": "LEFT"
       }
     ],
     "category": null,
@@ -545,6 +549,7 @@ Post 응답은 다음 정보를 제공한다. 목록에서는 blocks와 전체 �
     "boardId": null,
     "projectId": null,
     "thumbnailUrl": null,
+    "thumbnailImageId": null,
     "visibilityStatus": "PUBLIC",
     "likeCount": 0,
     "likedByMe": false,
@@ -716,6 +721,7 @@ Post 썸네일 및 Project 미디어 업로드는 multipart/form-data를 사용�
 - 입력 이미지의 종횡비를 유지하고 확대하지 않는다. 화면 표시용 파생 이미지는 긴 변 최대 2,560 px, 목록용 썸네일은 긴 변 최대 480 px로 만든다. 두 파생물 모두 WebP lossy quality 82로 저장하며 EXIF 등 불필요한 메타데이터를 제거한다. 원본은 저장하지 않는다.
 - 모든 입력에 WebP lossy quality 82를 일괄 적용한다. 손실 압축은 파일 크기를 줄이는 대신 일부 시각 정보를 버리므로 작은 글자나 얇은 선이 많은 PNG 스크린샷·도식은 경계가 부드러워지거나 압축 흔적이 보일 수 있다. 이는 MVP의 저장 효율을 위한 품질 절충이며 원본은 보관하지 않는다.
 - Post의 `thumbnailUrl`은 480 px 썸네일이다. Project의 `url`은 화면 표시용 이미지이고 `thumbnailUrl`은 목록과 미리보기용 파생 이미지다. R2에는 비공개 버킷과 서버 생성 키를 사용한다.
+- 대표 본문 이미지는 Post 생성 후 업로드한 이미지의 ID로 선택한다. Post PATCH의 `thumbnailImageId`를 저장하면 서버가 동일 Post에 첨부되고 현재 HTML/MARKDOWN 본문에 참조된 이미지만 내부 저장 키로 읽어 480 px WebP 썸네일을 생성한다. 원본·클라이언트 제공 객체 키는 받지 않는다. 기존 썸네일 multipart API는 호환 목적으로 유지한다.
 - 업로드·수정·삭제는 ACTIVE·프로필 완료 USER이며 해당 콘텐츠 작성자여야 한다. 회원 → 콘텐츠 잠금 아래 처리하고 다른 작성자 대상은 404, 삭제된 콘텐츠는 CONTENT_DELETED 409다. 업로드 query·중복/알 수 없는 multipart 필드·추가 파일은 400으로 거부한다. Project 업로드의 mediaRole·displayOrder는 필수이며 displayOrder는 0 이상 정수다. PATCH는 altText·displayOrder만 지원하며 altText=null은 설명 제거다. 대표 이미지 중복은 THUMBNAIL_ALREADY_EXISTS 409다.
 - HIDDEN·차단 콘텐츠의 소유자는 미디어를 관리할 수 있지만 새 서명 URL은 발급하지 않아 url·thumbnailUrl은 null이다. Project 목록은 미디어 배열을 생략하고 상세에서만 순서·ID 안정 정렬로 반환한다. R2 비활성 환경도 URL을 발급하지 않는다.
 - 교체·삭제·콘텐츠 논리 삭제·회원 물리 파기는 DB 트랜잭션과 함께 삭제 큐를 기록한다. 삭제 작업은 기본 1분 주기·최대 100개·SKIP LOCKED로 처리하고 저장소 오류는 5분 뒤 재시도한다. 실패한 업로드/DB 롤백의 새 객체는 업로드 전에 커밋한 회수 작업으로 1시간 뒤 회수하며 연결 트랜잭션 중에는 삭제하지 않는다.
@@ -771,6 +777,7 @@ Post 생성/수정은 선택 boolean `draft`를 받으며 응답에 해당 상�
 - POST `/api/v1/posts/{postId}/images`: USER, 프로필 완료 소유자, multipart `file`만 입력. 기존 JPEG/PNG/WebP·10MiB·실제 디코딩/픽셀 제한을 적용하고 글당 최대 50개 WebP 본문 이미지를 저장한다. `{id,url,altText:null}`를 반환한다. url은 편집 미리보기용 만료되는 서명 URL이다.
 - GET `/api/v1/posts/{postId}/images`: 활성 USER 소유자만 이미지 배열과 새 서명 URL을 받는다. query/본문은 없다.
 - DELETE `/api/v1/posts/{postId}/images/{imageId}`: 프로필 완료 소유자만 제거한다. 삭제 큐로 파일을 회수한다. query/본문은 없다.
+- 본문 이미지 선택은 Post PATCH의 `thumbnailImageId`로 저장한다. 첫 본문 이미지의 기본 선택은 편집기에서 정하고, 저장할 때 ID를 함께 보낸다. 대표 이미지 삭제 시 `thumbnailImageId`와 대표 썸네일을 비운다. 본문 전체 교체에서 선택된 이미지 참조가 사라지면 서버도 선택과 썸네일을 비운다.
 - GET `/api/v1/posts/{postId}/images/{imageId}/content`: 공개·미차단·미탈퇴 글의 실제 HTML/MARKDOWN 본문에 연결된 이미지에만 새 서명 URL로 302 연결한다. `Cache-Control: no-store`이며 숨김/초안/미연결/삭제는 404다. query/본문은 없다. 저장 본문에는 이 고정 경로를 사용하며 서명 URL을 영구 저장하지 않는다. 대체 텍스트는 본문의 img alt 또는 Markdown 이미지 설명으로 저장한다.
 
 업로드 중 DB/외부 저장 실패는 사전 커밋한 삭제 큐로 회수한다. 글 논리 삭제·물리 삭제·회원 파기 때 본문 이미지 연결과 외부 파일 정리도 적용한다. 본문에서 이미지 문법만 지워도 업로드 파일은 작성자가 명시적으로 지우거나 글을 삭제할 때까지 글의 첨부로 유지된다. 이미 발급된 서명 URL은 기존 CDN/스토리지 정책대로 만료 전 잠시 사용 가능하며 즉시 무효화와 동일하지 않다.

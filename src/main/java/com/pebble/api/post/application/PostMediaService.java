@@ -36,6 +36,7 @@ public class PostMediaService {
         deletion.stage(keys);
         deletion.lockStaged(keys);
         client.put(key, processed.thumbnail());
+        post.changeThumbnailImageId(null);
         post.changeThumbnail(key);
         posts.flush();
         deletion.retain(keys);
@@ -44,6 +45,7 @@ public class PostMediaService {
 
     public void delete(long memberId, long postId) {
         Post post = owned(memberId, postId);
+        post.changeThumbnailImageId(null);
         post.changeThumbnail(null);
         posts.flush();
     }
