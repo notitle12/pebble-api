@@ -48,3 +48,14 @@ test('uploaded blog logos require a valid signature before R2 access',async()=>{
  const tampered=signed(undefined,path).replace(/signature=[^&]+/,'signature='+Buffer.alloc(32).toString('base64url'));assert.equal((await s.call(tampered)).status,403);assert.equal(reads,1);
  const unexpected=Buffer.from(key.replace('blog-logo.webp','original.svg')).toString('base64url');assert.equal((await s.call(signed(undefined,unexpected))).status,403);assert.equal(reads,1);
 });
+
+
+test('body images require signed, unexpired URLs and an exact WebP path', async () => {
+ const key=objectKey.replace('thumbnail.webp','body.webp'), path=Buffer.from(key).toString('base64url');
+ const s=setup();let reads=0;s.env.MEDIA_BUCKET.get=async value=>{assert.equal(value,key);reads++;return {body:new Uint8Array([1,2,3])};};
+ assert.equal((await s.call(signed(undefined,path))).status,200);assert.equal(reads,1);
+ assert.equal((await s.call(signed(undefined,path),{},time+900000)).status,403);
+ for(const invalid of [key.replace('.webp','xwebp'),key.replace('body.webp','original.png')])
+   assert.equal((await s.call(signed(undefined,Buffer.from(invalid).toString('base64url')))).status,403);
+ assert.equal(reads,1);
+});

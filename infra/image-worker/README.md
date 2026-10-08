@@ -68,3 +68,7 @@ CDN HTTP 확인에는 Node 22 fetch를 사용했다. 같은 API URL을 Python ur
 - [Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/): HMAC 검증.
 - [R2 presigned URL](https://developers.cloudflare.com/r2/api/s3/presigned-urls/): 기존 S3 서명은 custom domain에서 사용 불가.
 - [Workers 요금](https://developers.cloudflare.com/workers/platform/pricing/), [R2 요금](https://developers.cloudflare.com/r2/pricing/): 캐시 HIT도 Worker 요청을 소모한다. 무료 한도와 실제 운영 비용을 배포 전 확인한다.
+
+## 본문 이미지 경로 (API #92)
+
+글 본문의 `post/<UUID>/body.webp`도 썸네일과 동일하게 Java 서명 발급과 Worker 경로 검사에서 허용한다. 업로드 후 owner 미리보기와 발행된 공개 글 본문의 조회는 기존 API 소유권·본문 참조·공개 상태 검사를 따른다. UUID가 아닌 경로, 임의 확장자, 원본 파일, 만료·변조 서명은 계속 거절한다. 키·버킷 공개 설정 변경은 필요하지 않다.
