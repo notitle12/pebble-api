@@ -278,6 +278,7 @@ Board 쓰기는 프로필 설정 완료를 요구하지 않는다. POST는 name�
 |---|---|---|---|
 | GET | /api/v1/categories | Guest | 공개 탐색용 Category 트리 |
 | GET | /api/v1/tags | Guest | 공개 탐색용 Tag 목록 |
+| POST | /api/v1/tags | USER | 자유 태그 생성 또는 기존 ACTIVE 태그 재사용 |
 | GET | /api/v1/admin/categories | MANAGER, MASTER | 전체 Category 목록 |
 | POST | /api/v1/admin/categories | MANAGER, MASTER | Category 생성 |
 | PATCH | /api/v1/admin/categories/{categoryId} | MANAGER, MASTER | 이름, slug, 부모, 순서, 상태 수정 |
@@ -640,6 +641,10 @@ Category 응답 항목: `{id, parentId, name, slug, displayOrder, status, childr
 `GET /categories`의 data는 최상위 Category 배열이고 각 children은 하위 Category 배열이다. `GET /tags`의 data는 Tag 배열이다. 빈 결과는 `[]`이며 ID·parentId는 문자열, 최상위 parentId는 null, 하위가 없는 children은 `[]`로 반환한다. Category 형제와 Tag 목록은 displayOrder 오름차순, 같은 순서는 숫자 ID 오름차순으로 정렬한다.
 
 Tag 응답 항목: `{id, name, slug, displayOrder, status}`. name 최대 50자, slug 최대 100자다. 비활성 항목은 기존 공개 콘텐츠에서 참조되는 경우 탐색 결과에 표시될 수 있다.
+
+`POST /tags`는 ACTIVE·프로필 완료 USER Bearer가 자유 태그를 등록하는 API다. 요청은 정확히 `{name:string}`이며 query·추가/중복 JSON 필드·추가 JSON 문서·null은 400이다. 이름은 NFKC → 앞뒤 공백 제거 → 선두 `#` 한 개 제거 → Locale.ROOT 소문자 순서로 정규화한다. 정규화 결과는 1~50 유니코드 코드 포인트이며 Unicode 문자·숫자·결합 문자와 `_`, `-`, `.`, `+`만 허용하고 문자 또는 숫자를 하나 이상 포함해야 한다. NUL·잘못된 Unicode·내부 공백·HTML은 400이며 `C++`는 허용하고 `C#`는 거부한다.
+
+대소문자를 무시한 기존 이름이 있으면 ACTIVE를 우선하고 같은 상태에서는 숫자 ID가 가장 작은 태그를 재사용한다. INACTIVE만 있으면 `INACTIVE_TAG` 409이며 재활성화하지 않는다. 신규 태그는 `user-` + 정규화 이름의 SHA-256 64자리 소문자 hex slug, displayOrder=0, ACTIVE로 생성한다. 기존 slug 고유 제약과 원자적 INSERT로 서로 다른 회원의 동시 생성도 같은 ID를 반환하며 생성 시 createdAt·updatedAt은 같은 시각이다. hash slug를 다른 이름의 ACTIVE 태그가 선점하면 `TAG_SLUG_CONFLICT` 409로 거부하고, 선점 태그가 INACTIVE면 `INACTIVE_TAG`가 우선한다. 생성·재사용 모두 200과 기존 Tag 응답을 반환하며 기존 태그의 이름·slug·순서·상태·시각을 바꾸지 않는다. 반환 ID는 기존 Post/Project `tagIds`에 연결할 수 있다. 정지·탈퇴 대기는 403, 미완료 프로필은 `PROFILE_REQUIRED` 409다.
 
 Category 트리는 활성 하위의 경로를 보존하기 위해 비활성 상위를 `INACTIVE` 상태인 그룹으로 포함할 수 있다. 이 그룹은 신규 선택 대상이 아니다. 사용 중이지 않은 비활성 하위와 Tag는 제외한다. 신규 Post 연결은 ACTIVE이고 저장된 하위 Category가 없는 항목만 허용하며, 공개 children이 비었다는 이유만으로 최하위라고 판단하지 않는다. Post는 Category·Tag를 참조하며, 공개 분류 필터에서 상위 Category를 지정하면 하위 Category에 연결된 공개 Post를 포함한다. Post가 사용 중인 비활성 분류도 공개 탐색에서 유지한다.
 
