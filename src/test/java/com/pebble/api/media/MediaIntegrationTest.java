@@ -13,6 +13,7 @@ import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.id.TsidGenerator;
 import com.pebble.api.global.media.R2ObjectStorage;
 import com.pebble.api.global.media.MediaDeletionQueue;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pebble.api.auth.application.AccessTokenService;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.application.MemberWithdrawalService;
@@ -27,7 +28,9 @@ import com.pebble.api.support.AuthenticationTestSupport;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.time.Instant;
 import jakarta.servlet.http.Cookie;
@@ -70,6 +73,7 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     @Autowired com.pebble.api.auth.application.AdminRefreshTokenService adminSessions;
     @Autowired com.pebble.api.post.application.PostService posts;
     @Autowired MockMvc mvc;
+    @Autowired ObjectMapper mapper;
     @MockitoBean R2ObjectStorage storage;
 
     private final List<Long> fixtureMembers = new ArrayList<>();
@@ -77,6 +81,7 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     private final List<Long> projectIds = new ArrayList<>();
     private final List<String> objectKeys = new ArrayList<>();
     private final List<byte[]> uploadedBytes = new ArrayList<>();
+    private final Map<String, byte[]> objects = new HashMap<>();
     private Member owner;
     private Member other;
     private long postId;
@@ -90,9 +95,14 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
         failPut = false;
         failDelete = false;
         when(storage.signedUrl(anyString())).thenAnswer(call -> "https://media.test/" + call.getArgument(0));
+        when(storage.get(anyString(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(call -> objects.get(call.getArgument(0)));
         doAnswer(call -> {
-            objectKeys.add(call.getArgument(0));
-            uploadedBytes.add(call.getArgument(1));
+            String key = call.getArgument(0);
+            byte[] bytes = call.getArgument(1);
+            objectKeys.add(key);
+            uploadedBytes.add(bytes);
+            objects.put(key, bytes);
             if (failPut) throw new IllegalStateException("simulated storage error");
             return null;
         }).when(storage).put(anyString(), any());
@@ -144,6 +154,79 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void postPatchSelectsOnlyReferencedSamePostBodyImageAndReusesItsThumbnail() throws Exception {
+        var image = bodyImages.upload(owner.getId(), postId, png());
+        String reference = "https://api.pebble-log.com/api/v1/posts/" + postId + "/images/" + image.id() + "/content";
+        var request = mapper.createObjectNode();
+        request.putArray("blocks").addObject().put("type", "HTML").put("content", "<img src=\"" + reference + "\" />");
+        request.put("thumbnailImageId", image.id());
+        mvc.perform(patch("/api/v1/posts/" + postId).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.thumbnailImageId").value(image.id()))
+                .andExpect(jsonPath("$.data.thumbnailUrl").value(org.hamcrest.Matchers.startsWith("https://media.test/post/")));
+
+        assertThat(jdbc.queryForObject("select thumbnail_image_id from post where id=?", Long.class, postId))
+                .isEqualTo(Long.parseLong(image.id()));
+        String firstThumbnailKey = jdbc.queryForObject("select thumbnail_storage_key from post where id=?", String.class, postId);
+        assertThat(firstThumbnailKey).isEqualTo(objectKeys.getLast());
+        assertThat(new String(uploadedBytes.getLast(), 0, 4, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("RIFF");
+        assertThat(new String(uploadedBytes.getLast(), 8, 4, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("WEBP");
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key=?", Long.class, firstThumbnailKey)).isZero();
+
+        request = mapper.createObjectNode().put("thumbnailImageId", image.id());
+        mvc.perform(patch("/api/v1/posts/" + postId).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.thumbnailImageId").value(image.id()));
+        assertThat(objectKeys).hasSize(2);
+        org.mockito.Mockito.verify(storage).get(objectKeys.getFirst(), 10 * 1024 * 1024);
+
+        var markdownImage = bodyImages.upload(owner.getId(), postId, png());
+        String markdownReference = "/api/v1/posts/" + postId + "/images/" + markdownImage.id() + "/content";
+        request = mapper.createObjectNode().put("thumbnailImageId", markdownImage.id());
+        request.putArray("blocks").addObject().put("type", "MARKDOWN")
+                .put("content", "![대표 이미지](" + markdownReference + ")");
+        mvc.perform(patch("/api/v1/posts/" + postId).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.thumbnailImageId").value(markdownImage.id()));
+        String markdownThumbnailKey = jdbc.queryForObject("select thumbnail_storage_key from post where id=?", String.class, postId);
+        assertThat(markdownThumbnailKey).isEqualTo(objectKeys.getLast()).isNotEqualTo(firstThumbnailKey);
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key=?", Long.class, firstThumbnailKey)).isEqualTo(1);
+        org.mockito.Mockito.verify(storage).get(objectKeys.get(2), 10 * 1024 * 1024);
+
+        var unrelatedPostId = TsidGenerator.generate();
+        postIds.add(unrelatedPostId);
+        jdbc.update("insert into post(id,author_member_id,post_number,title,visibility_status,created_at,updated_at) values (?,?,1,'other post','PUBLIC',now(),now())",
+                unrelatedPostId, other.getId());
+        var foreignImage = bodyImages.upload(other.getId(), unrelatedPostId, png());
+        request = mapper.createObjectNode().put("thumbnailImageId", foreignImage.id());
+        mvc.perform(patch("/api/v1/posts/" + postId).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isNotFound());
+        request.put("thumbnailImageId", markdownImage.id()).putArray("blocks").addObject()
+                .put("type", "HTML").put("content", "<a href=\"" + markdownReference + "\">본문 링크</a>");
+        mvc.perform(patch("/api/v1/posts/" + postId).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isBadRequest());
+
+        for (String nonRenderedReference : List.of(
+                "<img data-src=\"" + markdownReference + "\" />",
+                "<!-- <img src=\"" + markdownReference + "\" /> -->",
+                "<script>const example = '<img src=\"" + markdownReference + "\" />';</script>")) {
+            request = mapper.createObjectNode().put("thumbnailImageId", markdownImage.id());
+            request.putArray("blocks").addObject().put("type", "HTML").put("content", nonRenderedReference);
+            mvc.perform(patch("/api/v1/posts/" + postId).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(request.toString()))
+                    .andExpect(status().isBadRequest());
+        }
+
+        bodyImages.delete(owner.getId(), postId, Long.parseLong(markdownImage.id()));
+        assertThat(jdbc.queryForObject("select thumbnail_image_id from post where id=?", Long.class, postId)).isNull();
+        assertThat(jdbc.queryForObject("select thumbnail_storage_key from post where id=?", String.class, postId)).isNull();
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key in (?,?)", Long.class,
+                objectKeys.get(2), markdownThumbnailKey)).isEqualTo(2);
+    }
+
+    @Test
     void bodyImageUploadRollbackLeavesCleanupAndLogicalPostDeletionQueuesFiles() throws Exception {
         failPut=true;
         assertThatThrownBy(()->bodyImages.upload(owner.getId(),postId,png())).isInstanceOf(IllegalStateException.class);
@@ -155,6 +238,26 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
         jdbc.update("update post set visibility_status='DELETED',deleted_at=now() where id=?",postId);
         assertThat(jdbc.queryForObject("select count(*) from post_body_image where post_id=?",Long.class,postId)).isZero();
         assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key=?",Long.class,key)).isEqualTo(1);
+    }
+
+    @Test
+    void physicalPostCascadeAcceptsThumbnailSourceForeignKeyAndQueuesBothObjects() throws Exception {
+        var image = bodyImages.upload(owner.getId(), postId, png());
+        String reference = "/api/v1/posts/" + postId + "/images/" + image.id() + "/content";
+        var request = mapper.createObjectNode();
+        request.putArray("blocks").addObject().put("type", "HTML").put("content", "<img src=\"" + reference + "\" />");
+        request.put("thumbnailImageId", image.id());
+        mvc.perform(patch("/api/v1/posts/" + postId).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isOk());
+        String thumbnailKey = jdbc.queryForObject("select thumbnail_storage_key from post where id=?", String.class, postId);
+        String imageKey = jdbc.queryForObject("select storage_key from post_body_image where post_id=?", String.class, postId);
+
+        jdbc.update("delete from post where id=?", postId);
+        postIds.remove(postId);
+        assertThat(jdbc.queryForObject("select count(*) from post_body_image where post_id=?", Long.class, postId)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key in (?,?)", Long.class,
+                imageKey, thumbnailKey)).isEqualTo(2);
     }
 
     @Test
@@ -476,6 +579,10 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
         fixtureMembers.add(value.getId());
         profiles.complete(value.getId(), "media-blog-" + value.getId(), "media-" + value.getId(), null);
         return value;
+    }
+
+    private String bearer(Member member) {
+        return "Bearer " + tokens.issueForMember(member.getId(), Instant.now());
     }
 
     private byte[] png() {
