@@ -63,6 +63,57 @@ public class BoardService {
         boards.flush();
     }
 
+    public List<Board> replaceTree(long memberId, BoardTreeChanges input) {
+        members.findActiveForWrite(memberId);
+        List<Board> tree = tree(memberId);
+        Map<Long, Board> existing = new HashMap<>();
+        for (Board board : tree) existing.put(board.getId(), board);
+        Set<Long> retained = new HashSet<>();
+        collectExisting(input.boards(), existing, retained, 1);
+        Set<BoardTreeChanges.Existing> expected = new HashSet<>(input.base());
+        Set<BoardTreeChanges.Existing> actual = new HashSet<>();
+        for (Board board : tree) actual.add(new BoardTreeChanges.Existing(board.getId(), board.getName(),
+                board.getParentId(), board.getDisplayOrder()));
+        if (!expected.equals(actual)) throw new ApplicationException(BoardError.BOARD_TREE_CHANGED);
+        applyNodes(memberId, null, input.boards(), existing);
+        // 삭제하는 부모의 자식이 다른 곳으로 이동한 최종 트리를 먼저 반영한다.
+        boards.flush();
+        for (Board board : tree) {
+            if (!retained.contains(board.getId())) {
+                postBoards.detach(memberId, board.getId());
+                board.delete();
+            }
+        }
+        boards.flush();
+        return tree(memberId);
+    }
+
+    private void collectExisting(List<BoardTreeChanges.Node> nodes, Map<Long, Board> existing, Set<Long> retained, int depth) {
+        if (depth > 3 && !nodes.isEmpty()) throw invalid("parentId", "게시판은 최대 3단계까지 만들 수 있습니다.");
+        Set<String> names = new HashSet<>();
+        for (var node : nodes) {
+            if (!names.add(node.name())) throw invalid("name", "같은 상위 게시판 안에서 이름이 중복될 수 없습니다.");
+            if (node.id() != null) {
+                if (!existing.containsKey(node.id())) throw new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
+                if (!retained.add(node.id())) throw invalid("id", "게시판 ID를 중복으로 사용할 수 없습니다.");
+            }
+            collectExisting(node.children(), existing, retained, depth + 1);
+        }
+    }
+
+    private void applyNodes(long memberId, Long parentId, List<BoardTreeChanges.Node> nodes, Map<Long, Board> existing) {
+        for (int order = 0; order < nodes.size(); order++) {
+            var node = nodes.get(order);
+            Board board;
+            if (node.id() == null) board = boards.save(new Board(memberId, node.name(), parentId, order));
+            else {
+                board = existing.get(node.id());
+                board.update(node.name(), parentId, order);
+            }
+            applyNodes(memberId, board.getId(), node.children(), existing);
+        }
+    }
+
     private List<Board> tree(long memberId) {
         // Post 쓰기와 같은 회원 행을 먼저 잠근 뒤 최신 트리를 읽는다.
         return boards.findByOwnerMemberIdAndDeletedAtIsNullOrderByDisplayOrderAscIdAsc(memberId);
