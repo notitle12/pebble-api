@@ -57,6 +57,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.DELETE, "/api/v1/members/me", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/categories", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/tags", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/tags", Access.USER),
             new Endpoint(HttpMethod.POST, "/api/v1/members/me/profile", Access.USER),
             new Endpoint(HttpMethod.PATCH, "/api/v1/members/me/profile", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/posts/search", Access.PUBLIC),
