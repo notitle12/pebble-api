@@ -116,6 +116,33 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void persistsAndReturnsBlockAlignmentWithLeftDefault() throws Exception {
+        var request = mapper.createObjectNode().put("title", "블록 정렬").put("visibilityStatus", "PUBLIC");
+        var blocks = request.putArray("blocks");
+        blocks.addObject().put("type", "TEXT").put("content", "기본");
+        blocks.addObject().put("type", "TEXT").put("content", "오른쪽").put("alignment", "RIGHT");
+        var created = mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(request.toString()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.blocks[0].alignment").value("LEFT"))
+                .andExpect(jsonPath("$.data.blocks[1].alignment").value("RIGHT"));
+        String id = response(created).at("/data/id").asText();
+        em.flush();
+        em.clear();
+        assertThat(jdbc.queryForList("select alignment from post_block where post_id=? order by display_order", String.class,
+                Long.parseLong(id))).containsExactly("LEFT", "RIGHT");
+
+        change(id, "{\"blocks\":[{\"type\":\"TEXT\",\"content\":\"가운데\",\"alignment\":\"CENTER\"}]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].alignment").value("CENTER"));
+        assertThat(jdbc.queryForObject("select alignment from post_block where post_id=?", String.class,
+                Long.parseLong(id))).isEqualTo("CENTER");
+        change(id, "{\"blocks\":[{\"type\":\"TEXT\",\"content\":\"잘못된 값\",\"alignment\":\"JUSTIFY\"}]}")
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(PATH + "/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.blocks[0].alignment").value("CENTER"));
+    }
+
+    @Test
     void createsAndUpdatesTableBlocksWithoutChangingOwnershipOrHiddenRules() throws Exception {
         String table = """
                 {"schemaVersion":1,"tableName":"member","columns":[

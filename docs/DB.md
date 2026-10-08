@@ -221,6 +221,7 @@ Board 테이블과 Post의 `board_id`는 V7에서 생성한다. Board는 회원�
 | `blocked_by_admin_id` | BIGINT | Y | 현재 차단을 설정한 관리자 ID; V12 관리자 FK, 운영 기능은 후속 범위 |
 | `published_at` | TIMESTAMPTZ | Y | 최초 공개 시각 |
 | `deleted_at` | TIMESTAMPTZ | Y | `DELETED` 전환 시각 |
+| `thumbnail_image_id` | BIGINT | Y | 대표로 선택한 동일 Post 본문 이미지 ID; V22에서 추가하고 V23 FK는 본문 이미지 삭제 시 NULL로 정리 |
 | `created_at` | TIMESTAMPTZ | N | 생성 시각 |
 | `updated_at` | TIMESTAMPTZ | N | 수정 시각 |
 
@@ -235,6 +236,7 @@ Board 테이블과 Post의 `board_id`는 V7에서 생성한다. Board는 회원�
 - 공개 조회는 visibility_status = PUBLIC AND is_blocked = FALSE인 Post만 대상으로 한다. Post 검색은 제목·본문 블록·Category와 상위 Category·Tag 이름의 기본 부분 문자열 검색을 제공한다. 본문과 Tag는 EXISTS로 검색해 일치 항목 수에 따라 글이나 집계가 중복되지 않으며 공개 조건과 검색을 적용한 뒤 페이징한다. 별도 검색 테이블·인덱스·migration은 추가하지 않는다. 데이터가 늘어나면 쿼리 비용을 측정해 검색 인덱스 필요성을 검토한다.
 - is_blocked는 작성자가 변경할 수 없다. MANAGER 또는 MASTER 차단·차단 해제 기능은 미구현이다.
 - Post 본문과 코드 블록은 `post_block`에 순서대로 저장한다.
+- `thumbnail_image_id`는 애플리케이션이 같은 Post 첨부 및 본문 참조를 확인해 저장한다. 썸네일 파생 저장 키는 `thumbnail_storage_key`에 별도로 저장하며, 선택 이미지 삭제 때 선택과 파생 키를 함께 해제한다.
 - Board 연결은 V7에서 복합 FK (`board_id`, `author_member_id`) → `board(id, owner_member_id)`를 적용해 타인 게시판 배치를 차단한다. 공개 게시판 목록은 board_id와 작성자 상태를 기준으로 직접 연결된 공개 Post를 조회한다. V9는 (`project_id`, `author_member_id`) → `project(id, owner_member_id)` 복합 FK와 공개 관련 글·소유자 연결 해제 인덱스를 추가한다. 썸네일 키는 아직 없다. V12가 `blocked_by_admin_id`의 실제 관리자 FK를 추가한다.
 - Post 쓰기와 순서 변경은 ACTIVE이며 프로필 설정을 완료한 작성자만 수행한다.
 - 일반 DELETE는 visibility_status를 DELETED로 바꾸는 논리 삭제다. 단일 Post 물리 삭제 API는 없으며, 물리 파기 시 post_block·post_tag의 Post FK CASCADE에 따라 하위 행도 함께 정리된다. 계정 탈퇴에 따른 Post 물리 파기와 이 시점의 주소 예약 정리는 계정 데이터 보존·파기 절차에서 다룬다.
@@ -254,8 +256,10 @@ Post 본문을 순서가 있는 텍스트·코드·테이블 명세서·아키�
 | `language` | VARCHAR(50) | Y | 코드 언어. `CODE` 블록에서 필수 |
 | `title` | VARCHAR(100) | Y | 블록 제목 또는 설명 |
 | `display_order` | INTEGER | N | Post 내 블록 순서, 0 이상 |
+| `alignment` | VARCHAR(10) | N | 블록 정렬: `LEFT`, `CENTER`, `RIGHT`; 생략·기존 데이터는 `LEFT` |
 
 - UNIQUE (`post_id`, `display_order`)
+- V21은 기존 행에 `LEFT`를 채우고 alignment 허용값 CHECK를 추가한다.
 - `block_type = CODE`이면 `language`가 필수인 CHECK 제약을 둔다. TABLE/ARCHITECTURE의 language는 NULL이어야 한다.
 - V15는 ARCHITECTURE type과 language=NULL CHECK를 추가한다. 요소·그룹·연결 참조는 요청 경계에서 검증하며 기존 TEXT content에 저장한다.
 - V14는 type CHECK를 확장하고 TABLE 언어 제약을 추가한다. 기존 TEXT/CODE 행은 변환하지 않는다. TABLE의 버전·컬럼 구조는 API에서 검사하고 기존 TEXT content 컬럼에 JSON 문자열로 저장한다. 전용 테이블이나 JSONB 컬럼은 추가하지 않는다.
@@ -366,7 +370,7 @@ Project에 연결된 GitHub·배포·다운로드 등 외부 링크를 저장한
 
 ### 7.4 `project_media`
 
-V13에서 project_media와 Post의 nullable thumbnail_storage_key를 추가한다. Post 썸네일 키는 부분 UNIQUE, Project 대표 이미지는 부분 UNIQUE로 보호하고 각 파일은 서버 생성 UUID 키를 사용한다. 부모의 논리 삭제 시 연결을 제거하고 물리 삭제는 FK CASCADE로 처리한다.
+V13에서 project_media와 Post의 nullable thumbnail_storage_key를 추가한다. Post 썸네일 키는 부분 UNIQUE, Project 대표 이미지는 부분 UNIQUE로 보호하고 각 파일은 서버 생성 UUID 키를 사용한다. V22는 선택한 Post 본문 이미지 ID를 nullable thumbnail_image_id에 저장한다. V23 FK는 본문 이미지 삭제 시 ID를 NULL로 정리하며, 애플리케이션은 파생 파일도 함께 정리한다. Post 물리 삭제는 본문 이미지 및 썸네일 파일의 삭제 큐 등록을 포함한다.
 
 외부 삭제를 위한 media_deletion_job은 storage_key PK, next_attempt_at, created_at을 저장하며 회원/콘텐츠 FK를 두지 않아 탈퇴 DB 파기 후에도 남는다. 교체/연결 삭제 trigger가 큐를 같은 트랜잭션에 기록한다. 신규 업로드는 별도 트랜잭션으로 1시간 뒤 회수 작업을 먼저 커밋하고 연결 트랜잭션이 작업 행을 잠근 뒤 업로드한다. 연결 성공은 큐 제거와 함께 커밋하며 실패·롤백은 회수 작업을 보존한다. 작업자는 SKIP LOCKED·최신 참조 여부 확인 후 객체를 멱등 삭제하고 큐를 제거한다. 저장소 실패는 5분 뒤 다시 시도하며 키나 비밀을 로그에 남기지 않는다.
 

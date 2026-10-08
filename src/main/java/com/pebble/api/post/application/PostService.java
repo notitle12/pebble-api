@@ -49,6 +49,7 @@ public class PostService {
     private final BoardQueryService boards;
     private final ProjectQueryService projects;
     private final org.springframework.beans.factory.ObjectProvider<com.pebble.api.global.media.R2ObjectStorage> mediaStorage;
+    private final PostThumbnailService thumbnails;
 
     @Transactional
     public void purgeForMember(long memberId) {
@@ -77,6 +78,7 @@ public class PostService {
         ordered.add(position, post);
         applyOrder(ordered);
         replaceBlocks(post, input.blocks());
+        if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
         postTags.saveAll(selected.stream().map(tag -> new PostTag(post, tag)).toList());
         posts.flush();
         return detailView(post, true);
@@ -152,6 +154,8 @@ public class PostService {
         if (input.has("visibilityStatus")) post.changeVisibility(input.visibilityStatus());
         if (input.has("displayOrder")) move(post, input.displayOrder());
         if (input.has("blocks")) replaceBlocks(post, input.blocks());
+        if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
+        else if (input.has("blocks")) thumbnails.clearIfNoLongerReferenced(post);
         if (selected != null) {
             Set<Long> newIds = selected.stream().map(Tag::getId).collect(Collectors.toSet());
             Set<Long> oldIds = currentTags.stream().map(link -> link.getTag().getId()).collect(Collectors.toSet());
@@ -308,7 +312,8 @@ public class PostService {
         List<PostBlock> replacement = new ArrayList<>();
         for (int order = 0; order < input.size(); order++) {
             BlockInput block = input.get(order);
-            replacement.add(new PostBlock(post, block.type(), block.content(), block.language(), block.title(), order));
+            replacement.add(new PostBlock(post, block.type(), block.content(), block.language(), block.title(), order,
+                    block.alignment()));
         }
         blocks.saveAll(replacement);
     }

@@ -47,6 +47,9 @@ public class Post extends BaseTimeEntity {
     @Column(name = "thumbnail_storage_key", length = 512)
     private String thumbnailStorageKey;
 
+    @Column(name = "thumbnail_image_id")
+    private Long thumbnailImageId;
+
     @Column(length = 200)
     private String slug;
 
@@ -144,8 +147,16 @@ public class Post extends BaseTimeEntity {
 
     public String getThumbnailStorageKey() { return thumbnailStorageKey; }
 
+    public Long getThumbnailImageId() { return thumbnailImageId; }
+
+    public void changeThumbnailImageId(Long imageId) {
+        ensureNotDeleted();
+        thumbnailImageId = imageId;
+    }
+
     public void delete() {
         thumbnailStorageKey = null;
+        thumbnailImageId = null;
         ensureNotDeleted();
         visibility = PostVisibility.DELETED;
         deletedAt = Instant.now();

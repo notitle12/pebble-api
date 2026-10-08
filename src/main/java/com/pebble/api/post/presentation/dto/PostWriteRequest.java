@@ -6,6 +6,7 @@ import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.post.application.PostChanges;
 import com.pebble.api.post.application.PostChanges.BlockInput;
 import com.pebble.api.post.domain.BlockType;
+import com.pebble.api.post.domain.BlockAlignment;
 import com.pebble.api.post.domain.CodeLanguage;
 import com.pebble.api.post.domain.PostVisibility;
 import java.util.ArrayList;
@@ -17,7 +18,8 @@ import java.util.Locale;
 /** JSON 필드 존재 여부와 형식을 검증하고 업무 입력으로 변환한다. */
 public final class PostWriteRequest {
     private static final Set<String> FIELDS = Set.of("title", "summary", "blocks", "categoryId",
-            "tagIds", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft");
+            "tagIds", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft",
+            "thumbnailImageId");
 
     private PostWriteRequest() {
     }
@@ -56,7 +58,7 @@ public final class PostWriteRequest {
             List<BlockInput> parsed = new ArrayList<>();
             int index = 0;
             for (JsonNode block : node) {
-                object(block, Set.of("type", "content", "language", "title"));
+                object(block, Set.of("type", "content", "language", "title", "alignment"));
                 String prefix = "blocks[" + index++ + "].";
                 BlockType type = enumValue(block.get("type"), BlockType.class, prefix + "type");
                 String content = text(block.get("content"), prefix + "content", 50000, false, false);
@@ -73,7 +75,9 @@ public final class PostWriteRequest {
                 }
                 if ((type == BlockType.HTML || type == BlockType.MARKDOWN) && language != null) fail(prefix + "language", "서식 본문에는 코드 언어를 지정할 수 없습니다.");
                 String blockTitle = block.has("title") ? text(block.get("title"), prefix + "title", 100, true, false) : null;
-                parsed.add(new BlockInput(type, content, language, blockTitle));
+                BlockAlignment alignment = block.has("alignment")
+                        ? enumValue(block.get("alignment"), BlockAlignment.class, prefix + "alignment") : BlockAlignment.LEFT;
+                parsed.add(new BlockInput(type, content, language, blockTitle, alignment));
             }
             blocks = List.copyOf(parsed);
         }
@@ -94,7 +98,13 @@ public final class PostWriteRequest {
             if (!json.get("draft").isBoolean()) fail("draft", "boolean 값을 지정해 주세요.");
             draft = json.get("draft").booleanValue();
         }
-        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order, boardId, projectId, draft);
+        Long thumbnailImageId = json.hasNonNull("thumbnailImageId")
+                ? id(json.get("thumbnailImageId"), "thumbnailImageId") : null;
+        if (create && thumbnailImageId != null) {
+            fail("thumbnailImageId", "초안 생성 후 본문 이미지를 업로드한 다음 수정 요청에서 선택해 주세요.");
+        }
+        return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order,
+                boardId, projectId, draft, thumbnailImageId);
     }
 
     public static long id(String value, String field) {
