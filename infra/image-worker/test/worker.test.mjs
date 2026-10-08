@@ -41,3 +41,10 @@ test('member profile photos use signed authorization before R2 access',async()=>
  const unexpected=Buffer.from(key.replace('profile.webp','original.png')).toString('base64url');
  assert.equal((await s.call(signed(undefined,unexpected))).status,403);assert.equal(reads,1);
 });
+
+test('uploaded blog logos require a valid signature before R2 access',async()=>{
+ const key='member/12345678-1234-1234-1234-123456789abc/blog-logo.webp',path=Buffer.from(key).toString('base64url');const s=setup();let reads=0;s.env.MEDIA_BUCKET.get=async value=>{assert.equal(value,key);reads++;return {body:new Uint8Array([1,2,3])};};
+ assert.equal((await s.call(signed(undefined,path))).status,200);assert.equal(reads,1);
+ const tampered=signed(undefined,path).replace(/signature=[^&]+/,'signature='+Buffer.alloc(32).toString('base64url'));assert.equal((await s.call(tampered)).status,403);assert.equal(reads,1);
+ const unexpected=Buffer.from(key.replace('blog-logo.webp','original.svg')).toString('base64url');assert.equal((await s.call(signed(undefined,unexpected))).status,403);assert.equal(reads,1);
+});
