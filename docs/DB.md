@@ -537,3 +537,7 @@ post.is_draft는 기존 데이터 false이며 true는 HIDDEN/DELETED만 허용�
 `V18__expand_oauth_provider_names.sql`은 OAuth 공급자 CHECK만 확장한다. 기존 데이터·Provider/subject 고유 제약·회원당 Provider 고유 제약은 유지한다. 실제 계정 연결은 등록된 서버 클라이언트를 통해서만 수행한다. 카카오/구글 HTTP 로그인은 아직 제공하지 않는다.
 
 시간 필드는 Java의 BaseCreatedEntity/BaseTimeEntity에서 공통 매핑하지만 각 기존 테이블의 created_at/updated_at 컬럼과 TIMESTAMPTZ 제약을 유지한다. 새 공통 테이블이나 created_by/updated_by 컬럼은 만들지 않는다. 생성 전용 연결/미디어 엔티티에 updated_at을 추가하지 않는다. 시간 필드 리팩터링 자체는 DB migration이 없다.
+
+## 블로그 도구 (V20)
+
+blog_link는 member CASCADE 외부 링크·로고 저장 키·표시 순서를 보관한다. blog_visit_stats는 누적/오늘 집계, blog_visit_daily는 날짜별 브라우저 해시 유일 키다. 상세 보존·회수·동시성 정책은 [BLOG_TOOLS.md](BLOG_TOOLS.md)를 따른다.

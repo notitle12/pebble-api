@@ -782,3 +782,7 @@ Post 생성/수정은 선택 boolean `draft`를 받으며 응답에 해당 상�
 ## OAuth 공통화와 기존 네이버 API
 
 네이버 authorization/login/withdrawal-cancel 경로·요청·응답·state 쿠키와 Refresh 쿠키는 유지한다. 내부 처리는 공급자를 명시하는 공통 OAuthLoginService로 위임한다. 이 변경은 카카오/구글 로그인 API를 추가하지 않는다. 새로운 공급자는 서버 등록과 정확한 HTTP·쿠키·CORS/Origin/CSRF 및 프론트 callback 계약을 별도 작업에서 추가한다.
+
+## 블로그 방문·검색·외부 링크
+
+공개 방문 통계·작성자 q 검색, 본인 GitHub/사이트 로고 저장은 [BLOG_TOOLS.md](BLOG_TOOLS.md)를 따른다.
