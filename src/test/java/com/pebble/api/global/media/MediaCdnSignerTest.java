@@ -40,6 +40,18 @@ class MediaCdnSignerTest {
     }
 
     @Test
+    void bodyImagesUseSameSignedCdnPolicyAndRejectInvalidSuffixes() {
+        String key = KEY.replace("thumbnail.webp", "body.webp");
+        assertThat(signer("https://images.pebble-log.com", secret()).signedUrl(key))
+                .startsWith("https://images.pebble-log.com/media/");
+        for (String invalid : java.util.List.of(key.replace(".webp", "xwebp"),
+                key.replace(".webp", "\\.webp"), key.replace("body.webp", "original.png"))) {
+            assertThatThrownBy(() -> signer("https://images.pebble-log.com", secret()).signedUrl(invalid))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
     void rejectsUnsafeOriginWeakSecretsAndUnexpectedObjectKeysWithoutEchoingSecrets() {
         for (String origin : java.util.List.of("http://images.example", "https://user:secret@images.example", "https://images.example/path", "https://images.example?token=secret", "https://images.example:8443")) {
             assertThatThrownBy(() -> signer(origin, secret())).isInstanceOf(IllegalStateException.class).hasMessageNotContaining(origin).hasMessageNotContaining(secret());
