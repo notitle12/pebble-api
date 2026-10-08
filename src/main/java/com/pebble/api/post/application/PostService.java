@@ -290,6 +290,10 @@ public class PostService {
         return listPublic(categoryId, tagId, members.findPublicBlog(handle).getId(), pageable);
     }
 
+    public Page<PostView> searchBlog(String handle, String term, Long categoryId, Long tagId, Pageable pageable) {
+        return search(term, categoryId, tagId, members.findPublicBlog(handle).getId(), pageable);
+    }
+
     private Post ownedForUpdate(long postId, long memberId) {
         // 작성자 확인과 상태 전이를 같은 행 잠금 안에서 처리한다.
         Post post = posts.findByIdForUpdate(postId).orElseThrow(PostService::notFound);

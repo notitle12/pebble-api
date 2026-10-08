@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 
 @RequiredArgsConstructor
 public enum MemberError implements ErrorCode {
+    VISIT_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "방문 집계 요청이 많습니다. 잠시 후 다시 시도해 주세요."),
     ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 계정은 이용할 수 없습니다."),
     ACCOUNT_WITHDRAWAL_PENDING(HttpStatus.FORBIDDEN, "탈퇴 대기 중인 계정은 이용할 수 없습니다."),
     WITHDRAWAL_PENDING(HttpStatus.CONFLICT, "탈퇴 대기 회원의 상태는 관리자가 변경할 수 없습니다."),
