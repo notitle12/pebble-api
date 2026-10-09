@@ -67,3 +67,9 @@ out/
 /dist/
 /nbdist/
 /.nb-gradle/
+
+# Project documents are maintained in the local shared documentation folder.
+/docs/
+*.md
+*.mdx
+!/.github/**/*.md
