@@ -294,6 +294,13 @@ public class PostService {
         return listPublic(categoryId, tagId, members.findPublicBlog(handle).getId(), pageable);
     }
 
+    public Page<PostView> listBlogPlacement(String handle, String placement, Long categoryId, Long tagId, Pageable pageable) {
+        long memberId = members.findPublicBlog(handle).getId();
+        Specification<Post> placementFilter = (root, query, cb) -> cb.isNotNull(root.get(
+                "boards".equals(placement) ? "boardId" : "projectId"));
+        return page(posts.findAll(publicFilter(categoryId, tagId, memberId, null).and(placementFilter), pageable), false);
+    }
+
     public Page<PostView> searchBlog(String handle, String term, Long categoryId, Long tagId, Pageable pageable) {
         return search(term, categoryId, tagId, members.findPublicBlog(handle).getId(), pageable);
     }
