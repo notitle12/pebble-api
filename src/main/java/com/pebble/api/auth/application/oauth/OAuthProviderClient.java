@@ -5,6 +5,14 @@ public interface OAuthProviderClient {
     OAuthProfile authenticate(String authorizationCode, String state);
     String authorizationUrl(String state);
 
+    default String withdrawalAuthorizationUrl(String state) {
+        throw new UnsupportedOperationException("Withdrawal is not supported");
+    }
+
+    default void authenticateAndRevoke(String authorizationCode, String state, String expectedSubject) {
+        throw new UnsupportedOperationException("Withdrawal is not supported");
+    }
+
     record OAuthProfile(String subject, String nickname, String profileImageUrl) {
         @Override
         public String toString() {
