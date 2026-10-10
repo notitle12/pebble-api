@@ -155,6 +155,36 @@ class PostProjectIntegrationTest extends AuthenticationTestSupport {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void blogPlacementFiltersBeforePaginationAndRetainsAllPostsByDefault() throws Exception {
+        String project = project(owner, "PUBLIC");
+        String board = id(mvc.perform(post("/api/v1/boards").header(HttpHeaders.AUTHORIZATION, bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"board\"}")).andExpect(status().isCreated()));
+        createPost(owner, "PUBLIC", null, null).andExpect(status().isCreated());
+        createPost(owner, "PUBLIC", null, board).andExpect(status().isCreated());
+        createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated());
+        createPost(owner, "PUBLIC", project, board).andExpect(status().isCreated());
+        createPost(owner, "HIDDEN", project, board).andExpect(status().isCreated());
+        createPost(other, "PUBLIC", null, null).andExpect(status().isCreated());
+        String path = "/api/v1/blogs/" + owner.getHandle() + "/posts";
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(4));
+        for (String placement : new String[]{"boards", "projects"}) {
+            String field = placement.equals("boards") ? "boardId" : "projectId";
+            String expected = placement.equals("boards") ? board : project;
+            for (int page = 0; page < 2; page++) {
+                mvc.perform(get(path).param("placement", placement).param("size", "1").param("page", String.valueOf(page)))
+                        .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
+                        .andExpect(jsonPath("$.data.totalPages").value(2))
+                        .andExpect(jsonPath("$.data.content.length()").value(1))
+                        .andExpect(jsonPath("$.data.content[0]." + field).value(expected));
+            }
+        }
+        mvc.perform(get(path).param("placement", "invalid")).andExpect(status().isBadRequest());
+        mvc.perform(get(path).param("placement", "")).andExpect(status().isBadRequest());
+        mvc.perform(get(path).param("placement", "boards", "projects")).andExpect(status().isBadRequest());
+        mvc.perform(get(path).param("placement", "boards").param("q", "needle")).andExpect(status().isBadRequest());
+    }
+
     private Member member() {
         Member value = members.saveAndFlush(new Member("project-link-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null));
         return profiles.complete(value.getId(), "blog-" + value.getId(), "author-" + value.getId(), null);

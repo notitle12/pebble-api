@@ -111,8 +111,14 @@ public class PostController {
     @GetMapping("/api/v1/blogs/{handle}/posts")
     public ApiResponse<PostPage> publicBlog(@PathVariable String handle, @RequestParam MultiValueMap<String, String> query,
                                             @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId", "q"));
-        var result = query.containsKey("q")
+        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId", "q", "placement"));
+        String placement = query.getFirst("placement");
+        if (query.containsKey("placement") && (!Set.of("boards", "projects").contains(placement == null ? "" : placement) || query.containsKey("q"))) {
+            throw invalid("placement");
+        }
+        var result = placement != null
+                ? posts.listBlogPlacement(handle, placement, optionalId(query, "categoryId"), optionalId(query, "tagId"), pageable(query, "displayOrder"))
+                : query.containsKey("q")
                 ? posts.searchBlog(handle, PostWriteRequest.searchTerm(query.getFirst("q")), optionalId(query, "categoryId"), optionalId(query, "tagId"), pageable(query, "displayOrder"))
                 : posts.listBlog(handle, optionalId(query, "categoryId"), optionalId(query, "tagId"), pageable(query, "displayOrder"));
         return ApiResponse.of(page(likes.decorate(result, requesterId(jwt))));
