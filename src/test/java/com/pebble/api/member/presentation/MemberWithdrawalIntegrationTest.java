@@ -88,16 +88,10 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     @Test
     void requestSchedulesWithdrawalAndExpiresRefreshCookie() throws Exception {
         Instant before = Instant.now();
-        mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
-                .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.data.withdrawalScheduledAt").isNotEmpty())
-                .andExpect(header().string(HttpHeaders.SET_COOKIE,
-                        org.hamcrest.Matchers.allOf(org.hamcrest.Matchers.containsString("refresh_token="),
-                                org.hamcrest.Matchers.containsString("Path=/api/v1/auth"),
-                                org.hamcrest.Matchers.containsString("Max-Age=0"),
-                                org.hamcrest.Matchers.containsString("HttpOnly"),
-                                org.hamcrest.Matchers.containsString("Secure"),
-                                org.hamcrest.Matchers.containsString("SameSite=Lax"))));
+        var result = completeWithdrawal();
+        assertThat(result.getResponse().getStatus()).isEqualTo(202);
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).anySatisfy(cookie ->
+                assertThat(cookie).contains("refresh_token=", "Max-Age=0", "HttpOnly", "Secure", "SameSite=Lax"));
         Member pending = members.findById(member.getId()).orElseThrow();
         assertThat(pending.getWithdrawalScheduledAt()).isBetween(before.plus(Duration.ofDays(6)), before.plus(Duration.ofDays(8)));
         mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
@@ -134,8 +128,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         String subject = "withdrawal-subject-" + UUID.randomUUID();
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
         var oldLogin = login;
-        mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + oldLogin.accessToken()))
-                .andExpect(status().isAccepted());
+        withdrawalsRequest();
 
         var authorization = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         when(naver.authenticate("valid-code", authorization.state()))
@@ -251,7 +244,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void pendingNaverLoginDoesNotCancelWithdrawalAndUnknownIdentityDoesNotRegister() throws Exception {
+    void pendingNaverLoginRestoresAccountAndUnknownCancellationDoesNotRegister() throws Exception {
         String subject = "withdrawal-subject-" + UUID.randomUUID();
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
         withdrawalsRequest();
@@ -261,7 +254,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(post("/api/v1/auth/naver/login").cookie(new Cookie("naver_oauth_state", loginState.state()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"authorizationCode\":\"login-code\",\"state\":\"" + loginState.state() + "\"}"))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_PENDING"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.member.status").value("ACTIVE"));
 
         var unknownState = naverLogin.beginAuthorization(OAuthProvider.NAVER);
         String unknownSubject = "unregistered-" + UUID.randomUUID();
@@ -374,6 +367,82 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
         });
         naverLogin.cancelWithdrawal(OAuthProvider.NAVER, "valid-code", state.state(), state.state());
         assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.ACTIVE);
+    }
+
+    @Test
+    void loginStateCannotBeUsedToWithdrawAndCookieOriginIsRequired() throws Exception {
+        var state = naverLogin.beginAuthorization(OAuthProvider.NAVER).state();
+        String body = mapper.writeValueAsString(java.util.Map.of("authorizationCode", "code", "state", state));
+        mvc.perform(post("/api/v1/auth/naver/withdrawal").cookie(new Cookie("naver_oauth_state", state))
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/auth/naver/withdrawal")
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(new Cookie("naver_oauth_state", state))
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verify(naver, org.mockito.Mockito.never()).authenticateAndRevoke(
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+        assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.ACTIVE);
+    }
+
+    @Test
+    void providerFailureKeepsInternalAccountActive() throws Exception {
+        String subject = "failure-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        var grant = naverLogin.beginWithdrawal(member.getId());
+        org.mockito.Mockito.doThrow(new com.pebble.api.auth.domain.AuthException(
+                com.pebble.api.auth.domain.AuthError.OAUTH_PROVIDER_UNAVAILABLE))
+                .when(naver).authenticateAndRevoke("code", grant.state(), subject);
+        mvc.perform(post("/api/v1/auth/naver/withdrawal")
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(new Cookie("naver_oauth_state", grant.state()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(java.util.Map.of("authorizationCode", "code", "state", grant.state()))))
+                .andExpect(status().isBadGateway());
+        assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        assertThat(members.findById(member.getId()).orElseThrow().getWithdrawalScheduledAt()).isNull();
+    }
+
+    @Test
+    void withdrawalStateCannotSignInAndExpiredReservationCannotBeRestored() throws Exception {
+        String subject = "expired-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        var state = naverLogin.beginWithdrawal(member.getId());
+        mvc.perform(post("/api/v1/auth/naver/login").cookie(new Cookie("naver_oauth_state", state.state()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(java.util.Map.of("authorizationCode", "code", "state", state.state()))))
+                .andExpect(status().isUnauthorized());
+        jdbc.update("update member set status='WITHDRAWAL_PENDING', withdrawal_requested_at=now()-interval '8 days', withdrawal_scheduled_at=now()-interval '1 day' where id=?", member.getId());
+        em.clear();
+        var loginState = naverLogin.beginAuthorization(OAuthProvider.NAVER);
+        when(naver.authenticate("code", loginState.state())).thenReturn(new OAuthProviderClient.OAuthProfile(subject, null, null));
+        mvc.perform(post("/api/v1/auth/naver/login").cookie(new Cookie("naver_oauth_state", loginState.state()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(java.util.Map.of("authorizationCode", "code", "state", loginState.state()))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_EXPIRED"));
+        assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.WITHDRAWAL_PENDING);
+    }
+
+    private org.springframework.test.web.servlet.MvcResult completeWithdrawal() throws Exception {
+        String subject = "unlink-" + UUID.randomUUID();
+        identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
+        when(naver.withdrawalAuthorizationUrl(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(call -> "https://nid.naver.com/oauth2.0/authorize?state=" + call.getArgument(0));
+        var started = mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, bearer()))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        String cookieHeader = started.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+        String state = cookieHeader.substring("naver_oauth_state=".length(), cookieHeader.indexOf(';'));
+        var result = mvc.perform(post("/api/v1/auth/naver/withdrawal")
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                .cookie(new Cookie("naver_oauth_state", state))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(java.util.Map.of("authorizationCode", "unlink-code", "state", state))))
+                .andExpect(status().isAccepted()).andReturn();
+        org.mockito.Mockito.verify(naver).authenticateAndRevoke("unlink-code", state, subject);
+        mvc.perform(post("/api/v1/auth/naver/withdrawal")
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                .cookie(new Cookie("naver_oauth_state", state)).contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(java.util.Map.of("authorizationCode", "unlink-code", "state", state))))
+                .andExpect(status().isUnauthorized());
+        return result;
     }
 
     private String bearer() {

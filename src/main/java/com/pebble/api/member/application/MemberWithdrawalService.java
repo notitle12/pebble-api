@@ -40,6 +40,21 @@ public class MemberWithdrawalService {
         return member.getWithdrawalScheduledAt();
     }
 
+    public String subjectForWithdrawal(long memberId, OAuthProvider provider) {
+        queries.findActiveById(memberId);
+        return identities.findByMemberIdAndProvider(memberId, provider)
+                .orElseThrow(MemberWithdrawalService::notFound).getProviderSubject();
+    }
+
+    public void restoreOnLogin(long memberId) {
+        Member member = members.findByIdForWrite(memberId).orElseThrow(MemberWithdrawalService::notFound);
+        if (member.getStatus() == MemberStatus.WITHDRAWAL_PENDING) {
+            member.cancelWithdrawal(clock.instant());
+            sessions.revokeAll(memberId);
+            members.flush();
+        }
+    }
+
     public void cancel(OAuthProvider provider, String subject) {
         // 잠금 대기 전에 회원 Entity를 로드하지 않아 최신 예약 상태를 확인한다.
         long memberId = identities.findMemberId(provider, subject).orElseThrow(MemberWithdrawalService::notFound);

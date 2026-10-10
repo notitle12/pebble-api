@@ -90,6 +90,59 @@ class NaverOAuthClientTest {
         server.verify();
     }
 
+    @Test
+    void withdrawalReauthChecksIdentityAndRevokesProviderTokenImmediately() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        var properties = properties();
+        server.expect(requestTo(properties.tokenUri())).andRespond(withSuccess(
+                "{\"access_token\":\"provider-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(
+                "{\"resultcode\":\"00\",\"response\":{\"id\":\"subject\"}}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://nid.naver.com/oauth2.0/revoke"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("token=provider-token")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("token_type_hint=access_token")))
+                .andRespond(withSuccess());
+        var client = new NaverOAuthClient(builder.build(), properties);
+        assertThat(client.withdrawalAuthorizationUrl("state")).contains("auth_type=reauthenticate");
+        client.authenticateAndRevoke("code", "state", "subject");
+        server.verify();
+    }
+
+    @Test
+    void differentNaverAccountCannotRevokeOrWithdrawExpectedMember() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        var properties = properties();
+        server.expect(requestTo(properties.tokenUri())).andRespond(withSuccess(
+                "{\"access_token\":\"provider-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(
+                "{\"resultcode\":\"00\",\"response\":{\"id\":\"other-subject\"}}", MediaType.APPLICATION_JSON));
+        var client = new NaverOAuthClient(builder.build(), properties);
+        assertThat(catchThrowableOfType(AuthException.class,
+                () -> client.authenticateAndRevoke("code", "state", "expected-subject")).error())
+                .isEqualTo(AuthError.INVALID_CREDENTIALS);
+        server.verify();
+    }
+
+    @Test
+    void revocationFailureIsNotReportedAsCompletedWithdrawal() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        var properties = properties();
+        server.expect(requestTo(properties.tokenUri())).andRespond(withSuccess(
+                "{\"access_token\":\"provider-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(
+                "{\"resultcode\":\"00\",\"response\":{\"id\":\"subject\"}}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://nid.naver.com/oauth2.0/revoke"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        assertThat(catchThrowableOfType(AuthException.class,
+                () -> new NaverOAuthClient(builder.build(), properties).authenticateAndRevoke("code", "state", "subject")).error())
+                .isEqualTo(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
+        server.verify();
+    }
+
     private static Stream<String> optionalNicknames() {
         return Stream.of(null, "😀".repeat(20));
     }
