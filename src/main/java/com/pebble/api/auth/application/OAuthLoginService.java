@@ -35,9 +35,27 @@ public class OAuthLoginService {
         OAuthProfile profile = authenticate(provider, authorizationCode, state, cookieState);
         Member member = memberService.resolve(provider, profile.subject(),
                 profile.nickname(), profile.profileImageUrl());
-        // 공급자 통신·계정 연결이 끝난 뒤 회원 읽기 잠금으로 최신 상태 확인과 발급을 조정한다.
+        // 공급자 인증 뒤 회원 쓰기 잠금으로 기한 내 예약을 취소하고 최신 상태로 로그인한다.
+        withdrawals.restoreOnLogin(member.getId());
         var grant = sessions.login(member.getId());
         return new LoginGrant(grant.accessToken(), grant.refreshToken(), grant.cookieTtl(), grant.member());
+    }
+
+    public AuthorizationGrant beginWithdrawal(long memberId) {
+        withdrawals.subjectForWithdrawal(memberId, OAuthProvider.NAVER);
+        var registration = providers.require(OAuthProvider.NAVER);
+        String state = stateStore.issueWithdrawal(OAuthProvider.NAVER, registration.stateTtl(), memberId);
+        return new AuthorizationGrant(registration.client().withdrawalAuthorizationUrl(state), state, registration.stateTtl());
+    }
+
+    public java.time.Instant completeWithdrawal(String code, String state, String cookieState) {
+        validateStateCookie(state, cookieState);
+        Long memberId = stateStore.consumeWithdrawal(OAuthProvider.NAVER, state);
+        if (memberId == null) throw new AuthException(AuthError.INVALID_OAUTH_STATE);
+        String subject = withdrawals.subjectForWithdrawal(memberId, OAuthProvider.NAVER);
+        // 공급자 통신은 DB 트랜잭션/행 잠금 밖에서 실행하고 예약 시 상태를 다시 검증한다.
+        providers.require(OAuthProvider.NAVER).client().authenticateAndRevoke(code, state, subject);
+        return withdrawals.request(memberId);
     }
 
     public void cancelWithdrawal(OAuthProvider provider, String authorizationCode, String state, String cookieState) {
@@ -48,15 +66,19 @@ public class OAuthLoginService {
 
     private OAuthProfile authenticate(OAuthProvider provider, String authorizationCode, String state, String cookieState) {
         var registration = providers.require(provider);
-        if (isBlank(state) || isBlank(cookieState) || !MessageDigest.isEqual(
-                state.getBytes(StandardCharsets.UTF_8), cookieState.getBytes(StandardCharsets.UTF_8))) {
-            throw new AuthException(AuthError.INVALID_OAUTH_STATE);
-        }
+        validateStateCookie(state, cookieState);
         if (!stateStore.consume(provider, state)) {
             throw new AuthException(AuthError.INVALID_OAUTH_STATE);
         }
 
         return registration.client().authenticate(authorizationCode, state);
+    }
+
+    private void validateStateCookie(String state, String cookieState) {
+        if (isBlank(state) || isBlank(cookieState) || !MessageDigest.isEqual(
+                state.getBytes(StandardCharsets.UTF_8), cookieState.getBytes(StandardCharsets.UTF_8))) {
+            throw new AuthException(AuthError.INVALID_OAUTH_STATE);
+        }
     }
 
     private boolean isBlank(String value) {

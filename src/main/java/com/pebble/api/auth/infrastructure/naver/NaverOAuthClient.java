@@ -40,7 +40,21 @@ public class NaverOAuthClient implements OAuthProviderClient {
     }
 
     @Override
+    public String withdrawalAuthorizationUrl(String state) {
+        return authorizationUrl(state) + "&auth_type=reauthenticate";
+    }
+
+    @Override
+    public void authenticateAndRevoke(String authorizationCode, String state, String expectedSubject) {
+        authenticate(authorizationCode, state, expectedSubject);
+    }
+
+    @Override
     public OAuthProfile authenticate(String authorizationCode, String state) {
+        return authenticate(authorizationCode, state, null);
+    }
+
+    private OAuthProfile authenticate(String authorizationCode, String state, String expectedSubject) {
         requireClientConfiguration();
         try {
             NaverTokenResponse token = restClient.post()
@@ -73,6 +87,22 @@ public class NaverOAuthClient implements OAuthProviderClient {
                     || (profile.nickname() != null && characterCount(profile.nickname()) > 30)
                     || (profile.profileImage() != null && characterCount(profile.profileImage()) > 2048)) {
                 throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
+            }
+            if (expectedSubject != null) {
+                if (!expectedSubject.equals(profile.id())) throw new AuthException(AuthError.INVALID_CREDENTIALS);
+                MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+                form.add("client_id", properties.clientId());
+                form.add("client_secret", properties.clientSecret());
+                form.add("token", token.accessToken());
+                form.add("token_type_hint", "access_token");
+                // 공급자 토큰은 현재 요청에서만 사용하고 DB·Redis·로그에 남기지 않는다.
+                try {
+                    restClient.post().uri("https://nid.naver.com/oauth2.0/revoke")
+                            .contentType(MediaType.APPLICATION_FORM_URLENCODED).body(form)
+                            .retrieve().toBodilessEntity();
+                } catch (RestClientException exception) {
+                    throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
+                }
             }
             return new OAuthProfile(profile.id(), profile.nickname(), profile.profileImage());
         } catch (HttpClientErrorException exception) {

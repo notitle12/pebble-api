@@ -23,15 +23,29 @@ public class OAuthStateStore {
     }
 
     public String issue(OAuthProvider provider, Duration stateTtl) {
+        return issue(provider, stateTtl, "issued");
+    }
+
+    public String issueWithdrawal(OAuthProvider provider, Duration stateTtl, long memberId) {
+        return issue(provider, stateTtl, "withdrawal:" + memberId);
+    }
+
+    private String issue(OAuthProvider provider, Duration stateTtl, String value) {
         byte[] bytes = new byte[32];
         SECURE_RANDOM.nextBytes(bytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        redisTemplate.opsForValue().set(key(provider, state), "issued", stateTtl);
+        redisTemplate.opsForValue().set(key(provider, state), value, stateTtl);
         return state;
     }
 
     public boolean consume(OAuthProvider provider, String state) {
         return "issued".equals(redisTemplate.opsForValue().getAndDelete(key(provider, state)));
+    }
+
+    public Long consumeWithdrawal(OAuthProvider provider, String state) {
+        String value = redisTemplate.opsForValue().getAndDelete(key(provider, state));
+        if (value == null || !value.startsWith("withdrawal:")) return null;
+        return Long.valueOf(value.substring("withdrawal:".length()));
     }
 
     private String key(OAuthProvider provider, String state) {
