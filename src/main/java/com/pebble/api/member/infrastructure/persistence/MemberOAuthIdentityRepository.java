@@ -14,6 +14,8 @@ public interface MemberOAuthIdentityRepository extends JpaRepository<MemberOAuth
     @EntityGraph(attributePaths = "member")
     Optional<MemberOAuthIdentity> findByProviderAndProviderSubject(OAuthProvider provider, String providerSubject);
 
+    Optional<MemberOAuthIdentity> findByMemberIdAndProvider(long memberId, OAuthProvider provider);
+
     @Query("select i.member.id from MemberOAuthIdentity i where i.provider=:provider and i.providerSubject=:subject")
     Optional<Long> findMemberId(@Param("provider") OAuthProvider provider, @Param("subject") String subject);
 

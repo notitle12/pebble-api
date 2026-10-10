@@ -3,11 +3,9 @@ package com.pebble.api.member.presentation;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
-import com.pebble.api.member.application.MemberWithdrawalService;
+import com.pebble.api.auth.application.OAuthLoginService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -24,20 +22,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class MemberWithdrawalController {
 
     private static final String MEMBER_SUBJECT_PREFIX = "member:";
-    private final MemberWithdrawalService withdrawals;
+    private final OAuthLoginService oauth;
 
     @DeleteMapping
-    public ResponseEntity<ApiResponse<WithdrawalResponse>> request(
+    public ResponseEntity<ApiResponse<AuthorizationResponse>> request(
             @AuthenticationPrincipal Jwt jwt, HttpServletRequest request) {
         rejectPayloadOrQuery(request);
         long memberId = Long.parseLong(jwt.getSubject().substring(MEMBER_SUBJECT_PREFIX.length()));
-        Instant scheduledAt = withdrawals.request(memberId);
-        ResponseCookie expiredRefreshCookie = ResponseCookie.from("refresh_token", "")
+        var grant = oauth.beginWithdrawal(memberId);
+        ResponseCookie stateCookie = ResponseCookie.from("naver_oauth_state", grant.state())
                 .httpOnly(true).secure(true).sameSite("Lax")
-                .path("/api/v1/auth").maxAge(Duration.ZERO).build();
-        return ResponseEntity.accepted()
-                .header(HttpHeaders.SET_COOKIE, expiredRefreshCookie.toString())
-                .body(ApiResponse.of(new WithdrawalResponse(scheduledAt)));
+                .path("/api/v1/auth/naver").maxAge(grant.stateTtl()).build();
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, stateCookie.toString())
+                .body(ApiResponse.of(new AuthorizationResponse(grant.authorizationUrl())));
     }
 
     private void rejectPayloadOrQuery(HttpServletRequest request) {
@@ -49,6 +46,6 @@ public class MemberWithdrawalController {
         }
     }
 
-    public record WithdrawalResponse(Instant withdrawalScheduledAt) {
+    public record AuthorizationResponse(String authorizationUrl) {
     }
 }

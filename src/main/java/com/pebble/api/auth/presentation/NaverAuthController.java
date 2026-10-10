@@ -87,20 +87,40 @@ public class NaverAuthController {
                         toMemberResponse(grant.member()))));
     }
 
+    @PostMapping(value = "/withdrawal", consumes = "application/json")
+    public ResponseEntity<ApiResponse<WithdrawalResponse>> completeWithdrawal(
+            @RequestBody String json,
+            @CookieValue(name = STATE_COOKIE, required = false) String cookieState,
+            HttpServletRequest request) {
+        NaverWithdrawalRequest body = parseWithdrawal(json, request);
+        var scheduledAt = oauthLoginService.completeWithdrawal(body.authorizationCode(), body.state(), cookieState);
+        ResponseCookie stateCookie = ResponseCookie.from(STATE_COOKIE, "").httpOnly(true).secure(true)
+                .sameSite("Lax").path(COOKIE_PATH + "/naver").maxAge(Duration.ZERO).build();
+        ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_COOKIE, "").httpOnly(true).secure(true)
+                .sameSite("Lax").path(COOKIE_PATH).maxAge(Duration.ZERO).build();
+        return ResponseEntity.accepted().header(HttpHeaders.SET_COOKIE, stateCookie.toString(), refreshCookie.toString())
+                .body(ApiResponse.of(new WithdrawalResponse(scheduledAt)));
+    }
+
+    private NaverWithdrawalRequest parseWithdrawal(String json, HttpServletRequest request) {
+        if (!request.getParameterMap().isEmpty()) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        try {
+            JsonNode tree = mapper.reader().with(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+                    .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(json);
+            return NaverWithdrawalRequest.parse(tree);
+        } catch (JsonProcessingException exception) {
+            throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        }
+    }
+
+    public record WithdrawalResponse(java.time.Instant withdrawalScheduledAt) {}
+
     @PostMapping(value = "/withdrawal/cancel", consumes = "application/json")
     public ResponseEntity<ApiResponse<WithdrawalCancellationResponse>> cancelWithdrawal(
             @RequestBody String json,
             @CookieValue(name = STATE_COOKIE, required = false) String cookieState,
             HttpServletRequest request) {
-        if (!request.getParameterMap().isEmpty()) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
-        NaverWithdrawalRequest body;
-        try {
-            JsonNode tree = mapper.reader().with(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
-                    .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(json);
-            body = NaverWithdrawalRequest.parse(tree);
-        } catch (JsonProcessingException exception) {
-            throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
-        }
+        NaverWithdrawalRequest body = parseWithdrawal(json, request);
         oauthLoginService.cancelWithdrawal(OAuthProvider.NAVER, body.authorizationCode(), body.state(), cookieState);
         ResponseCookie expiredStateCookie = ResponseCookie.from(STATE_COOKIE, "")
                 .httpOnly(true).secure(true).sameSite("Lax")
