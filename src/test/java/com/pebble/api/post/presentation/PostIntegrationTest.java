@@ -221,7 +221,8 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         change(id, "{\"blocks\":[{\"type\":\"DB_SCHEMA\",\"content\":\"{}\"}]}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
         mvc.perform(get(PATH + "/" + id)).andExpect(jsonPath("$.data.blocks[0].content").value(table));
-        String updated = table.replace("\"name\":\"member\"", "\"name\":\"updated_member\"");
+        String updated = table.replace("\"name\":\"member\"", "\"name\":\"updated_member\"")
+                .replace("\"columnId\":\"id\"", "\"columnId\":\"id\",\"notation\":\"BARKER\",\"sourceRequired\":true");
         var patch = mapper.createObjectNode();
         patch.putArray("blocks").addObject().put("type", "DB_SCHEMA").put("content", updated);
         change(id, patch.toString()).andExpect(status().isOk()).andExpect(jsonPath("$.data.blocks[0].content").value(updated));
