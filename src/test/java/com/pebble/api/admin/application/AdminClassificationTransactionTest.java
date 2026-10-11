@@ -16,8 +16,8 @@ import com.pebble.api.post.presentation.dto.PostWriteRequest;
 import com.pebble.api.project.application.ProjectService;
 import com.pebble.api.project.presentation.dto.ProjectWriteRequest;
 import com.pebble.api.support.AuthenticationTestSupport;
-import com.pebble.api.tag.application.TagChanges;
-import com.pebble.api.tag.domain.TagStatus;
+import com.pebble.api.techstack.application.TechStackChanges;
+import com.pebble.api.techstack.domain.TechStackStatus;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -59,7 +59,7 @@ class AdminClassificationTransactionTest extends AuthenticationTestSupport {
                 jdbc.update("delete from member where id=?", id);
             }
             jdbc.update("delete from category where slug like ?", prefix + "%");
-            jdbc.update("delete from tag where slug like ?", prefix + "%");
+            jdbc.update("delete from tech_stack where slug like ?", prefix + "%");
         });
     }
 
@@ -91,23 +91,23 @@ class AdminClassificationTransactionTest extends AuthenticationTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"post", "project"})
-    void waitingContentSelectionRejectsCommittedTagDeactivation(String type) throws Exception {
-        long tag = tag("new-tag");
+    @ValueSource(strings = {"project"})
+    void waitingContentSelectionRejectsCommittedTechStackDeactivation(String type) throws Exception {
+        long techStack = techStack("new-techStack");
         long owner = owner();
-        blocked(() -> deactivateTag(tag), () -> content(type, owner, tag), "INACTIVE_TAG");
+        blocked(() -> deactivateTechStack(techStack), () -> content(type, owner, techStack), "INACTIVE_TECH_STACK");
         assertThat(jdbc.queryForObject("select count(*) from " + type + " where " +
                 (type.equals("post") ? "author_member_id" : "owner_member_id") + "=?", Long.class, owner)).isZero();
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"post", "project"})
+    @ValueSource(strings = {"project"})
     void tagAssignmentCommittedFirstIsPreservedWhenWaitingDeactivationCommits(String type) throws Exception {
-        long tag = tag("new-tag");
+        long techStack = techStack("new-techStack");
         long owner = owner();
-        blocked(() -> content(type, owner, tag), () -> deactivateTag(tag), null);
-        assertThat(jdbc.queryForObject("select count(*) from " + type + "_tag where tag_id=?", Long.class, tag)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("select status from tag where id=?", String.class, tag)).isEqualTo("INACTIVE");
+        blocked(() -> content(type, owner, techStack), () -> deactivateTechStack(techStack), null);
+        assertThat(jdbc.queryForObject("select count(*) from " + type + "_tech_stack where tech_stack_id=?", Long.class, techStack)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select status from tech_stack where id=?", String.class, techStack)).isEqualTo("INACTIVE");
     }
 
     @Test
@@ -120,38 +120,38 @@ class AdminClassificationTransactionTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void failedCategoryMoveAndTagStateTransactionRollsBackEveryChange() {
+    void failedCategoryMoveAndTechStackStateTransactionRollsBackEveryChange() {
         long first = category(null, "first");
         long second = category(null, "second");
-        long tag = tag("tag");
+        long techStack = techStack("techStack");
         var before = jdbc.queryForMap("select parent_id,updated_at from category where id=?", first);
-        var tagBefore = jdbc.queryForMap("select status,updated_at from tag where id=?", tag);
+        var tagBefore = jdbc.queryForMap("select status,updated_at from tech_stack where id=?", techStack);
         assertThatThrownBy(() -> transactions.executeWithoutResult(status -> {
             move(first, second);
-            deactivateTag(tag);
+            deactivateTechStack(techStack);
             throw new IllegalStateException("rollback fixture");
         })).isInstanceOf(IllegalStateException.class);
         assertThat(jdbc.queryForMap("select parent_id,updated_at from category where id=?", first)).isEqualTo(before);
-        assertThat(jdbc.queryForMap("select status,updated_at from tag where id=?", tag)).isEqualTo(tagBefore);
+        assertThat(jdbc.queryForMap("select status,updated_at from tech_stack where id=?", techStack)).isEqualTo(tagBefore);
     }
 
     @Test
-    void simultaneousTagSlugCreationHasOneWinnerAndOneConflict() throws Exception {
+    void simultaneousTechStackSlugCreationHasOneWinnerAndOneConflict() throws Exception {
         long firstOwner = 1L;
-        var input = new TagChanges(Set.of("name", "slug"), "tag", prefix + "-duplicate", 0, null);
+        var input = new TechStackChanges(Set.of("name", "slug"), "tech_stack", prefix + "-duplicate", 0, null);
         CountDownLatch start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> { await(start); return createTagOutcome(firstOwner, input); });
-            var second = executor.submit(() -> { await(start); return createTagOutcome(firstOwner, input); });
+            var first = executor.submit(() -> { await(start); return createTechStackOutcome(firstOwner, input); });
+            var second = executor.submit(() -> { await(start); return createTechStackOutcome(firstOwner, input); });
             start.countDown();
             assertThat(List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS)))
-                    .containsExactlyInAnyOrder("SUCCESS", "TAG_SLUG_CONFLICT");
+                    .containsExactlyInAnyOrder("SUCCESS", "TECH_STACK_SLUG_CONFLICT");
         }
-        assertThat(jdbc.queryForObject("select count(*) from tag where slug=?", Long.class, input.slug())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from tech_stack where slug=?", Long.class, input.slug())).isEqualTo(1);
     }
 
-    private String createTagOutcome(long actor, TagChanges input) {
-        try { management.createTag(actor, input); return "SUCCESS"; }
+    private String createTechStackOutcome(long actor, TechStackChanges input) {
+        try { management.createTechStack(actor, input); return "SUCCESS"; }
         catch (ApplicationException exception) { return exception.error().code(); }
     }
 
@@ -187,11 +187,11 @@ class AdminClassificationTransactionTest extends AuthenticationTestSupport {
     private void move(long id, long parent) {
         management.updateCategory(1, id, new CategoryChanges(Set.of("parentId"), null, null, parent, null, null));
     }
-    private long tag(String suffix) {
-        return management.createTag(1, new TagChanges(Set.of("name", "slug"), suffix, prefix + "-" + suffix, 0, null)).getId();
+    private long techStack(String suffix) {
+        return management.createTechStack(1, new TechStackChanges(Set.of("name", "slug"), suffix, prefix + "-" + suffix, 0, null)).getId();
     }
-    private void deactivateTag(long id) {
-        management.updateTag(1, id, new TagChanges(Set.of("status"), null, null, null, TagStatus.INACTIVE));
+    private void deactivateTechStack(long id) {
+        management.updateTechStack(1, id, new TechStackChanges(Set.of("status"), null, null, null, TechStackStatus.INACTIVE));
     }
     private long owner() {
         Member member = members.saveAndFlush(new Member("classification-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null));
@@ -199,17 +199,17 @@ class AdminClassificationTransactionTest extends AuthenticationTestSupport {
         profiles.complete(member.getId(), "Class blog " + member.getId(), "class-" + member.getId(), null);
         return member.getId();
     }
-    private void post(long owner, Long category, Long tag) {
+    private void post(long owner, Long category, Long techStack) {
         try {
             posts.create(owner, PostWriteRequest.parse(mapper.readTree("{\"title\":\"classification post\",\"visibilityStatus\":\"PUBLIC\",\"categoryId\":" +
-                    (category == null ? "null" : "\"" + category + "\"") + ",\"tagIds\":" +
-                    (tag == null ? "[]" : "[\"" + tag + "\"]") + ",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}]}"), true));
+                    (category == null ? "null" : "\"" + category + "\"") + ",\"tags\":" +
+                    (techStack == null ? "[]" : "[\"" + techStack + "\"]") + ",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}]}"), true));
         } catch (java.io.IOException exception) { throw new IllegalStateException(exception); }
     }
-    private void content(String type, long owner, long tag) {
-        if (type.equals("post")) { post(owner, null, tag); return; }
+    private void content(String type, long owner, long techStack) {
+        if (type.equals("post")) { post(owner, null, techStack); return; }
         try {
-            projects.create(owner, ProjectWriteRequest.parse(mapper.readTree("{\"name\":\"classification project\",\"visibilityStatus\":\"PUBLIC\",\"lifecycleStatus\":\"IN_PROGRESS\",\"tagIds\":[\"" + tag + "\"]}"), true));
+            projects.create(owner, ProjectWriteRequest.parse(mapper.readTree("{\"name\":\"classification project\",\"visibilityStatus\":\"PUBLIC\",\"lifecycleStatus\":\"IN_PROGRESS\",\"techStackIds\":[\"" + techStack + "\"]}"), true));
         } catch (java.io.IOException exception) { throw new IllegalStateException(exception); }
     }
     private static void await(CountDownLatch latch) {

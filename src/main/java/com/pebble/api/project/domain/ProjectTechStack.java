@@ -1,7 +1,7 @@
 package com.pebble.api.project.domain;
 
 import com.pebble.api.global.persistence.BaseCreatedEntity;
-import com.pebble.api.tag.domain.Tag;
+import com.pebble.api.techstack.domain.TechStack;
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
@@ -12,29 +12,29 @@ import jakarta.persistence.MapsId;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "project_tag")
-public class ProjectTag extends BaseCreatedEntity {
+@Table(name = "project_tech_stack")
+public class ProjectTechStack extends BaseCreatedEntity {
     @EmbeddedId
-    private ProjectTagId id;
+    private ProjectTechStackId id;
     @MapsId("projectId")
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "project_id", nullable = false, updatable = false)
     private Project project;
-    @MapsId("tagId")
+    @MapsId("techStackId")
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tag_id", nullable = false, updatable = false)
-    private Tag tag;
+    @JoinColumn(name = "tech_stack_id", nullable = false, updatable = false)
+    private TechStack techStack;
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
-    protected ProjectTag() { }
-    public ProjectTag(Project project, Tag tag, int displayOrder) {
+    protected ProjectTechStack() { }
+    public ProjectTechStack(Project project, TechStack techStack, int displayOrder) {
         this.project = project;
-        this.tag = tag;
+        this.techStack = techStack;
         this.displayOrder = displayOrder;
-        this.id = new ProjectTagId(project.getId(), tag.getId());
+        this.id = new ProjectTechStackId(project.getId(), techStack.getId());
     }
     public Project getProject() { return project; }
-    public Tag getTag() { return tag; }
+    public TechStack getTechStack() { return techStack; }
     public int getDisplayOrder() { return displayOrder; }
 }

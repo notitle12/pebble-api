@@ -17,9 +17,9 @@ import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
 import com.pebble.api.member.infrastructure.persistence.MemberRepository;
 import com.pebble.api.support.AuthenticationTestSupport;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.infrastructure.persistence.TagRepository;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.infrastructure.persistence.TechStackRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.Comparator;
@@ -50,7 +50,7 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
     @Autowired MemberRepository members;
     @Autowired MemberProfileService profiles;
     @Autowired AccessTokenService tokens;
-    @Autowired TagRepository tags;
+    @Autowired TechStackRepository techStacks;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
     @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
@@ -64,21 +64,21 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void searchMatchesNameSummaryDescriptionAndTagAndDeduplicatesProjects() throws Exception {
-        Tag tag = tag("needle-tag", TagStatus.ACTIVE);
-        Tag secondTag = tag("needle-second", TagStatus.ACTIVE);
+    void searchMatchesNameSummaryDescriptionAndTechStackAndDeduplicatesProjects() throws Exception {
+        TechStack techStack = techStack("needle-techStack", TechStackStatus.ACTIVE);
+        TechStack secondTechStack = techStack("needle-second", TechStackStatus.ACTIVE);
         String nameMatch = create(owner, "needle-name", "ordinary", "ordinary", List.of());
         String summaryMatch = create(owner, "ordinary summary project", "needle-summary", "ordinary", List.of());
         String descriptionMatch = create(owner, "ordinary description project", "ordinary", "needle-description", List.of());
-        String tagMatch = create(owner, "ordinary tagged project", "ordinary", "ordinary", List.of(tag));
-        String allMatch = create(owner, "needle-multiple", "needle-multiple", "needle-multiple", List.of(tag, secondTag));
+        String tagMatch = create(owner, "ordinary tagged project", "ordinary", "ordinary", List.of(techStack));
+        String allMatch = create(owner, "needle-multiple", "needle-multiple", "needle-multiple", List.of(techStack, secondTechStack));
 
         assertSearch("needle", nameMatch, summaryMatch, descriptionMatch, tagMatch, allMatch);
         mvc.perform(search("needle").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(5))
                 .andExpect(jsonPath("$.data.content[0].features").doesNotExist())
                 .andExpect(jsonPath("$.data.content[0].description").doesNotExist());
-        mvc.perform(search("needle").param("tagId", tag.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
+        mvc.perform(search("needle").param("techStackId", techStack.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
                 .andExpect(jsonPath("$.data.totalPages").value(2)).andExpect(jsonPath("$.data.content.length()").value(1));
         mvc.perform(search("needle").param("lifecycleStatus", "COMPLETED"))
@@ -103,13 +103,13 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void globalListFiltersTagAndLifecycleAndPaginatesWithStableTieOrder() throws Exception {
-        Tag selected = tag("selected", TagStatus.ACTIVE);
-        Tag otherTag = tag("other", TagStatus.ACTIVE);
+    void globalListFiltersTechStackAndLifecycleAndPaginatesWithStableTieOrder() throws Exception {
+        TechStack selected = techStack("selected", TechStackStatus.ACTIVE);
+        TechStack otherTechStack = techStack("other", TechStackStatus.ACTIVE);
         String first = create(owner, "first", null, null, List.of(selected), "IN_PROGRESS");
         String second = create(owner, "second", null, null, List.of(selected), "IN_PROGRESS");
         create(owner, "completed", null, null, List.of(selected), "COMPLETED");
-        create(owner, "other tag", null, null, List.of(otherTag), "IN_PROGRESS");
+        create(owner, "other techStack", null, null, List.of(otherTechStack), "IN_PROGRESS");
         em.flush();
         jdbc.update("update project set published_at='2026-01-01T00:00:00Z' where id in (?,?)",
                 Long.parseLong(first), Long.parseLong(second));
@@ -117,25 +117,25 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
         List<String> sortedIds = List.of(first, second).stream()
                 .sorted(Comparator.<String>comparingLong(Long::parseLong).reversed()).toList();
 
-        mvc.perform(get(PROJECTS).param("tagId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
+        mvc.perform(get(PROJECTS).param("techStackId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
                 .andExpect(jsonPath("$.data.totalPages").value(2)).andExpect(jsonPath("$.data.content[0].id").value(sortedIds.get(0)))
                 .andExpect(jsonPath("$.data.hasNext").value(true));
-        mvc.perform(get(PROJECTS).param("tagId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS")
+        mvc.perform(get(PROJECTS).param("techStackId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS")
                         .param("page", "1").param("size", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(sortedIds.get(1)))
                 .andExpect(jsonPath("$.data.hasPrevious").value(true));
         mvc.perform(get(PROJECTS).param("lifecycleStatus", "COMPLETED"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1));
-        mvc.perform(get(PROJECTS).param("tagId", otherTag.getId().toString()))
+        mvc.perform(get(PROJECTS).param("techStackId", otherTechStack.getId().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1));
         mvc.perform(get(PROJECTS).param("sort", "createdAt,asc"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.page").value(0));
         mvc.perform(get("/api/v1/members/" + owner.getId() + "/projects")
-                        .param("tagId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
+                        .param("techStackId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
                 .andExpect(jsonPath("$.data.content[0].id").value(sortedIds.get(0)));
-        mvc.perform(get("/api/v1/members/" + owner.getId() + "/projects").param("tagId", otherTag.getId().toString()))
+        mvc.perform(get("/api/v1/members/" + owner.getId() + "/projects").param("techStackId", otherTechStack.getId().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
@@ -207,15 +207,15 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void validatesSearchListAndMemberPathParameters() throws Exception {
-        Tag tag = tag("validation", TagStatus.ACTIVE);
+        TechStack techStack = techStack("validation", TechStackStatus.ACTIVE);
         for (MockHttpServletRequestBuilder request : List.of(
                 get("/api/v1/projects/search"), search(""), search("  "), search("x".repeat(201)), search("\u0000"),
                 search("one").param("q", "two"), search("one").param("unknown", "x"),
-                search("one").param("tagId", "0"), search("one").param("tagId", "9223372036854775808"),
+                search("one").param("techStackId", "0"), search("one").param("techStackId", "9223372036854775808"),
                 search("one").param("lifecycleStatus", "DONE"), search("one").param("page", "-1"),
                 search("one").param("size", "101"), search("one").param("sort", "name,asc"),
-                search("one").param("sort", "publishedAt"), get(PROJECTS).param("tagId", "abc"),
-                get(PROJECTS).param("lifecycleStatus", "DONE"), get(PROJECTS).param("tagId", tag.getId().toString()).param("tagId", "1"))) {
+                search("one").param("sort", "publishedAt"), get(PROJECTS).param("techStackId", "abc"),
+                get(PROJECTS).param("lifecycleStatus", "DONE"), get(PROJECTS).param("techStackId", techStack.getId().toString()).param("techStackId", "1"))) {
             mvc.perform(request).andExpect(status().isBadRequest());
         }
         mvc.perform(get("/api/v1/members/999999999999999999/projects")).andExpect(status().isNotFound());
@@ -250,28 +250,28 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
         return get(PROJECTS + "/search").param("q", q);
     }
 
-    private String create(Member owner, String name, String summary, String description, List<Tag> selected) throws Exception {
+    private String create(Member owner, String name, String summary, String description, List<TechStack> selected) throws Exception {
         return create(owner, "PUBLIC", name, summary, description, selected);
     }
 
     private String create(Member owner, String visibility, String name, String summary, String description,
-                          List<Tag> selected) throws Exception {
+                          List<TechStack> selected) throws Exception {
         return create(owner, visibility, name, summary, description, selected, "IN_PROGRESS");
     }
 
-    private String create(Member owner, String name, String summary, String description, List<Tag> selected,
+    private String create(Member owner, String name, String summary, String description, List<TechStack> selected,
                           String lifecycle) throws Exception {
         return create(owner, "PUBLIC", name, summary, description, selected, lifecycle);
     }
 
     private String create(Member owner, String visibility, String name, String summary, String description,
-                          List<Tag> selected, String lifecycle) throws Exception {
+                          List<TechStack> selected, String lifecycle) throws Exception {
         ObjectNode json = mapper.createObjectNode().put("name", name).put("lifecycleStatus", lifecycle)
                 .put("visibilityStatus", visibility);
         if (summary != null) json.put("summary", summary);
         if (description != null) json.put("description", description);
-        ArrayNode tagIds = json.putArray("tagIds");
-        selected.forEach(tag -> tagIds.add(tag.getId().toString()));
+        ArrayNode techStackIds = json.putArray("techStackIds");
+        selected.forEach(techStack -> techStackIds.add(techStack.getId().toString()));
         json.putArray("features");
         json.putArray("links");
         ResultActions result = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(PROJECTS)
@@ -281,8 +281,8 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
         return response(result).at("/data/id").asText();
     }
 
-    private Tag tag(String name, TagStatus status) {
-        return tags.saveAndFlush(new Tag(name, "tag-" + UUID.randomUUID(), 0, status));
+    private TechStack techStack(String name, TechStackStatus status) {
+        return techStacks.saveAndFlush(new TechStack(name, "techStack-" + UUID.randomUUID(), 0, status));
     }
 
     private JsonNode response(ResultActions result) throws Exception {

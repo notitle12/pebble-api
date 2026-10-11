@@ -14,9 +14,9 @@ import com.pebble.api.post.presentation.dto.PostWriteRequest;
 import com.pebble.api.project.domain.ProjectVisibility;
 import com.pebble.api.project.presentation.dto.ProjectWriteRequest;
 import com.pebble.api.support.AuthenticationTestSupport;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.infrastructure.persistence.TagRepository;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.infrastructure.persistence.TechStackRepository;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -33,12 +33,12 @@ class ProjectManagementIntegrationTest extends AuthenticationTestSupport {
     @Autowired PostService posts;
     @Autowired MemberRepository members;
     @Autowired MemberProfileService profiles;
-    @Autowired TagRepository tags;
+    @Autowired TechStackRepository techStacks;
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate transactions;
     private final List<Long> owners = new ArrayList<>();
-    private final List<Long> createdTags = new ArrayList<>();
+    private final List<Long> createdTechStacks = new ArrayList<>();
 
     @AfterEach
     void cleanup() {
@@ -47,20 +47,20 @@ class ProjectManagementIntegrationTest extends AuthenticationTestSupport {
             jdbc.update("delete from project where owner_member_id=?", owner);
             jdbc.update("delete from member where id=?", owner);
         }));
-        transactions.executeWithoutResult(status -> createdTags.forEach(tagId -> {
-            jdbc.update("delete from project_tag where tag_id=?", tagId);
-            jdbc.update("delete from tag where id=?", tagId);
+        transactions.executeWithoutResult(status -> createdTechStacks.forEach(techStackId -> {
+            jdbc.update("delete from project_tech_stack where tech_stack_id=?", techStackId);
+            jdbc.update("delete from tech_stack where id=?", techStackId);
         }));
     }
 
     @Test
-    void managementSearchUsesLiteralMatchingAndDoesNotDuplicateProjectsForMatchingTags() throws Exception {
+    void managementSearchUsesLiteralMatchingAndDoesNotDuplicateProjectsForMatchingTechStacks() throws Exception {
         long owner = owner();
         String suffix = java.util.UUID.randomUUID().toString().substring(0, 8);
-        Tag first = tags.saveAndFlush(new Tag("needle%_x one " + suffix, "needle-one-" + suffix, 1, TagStatus.ACTIVE));
-        Tag second = tags.saveAndFlush(new Tag("needle%_x two " + suffix, "needle-two-" + suffix, 2, TagStatus.ACTIVE));
-        createdTags.add(first.getId());
-        createdTags.add(second.getId());
+        TechStack first = techStacks.saveAndFlush(new TechStack("needle%_x one " + suffix, "needle-one-" + suffix, 1, TechStackStatus.ACTIVE));
+        TechStack second = techStacks.saveAndFlush(new TechStack("needle%_x two " + suffix, "needle-two-" + suffix, 2, TechStackStatus.ACTIVE));
+        createdTechStacks.add(first.getId());
+        createdTechStacks.add(second.getId());
         long tagged = create(owner, "PUBLIC", "ordinary", "summary", "", List.of(first, second));
         long hidden = create(owner, "HIDDEN", "literal needle%_x title", null, null, List.of());
         long deleted = create(owner, "PUBLIC", "unrelated", null, "retained deleted description", List.of());
@@ -114,11 +114,11 @@ class ProjectManagementIntegrationTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select project_id from post where id=?", Long.class, postId)).isNull();
     }
 
-    private long create(long owner, String visibility, String name, String summary, String description, List<Tag> selected) throws Exception {
+    private long create(long owner, String visibility, String name, String summary, String description, List<TechStack> selected) throws Exception {
         String json = "{\"name\":\"" + name + "\",\"summary\":" + nullable(summary)
                 + ",\"description\":" + nullable(description) + ",\"visibilityStatus\":\"" + visibility
-                + "\",\"lifecycleStatus\":\"IN_PROGRESS\",\"tagIds\":["
-                + String.join(",", selected.stream().map(tag -> "\"" + tag.getId() + "\"").toList()) + "]}";
+                + "\",\"lifecycleStatus\":\"IN_PROGRESS\",\"techStackIds\":["
+                + String.join(",", selected.stream().map(techStack -> "\"" + techStack.getId() + "\"").toList()) + "]}";
         return projects.create(owner, ProjectWriteRequest.parse(mapper.readTree(json), true)).project().getId();
     }
 

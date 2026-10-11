@@ -1,6 +1,6 @@
 package com.pebble.api.project.application;
 
-import com.pebble.api.project.infrastructure.persistence.ProjectTagRepository;
+import com.pebble.api.project.infrastructure.persistence.ProjectTechStackRepository;
 import com.pebble.api.project.infrastructure.persistence.ProjectRepository;
 import com.pebble.api.project.domain.Project;
 import com.pebble.api.project.domain.ProjectVisibility;
@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProjectQueryService {
-    private final ProjectTagRepository projectTags;
+    private final ProjectTechStackRepository projectTechStacks;
     private final ProjectRepository projects;
 
     @Transactional
@@ -49,7 +49,7 @@ public class ProjectQueryService {
         return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
     }
 
-    public List<Long> findPublicTagIds() {
-        return projectTags.findPublicTagIds();
+    public List<Long> findPublicTechStackIds() {
+        return projectTechStacks.findPublicTechStackIds();
     }
 }

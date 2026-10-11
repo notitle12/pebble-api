@@ -331,7 +331,7 @@ class BoardIntegrationTest extends AuthenticationTestSupport {
 
     private String createPost(Member member, String visibility, String boardJson) throws Exception {
         String body = "{\"title\":\"title\",\"summary\":null,\"visibilityStatus\":\"" + visibility
-                + "\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"text\"}],\"tagIds\":[],\"boardId\":" + boardJson + "}";
+                + "\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"text\"}],\"tags\":[],\"boardId\":" + boardJson + "}";
         ResultActions result = mvc.perform(post(POSTS_PATH).header(HttpHeaders.AUTHORIZATION, bearer(member))
                 .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated());
         return response(result).at("/data/id").asText();
