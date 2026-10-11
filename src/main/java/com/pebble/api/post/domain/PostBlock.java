@@ -15,13 +15,14 @@ import org.hibernate.annotations.Check;
 
 @Entity
 @Table(name = "post_block")
-@Check(name = "ck_post_block_type", constraints = "block_type in ('TEXT', 'CODE', 'TABLE', 'ARCHITECTURE', 'HTML', 'MARKDOWN')")
+@Check(name = "ck_post_block_type", constraints = "block_type in ('TEXT', 'CODE', 'TABLE', 'ARCHITECTURE', 'HTML', 'MARKDOWN', 'DB_SCHEMA')")
 @Check(name = "ck_post_block_content_length", constraints = "char_length(content) <= 50000")
 @Check(name = "ck_post_block_order", constraints = "display_order >= 0")
 @Check(name = "ck_post_block_alignment", constraints = "alignment in ('LEFT', 'CENTER', 'RIGHT')")
 @Check(name = "ck_post_block_table_language", constraints = "block_type <> 'TABLE' or language is null")
 @Check(name = "ck_post_block_architecture_language", constraints = "block_type <> 'ARCHITECTURE' or language is null")
 @Check(name = "ck_post_block_rich_language", constraints = "block_type not in ('HTML', 'MARKDOWN') or language is null")
+@Check(name = "ck_post_block_schema_language", constraints = "block_type <> 'DB_SCHEMA' or language is null")
 @Check(name = "ck_post_block_code_language", constraints = "block_type <> 'CODE' or language is not null")
 public class PostBlock {
 
@@ -65,7 +66,7 @@ public class PostBlock {
         if (type == BlockType.CODE && language == null) {
             throw new IllegalArgumentException("Code block requires a language");
         }
-        if ((type == BlockType.TABLE || type == BlockType.ARCHITECTURE || type == BlockType.HTML || type == BlockType.MARKDOWN) && language != null) {
+        if ((type == BlockType.DB_SCHEMA || type == BlockType.TABLE || type == BlockType.ARCHITECTURE || type == BlockType.HTML || type == BlockType.MARKDOWN) && language != null) {
             throw new IllegalArgumentException("Structured block must not have a code language");
         }
         if (displayOrder == null || displayOrder < 0) {
