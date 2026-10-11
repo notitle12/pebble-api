@@ -75,6 +75,16 @@ class DatabaseSchemaInputTest {
         String longName = VALID.replace("会员", "😀".repeat(101)).replace("회원", "😀".repeat(101));
         assertThatThrownBy(() -> PostWriteRequest.parse(request(longName), false)).isInstanceOf(ApplicationException.class);
     }
+    @Test void acceptsOptionalRelationshipNotationAndMinimumCardinality() {
+        for (String notation : List.of("IE", "BARKER", "CHEN")) {
+            String content = VALID.replace("\"columnId\":\"id\"", "\"columnId\":\"id\",\"notation\":\"" + notation + "\",\"sourceRequired\":true");
+            assertThat(PostWriteRequest.parse(request(content), false).blocks().getFirst().content()).isEqualTo(content);
+        }
+        for (String extra : List.of("\"notation\":\"UNKNOWN\"", "\"notation\":null", "\"sourceRequired\":\"false\"", "\"sourceRequired\":null")) {
+            String content = VALID.replace("\"columnId\":\"id\"", "\"columnId\":\"id\"," + extra);
+            assertThatThrownBy(() -> PostWriteRequest.parse(request(content), false)).isInstanceOf(ApplicationException.class);
+        }
+    }
     @Test void rejectsLanguageAndOversizedContent() {
         ObjectNode req=request(VALID); ((ObjectNode) req.get("blocks").get(0)).put("language", "SQL");
         assertThatThrownBy(() -> PostWriteRequest.parse(req, false)).isInstanceOf(ApplicationException.class);

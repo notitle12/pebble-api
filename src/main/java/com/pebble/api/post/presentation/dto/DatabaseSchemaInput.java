@@ -65,8 +65,10 @@ final class DatabaseSchemaInput {
                 JsonNode ref = column.get("reference");
                 if (ref == null) fail(field, "참조 또는 null을 입력해 주세요.");
                 if (!ref.isNull()) {
-                    object(ref, Set.of("tableId", "columnId"), field);
+                    object(ref, Set.of("tableId", "columnId", "notation", "sourceRequired"), field);
                     identifier(ref.get("tableId"), field); identifier(ref.get("columnId"), field);
+                    if (ref.has("notation") && !Set.of("IE", "BARKER", "CHEN").contains(text(ref.get("notation"), field, 6, true))) fail(field, "관계선 표기법을 확인해 주세요.");
+                    if (ref.has("sourceRequired")) bool(ref.get("sourceRequired"), field);
                 }
             }
             ids.put(tableId, columnIds);
