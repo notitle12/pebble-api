@@ -303,7 +303,7 @@ class CommentIntegrationTest extends AuthenticationTestSupport {
 
     private String project(Member author, String visibility) throws Exception {
         String json = "{\"name\":\"comment project\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"" + visibility
-                + "\",\"tagIds\":[],\"features\":[],\"links\":[]}";
+                + "\",\"techStackIds\":[],\"features\":[],\"links\":[]}";
         return createdId(mvc.perform(post(PROJECTS).header(HttpHeaders.AUTHORIZATION, bearer(author)).contentType(MediaType.APPLICATION_JSON)
                 .content(json)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
     }

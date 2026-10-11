@@ -131,7 +131,7 @@ class CategoryIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/admin/categories").header(HttpHeaders.AUTHORIZATION, bearer))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/v1/admin/tags").header(HttpHeaders.AUTHORIZATION, bearer))
+        mockMvc.perform(get("/api/v1/admin/tech-stacks").header(HttpHeaders.AUTHORIZATION, bearer))
                 .andExpect(status().isForbidden());
     }
 

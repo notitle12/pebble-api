@@ -13,8 +13,8 @@ import com.pebble.api.category.presentation.dto.CategoryResponse;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.presentation.dto.TagResponse;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.presentation.dto.TechStackResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.util.List;
@@ -37,7 +37,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/admin/{type:categories|tags}")
+@RequestMapping("/api/v1/admin/{type:categories|tech-stacks}")
 public class AdminClassificationController {
     private final AdminClassificationService classifications;
     private final AdminContentAudit audit;
@@ -52,7 +52,7 @@ public class AdminClassificationController {
             noPayload(request);
             return "categories".equals(type)
                     ? ApiResponse.of(classifications.listCategories(actor).stream().map(AdminClassificationController::category).toList())
-                    : ApiResponse.of(classifications.listTags(actor).stream().map(AdminClassificationController::tag).toList());
+                    : ApiResponse.of(classifications.listTechStacks(actor).stream().map(AdminClassificationController::techStack).toList());
         }, ignored -> null);
     }
 
@@ -70,10 +70,10 @@ public class AdminClassificationController {
                 return ResponseEntity.created(UriComponentsBuilder.fromPath("/api/v1/admin/categories/{id}").buildAndExpand(id).toUri())
                         .body((ApiResponse<?>) ApiResponse.of(category(created)));
             }
-            Tag created = classifications.createTag(actor, AdminClassificationWriteRequest.tag(body, true));
+            TechStack created = classifications.createTechStack(actor, AdminClassificationWriteRequest.techStack(body, true));
             long id = created.getId();
-            return ResponseEntity.created(UriComponentsBuilder.fromPath("/api/v1/admin/tags/{id}").buildAndExpand(id).toUri())
-                    .body((ApiResponse<?>) ApiResponse.of(tag(created)));
+            return ResponseEntity.created(UriComponentsBuilder.fromPath("/api/v1/admin/tech-stacks/{id}").buildAndExpand(id).toUri())
+                    .body((ApiResponse<?>) ApiResponse.of(techStack(created)));
         }, this::createdId);
     }
 
@@ -87,7 +87,7 @@ public class AdminClassificationController {
             JsonNode body = parse(raw);
             return "categories".equals(type)
                     ? ApiResponse.of(category(classifications.updateCategory(actor, target, AdminClassificationWriteRequest.category(body, false))))
-                    : ApiResponse.of(tag(classifications.updateTag(actor, target, AdminClassificationWriteRequest.tag(body, false))));
+                    : ApiResponse.of(techStack(classifications.updateTechStack(actor, target, AdminClassificationWriteRequest.techStack(body, false))));
         }, ignored -> null);
     }
 
@@ -100,13 +100,13 @@ public class AdminClassificationController {
         return new CategoryResponse(value.getId().toString(), value.getParent() == null ? null : value.getParent().getId().toString(),
                 value.getName(), value.getSlug(), value.getDisplayOrder(), value.getStatus(), children);
     }
-    private static TagResponse tag(Tag value) {
-        return new TagResponse(value.getId().toString(), value.getName(), value.getSlug(), value.getDisplayOrder(), value.getStatus());
+    private static TechStackResponse techStack(TechStack value) {
+        return new TechStackResponse(value.getId().toString(), value.getName(), value.getSlug(), value.getDisplayOrder(), value.getStatus());
     }
 
     private <T> T audited(String action, String type, long actor, String rawId, HttpServletRequest request,
             Function<Long, T> work, Function<T, Long> resultTarget) {
-        String dataType = "categories".equals(type) ? "category" : "tag";
+        String dataType = "categories".equals(type) ? "category" : "techStack";
         String operation = "ADMIN_" + dataType.toUpperCase(java.util.Locale.ROOT) + "_" + action;
         Long target = null;
         try {

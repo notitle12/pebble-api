@@ -1,4 +1,4 @@
-package com.pebble.api.tag.presentation;
+package com.pebble.api.techstack.presentation;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -8,9 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.support.AuthenticationTestSupport;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.infrastructure.persistence.TagRepository;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.infrastructure.persistence.TechStackRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,23 +24,23 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class TagIntegrationTest extends AuthenticationTestSupport {
+class TechStackIntegrationTest extends AuthenticationTestSupport {
 
-    private static final String PATH = "/api/v1/tags";
+    private static final String PATH = "/api/v1/tech-stacks";
     private static final String ORIGIN = "http://localhost:3000";
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
-    private TagRepository tags;
+    private TechStackRepository techStacks;
 
     @MockitoBean(name = "naverOAuthClient")
     private OAuthProviderClient naverOAuthGateway;
 
     @BeforeEach
-    void clearTagsWithinRollbackTransaction() {
-        tags.deleteAllInBatch();
+    void clearTechStacksWithinRollbackTransaction() {
+        techStacks.deleteAllInBatch();
     }
 
     @Test
@@ -51,13 +51,13 @@ class TagIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void returnsActiveTagsWithStableOrderAndStringIds() throws Exception {
-        tags.saveAndFlush(new Tag("Later", "test-later", 2, TagStatus.ACTIVE));
-        Tag first = tags.saveAndFlush(new Tag("First", "test-first", 1, TagStatus.ACTIVE));
-        Tag second = tags.saveAndFlush(new Tag("Second", "test-second", 1, TagStatus.ACTIVE));
-        tags.saveAndFlush(new Tag("Inactive", "test-inactive", 0, TagStatus.INACTIVE));
-        Tag smaller = first.getId() < second.getId() ? first : second;
-        Tag larger = smaller == first ? second : first;
+    void returnsActiveTechStacksWithStableOrderAndStringIds() throws Exception {
+        techStacks.saveAndFlush(new TechStack("Later", "test-later", 2, TechStackStatus.ACTIVE));
+        TechStack first = techStacks.saveAndFlush(new TechStack("First", "test-first", 1, TechStackStatus.ACTIVE));
+        TechStack second = techStacks.saveAndFlush(new TechStack("Second", "test-second", 1, TechStackStatus.ACTIVE));
+        techStacks.saveAndFlush(new TechStack("Inactive", "test-inactive", 0, TechStackStatus.INACTIVE));
+        TechStack smaller = first.getId() < second.getId() ? first : second;
+        TechStack larger = smaller == first ? second : first;
 
         mockMvc.perform(get(PATH)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(3))
@@ -72,12 +72,12 @@ class TagIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void permitsFrontendGetAndPostPreflightButNotOtherOriginsOrMethods() throws Exception {
+    void permitsFrontendGetButRejectsPublicCatalogWrites() throws Exception {
         mockMvc.perform(options(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN))
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET,POST"));
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET"));
         mockMvc.perform(get(PATH).header(HttpHeaders.ORIGIN, ORIGIN))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN));
@@ -86,7 +86,7 @@ class TagIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(options(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
         mockMvc.perform(options(PATH).header(HttpHeaders.ORIGIN, ORIGIN)
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE"))
                 .andExpect(status().isForbidden());

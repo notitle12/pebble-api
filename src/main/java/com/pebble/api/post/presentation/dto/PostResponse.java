@@ -7,14 +7,13 @@ import com.pebble.api.post.domain.BlockType;
 import com.pebble.api.post.domain.BlockAlignment;
 import com.pebble.api.post.domain.CodeLanguage;
 import com.pebble.api.post.domain.PostVisibility;
-import com.pebble.api.tag.domain.TagStatus;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Page;
 
 public record PostResponse(String id, String postNumber, String slug, String urlKey, int displayOrder, Author author, String title, String summary,
                            @JsonInclude(JsonInclude.Include.NON_NULL) List<Block> blocks,
-                           Classification category, List<Technology> tags,
+                           Classification category, List<String> tags,
                            String boardId, String projectId, String thumbnailUrl, String thumbnailImageId, boolean draft,
                            PostVisibility visibilityStatus, long likeCount, boolean likedByMe,
                            Instant publishedAt, Instant createdAt, Instant updatedAt,
@@ -32,7 +31,7 @@ public record PostResponse(String id, String postNumber, String slug, String url
                         block.getContent(), block.getLanguage(), block.getTitle(), block.getDisplayOrder(), block.getAlignment())).toList(),
                 category == null ? null : new Classification(category.getId().toString(), category.getName(),
                         category.getSlug(), category.getStatus()),
-                view.tags().stream().map(tag -> new Technology(tag.getId().toString(), tag.getName(), tag.getSlug(), tag.getStatus())).toList(),
+                view.tags(),
                 post.getBoardId() == null ? null : post.getBoardId().toString(),
                 post.getProjectId() == null ? null : post.getProjectId().toString(), view.thumbnailUrl(),
                 post.getThumbnailImageId() == null ? null : post.getThumbnailImageId().toString(), post.isDraft(), post.getVisibility(), view.likeCount(), view.likedByMe(), post.getPublishedAt(), post.getCreatedAt(),
@@ -43,7 +42,6 @@ public record PostResponse(String id, String postNumber, String slug, String url
     public record Block(BlockType type, String content, CodeLanguage language, String title, int displayOrder,
                         BlockAlignment alignment) { }
     public record Classification(String id, String name, String slug, CategoryStatus status) { }
-    public record Technology(String id, String name, String slug, TagStatus status) { }
 
     public record PostPage(List<PostResponse> content, int page, int size, long totalElements, int totalPages,
                            boolean hasNext, boolean hasPrevious) {

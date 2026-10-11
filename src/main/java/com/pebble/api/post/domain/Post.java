@@ -35,6 +35,17 @@ public class Post extends BaseTimeEntity {
     @JoinColumn(name = "category_id")
     private Category category;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.ARRAY)
+    @Column(name = "tags", nullable = false, columnDefinition = "text[]")
+    private String[] tags = new String[0];
+
+    public java.util.List<String> getTags() { return java.util.List.of(tags); }
+
+    public void changeTags(java.util.List<String> values) {
+        ensureNotDeleted();
+        tags = values.toArray(String[]::new);
+    }
+
     @Column(name = "board_id")
     private Long boardId;
 

@@ -16,9 +16,9 @@ import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
 import com.pebble.api.member.infrastructure.persistence.MemberRepository;
 import com.pebble.api.support.AuthenticationTestSupport;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.infrastructure.persistence.TagRepository;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.infrastructure.persistence.TechStackRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
@@ -49,7 +49,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     @Autowired com.pebble.api.post.infrastructure.persistence.PostRepository postRepository;
     @Autowired MemberProfileService profiles;
     @Autowired CategoryRepository categories;
-    @Autowired TagRepository tags;
+    @Autowired TechStackRepository techStacks;
     @Autowired AccessTokenService tokens;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
@@ -61,6 +61,22 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     void setup() {
         owner = initializedMember("owner");
         other = initializedMember("other");
+    }
+
+    @Test
+    void freeTagsNormalizeDeduplicatePreserveOnOmissionAndClearExplicitly() throws Exception {
+        long count = techStacks.count();
+        String id = create(owner, "PUBLIC", null, List.of());
+        change(id, "{\"tags\":[\"#회고\",\"JPA\",\"회고\"]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.tags[0]").value("회고"))
+                .andExpect(jsonPath("$.data.tags[1]").value("JPA")).andExpect(jsonPath("$.data.tags.length()").value(2));
+        change(id, "{\"title\":\"updated\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tags.length()").value(2));
+        assertThat(techStacks.count()).isEqualTo(count);
+        change(id, "{\"tags\":[]}").andExpect(status().isOk()).andExpect(jsonPath("$.data.tags").isEmpty());
+        for (Object invalid : List.of(java.util.Collections.nCopies(21, "tag"), List.of("a".repeat(51)), List.of("#"), List.of("a\nb"))) {
+            change(id, mapper.writeValueAsString(Map.of("tags", invalid))).andExpect(status().isBadRequest());
+        }
     }
 
     @Test
@@ -99,15 +115,15 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     @Test
     void createsStructuredPostWithStringIdsAndOwnerOnlyMetadata() throws Exception {
         Category category = category(null, CategoryStatus.ACTIVE);
-        Tag tag = tag(TagStatus.ACTIVE);
-        String id = create(owner, "PUBLIC", category, List.of(tag));
+        TechStack techStack = techStack(TechStackStatus.ACTIVE);
+        String id = create(owner, "PUBLIC", category, List.of(techStack));
         mvc.perform(get(PATH + "/" + id)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.author.id").value(owner.getId().toString()))
                 .andExpect(jsonPath("$.data.blocks[0].type").value("TEXT"))
                 .andExpect(jsonPath("$.data.blocks[1].language").value("JAVA"))
                 .andExpect(jsonPath("$.data.blocks[1].displayOrder").value(1))
                 .andExpect(jsonPath("$.data.category.id").value(category.getId().toString()))
-                .andExpect(jsonPath("$.data.tags[0].id").value(tag.getId().toString()))
+                .andExpect(jsonPath("$.data.tags[0]").value(techStack.getName()))
                 .andExpect(jsonPath("$.data.publishedAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.isBlocked").doesNotExist())
                 .andExpect(jsonPath("$.data.blockedByAdminId").doesNotExist());
@@ -220,12 +236,12 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     @Test
     void patchDistinguishesOmittedNullAndReplacementArrays() throws Exception {
         Category category = category(null, CategoryStatus.ACTIVE);
-        Tag tag = tag(TagStatus.ACTIVE);
-        String id = create(owner, "PUBLIC", category, List.of(tag));
+        TechStack techStack = techStack(TechStackStatus.ACTIVE);
+        String id = create(owner, "PUBLIC", category, List.of(techStack));
         change(id, "{\"title\":\"changed\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.summary").value("summary"))
                 .andExpect(jsonPath("$.data.blocks.length()").value(2));
-        change(id, "{\"summary\":null,\"categoryId\":null,\"tagIds\":[],\"blocks\":[{\"type\":\"TEXT\",\"content\":\"new\"}]}")
+        change(id, "{\"summary\":null,\"categoryId\":null,\"tags\":[],\"blocks\":[{\"type\":\"TEXT\",\"content\":\"new\"}]}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.summary").isEmpty())
                 .andExpect(jsonPath("$.data.category").isEmpty()).andExpect(jsonPath("$.data.tags").isEmpty())
                 .andExpect(jsonPath("$.data.blocks.length()").value(1))
@@ -305,43 +321,42 @@ class PostIntegrationTest extends AuthenticationTestSupport {
                             .content(withClassification(basic("PUBLIC"), invalid, List.of())))
                     .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY_SELECTION"));
         }
-        Tag inactiveTag = tag(TagStatus.INACTIVE);
+        TechStack inactiveTechStack = techStack(TechStackStatus.INACTIVE);
         mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(owner)).contentType(MediaType.APPLICATION_JSON)
-                        .content(withClassification(basic("PUBLIC"), null, List.of(inactiveTag))))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("INACTIVE_TAG"));
+                        .content(withClassification(basic("PUBLIC"), null, List.of(inactiveTechStack))))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.tags[0]").value(inactiveTechStack.getName()));
     }
 
     @Test
     void preservesExistingInactiveReferencesAndPublicTaxonomyDiscovery() throws Exception {
         Category parent = category(null, CategoryStatus.ACTIVE);
         Category leaf = category(parent, CategoryStatus.ACTIVE);
-        Tag tag = tag(TagStatus.ACTIVE);
-        String id = create(owner, "PUBLIC", leaf, List.of(tag));
+        TechStack techStack = techStack(TechStackStatus.ACTIVE);
+        String id = create(owner, "PUBLIC", leaf, List.of(techStack));
         jdbc.update("update category set status='INACTIVE' where id in (?,?)", leaf.getId(), parent.getId());
-        jdbc.update("update tag set status='INACTIVE' where id=?", tag.getId());
+        jdbc.update("update tech_stack set status='INACTIVE' where id=?", techStack.getId());
         em.clear();
-        change(id, "{\"categoryId\":\"" + leaf.getId() + "\",\"tagIds\":[\"" + tag.getId() + "\"]}")
+        change(id, "{\"categoryId\":\"" + leaf.getId() + "\",\"tags\":[\"回顧\"]}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.category.status").value("INACTIVE"))
-                .andExpect(jsonPath("$.data.tags[0].status").value("INACTIVE"));
+                ;
         JsonNode tree = response(mvc.perform(get("/api/v1/categories")).andExpect(status().isOk()));
         assertThat(tree.at("/data").toString()).contains(leaf.getId().toString(), parent.getId().toString());
-        JsonNode vocabulary = response(mvc.perform(get("/api/v1/tags")).andExpect(status().isOk()));
-        assertThat(vocabulary.at("/data").toString()).contains(tag.getId().toString());
-        mvc.perform(get(PATH).param("categoryId", leaf.getId().toString()).param("tagId", tag.getId().toString()))
+        JsonNode vocabulary = response(mvc.perform(get("/api/v1/tech-stacks")).andExpect(status().isOk()));
+        assertThat(vocabulary.at("/data").toString()).doesNotContain(techStack.getId().toString());
+        mvc.perform(get(PATH).param("categoryId", leaf.getId().toString()))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
-        mvc.perform(get(PATH).param("categoryId", parent.getId().toString()).param("tagId", tag.getId().toString()))
+        mvc.perform(get(PATH).param("categoryId", parent.getId().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1));
         change(id, "{\"visibilityStatus\":\"HIDDEN\"}").andExpect(status().isOk());
         assertThat(response(mvc.perform(get("/api/v1/categories"))).at("/data").toString()).doesNotContain(leaf.getId().toString(), parent.getId().toString());
-        assertThat(response(mvc.perform(get("/api/v1/tags"))).at("/data").toString()).doesNotContain(tag.getId().toString());
-        change(id, "{\"tagIds\":[],\"categoryId\":null}").andExpect(status().isOk());
+        change(id, "{\"tags\":[],\"categoryId\":null}").andExpect(status().isOk());
         change(id, "{\"categoryId\":\"" + leaf.getId() + "\"}").andExpect(status().isConflict());
     }
 
     @Test
     void missingClassificationRollsBackWholePatch() throws Exception {
         String id = create(owner, "PUBLIC", null, List.of());
-        change(id, "{\"title\":\"must not save\",\"tagIds\":[\"9223372036854775807\"]}").andExpect(status().isNotFound());
+        change(id, "{\"title\":\"must not save\",\"categoryId\":\"9223372036854775807\"}").andExpect(status().isNotFound());
         mvc.perform(get(PATH + "/" + id)).andExpect(jsonPath("$.data.title").value("title"));
     }
 
@@ -349,7 +364,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     void rejectsInvalidFieldsTypesIdsAndForbiddenStateValues() throws Exception {
         String id = create(owner, "PUBLIC", null, List.of());
         for (String invalid : List.of("{\"title\":null}", "{\"title\":\" \"}", "{\"blocks\":[]}", "{\"blocks\":null}",
-                "{\"tagIds\":null}", "{\"tagIds\":[\"1\",\"1\"]}", "{\"categoryId\":1}", "{\"categoryId\":\"0\"}",
+                "{\"tags\":null}", "{\"tags\":[1]}", "{\"categoryId\":1}", "{\"categoryId\":\"0\"}",
                 "{\"categoryId\":\"9223372036854775808\"}", "{\"visibilityStatus\":\"DELETED\"}", "{\"visibilityStatus\":null}",
                 "{\"boardId\":1}", "{\"projectId\":1}", "{\"blockedAt\":null}", "{\"blockedByAdminId\":null}",
                 "{\"unknown\":true}", "{\"blocks\":[{\"type\":\"CODE\",\"content\":\"code\"}]}",
@@ -383,15 +398,15 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     @Test
     void filtersBeforePaginationAndSortsTiesByNumericId() throws Exception {
         Category category = category(null, CategoryStatus.ACTIVE);
-        Tag tag = tag(TagStatus.ACTIVE);
-        String first = create(owner, "PUBLIC", category, List.of(tag));
-        String second = create(owner, "PUBLIC", category, List.of(tag));
-        create(owner, "HIDDEN", category, List.of(tag));
+        TechStack techStack = techStack(TechStackStatus.ACTIVE);
+        String first = create(owner, "PUBLIC", category, List.of(techStack));
+        String second = create(owner, "PUBLIC", category, List.of(techStack));
+        create(owner, "HIDDEN", category, List.of(techStack));
         create(other, "PUBLIC", null, List.of());
         jdbc.update("update post set published_at='2026-01-01T00:00:00Z' where id in (?,?)", Long.parseLong(first), Long.parseLong(second));
         em.clear();
         String bigger = Long.parseLong(first) > Long.parseLong(second) ? first : second;
-        mvc.perform(get(PATH).param("categoryId", category.getId().toString()).param("tagId", tag.getId().toString())
+        mvc.perform(get(PATH).param("categoryId", category.getId().toString())
                         .param("authorId", owner.getId().toString()).param("size", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(bigger))
                 .andExpect(jsonPath("$.data.content[0].blocks").doesNotExist())
@@ -504,7 +519,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(PATH).param("sort", "displayOrder,asc")).andExpect(status().isBadRequest());
     }
 
-    private String create(Member member, String visibility, Category category, List<Tag> selected) throws Exception {
+    private String create(Member member, String visibility, Category category, List<TechStack> selected) throws Exception {
         ResultActions result = mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(member)).contentType(MediaType.APPLICATION_JSON)
                 .content(withClassification(basic(visibility), category, selected))).andExpect(status().isCreated());
         String id = response(result).at("/data/id").asText();
@@ -516,11 +531,11 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         return "{\"title\":\"title\",\"summary\":\"summary\",\"visibilityStatus\":\"" + visibility
                 + "\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"text\"},{\"type\":\"CODE\",\"content\":\"code\",\"language\":\"JAVA\",\"title\":\"example\"}]}";
     }
-    private String withClassification(String input, Category category, List<Tag> selected) throws Exception {
+    private String withClassification(String input, Category category, List<TechStack> selected) throws Exception {
         var node = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(input);
         if (category != null) node.put("categoryId", category.getId().toString());
-        var array = node.putArray("tagIds");
-        selected.forEach(tag -> array.add(tag.getId().toString()));
+        var array = node.putArray("tags");
+        selected.forEach(techStack -> array.add(techStack.getName()));
         return mapper.writeValueAsString(node);
     }
     private ResultActions change(String id, String json) throws Exception {
@@ -590,7 +605,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     private Category category(Category parent, CategoryStatus status) {
         return categories.saveAndFlush(new Category(parent, "topic", "test-" + java.util.UUID.randomUUID(), 100, status));
     }
-    private Tag tag(TagStatus status) {
-        return tags.saveAndFlush(new Tag("tech", "test-" + java.util.UUID.randomUUID(), 100, status));
+    private TechStack techStack(TechStackStatus status) {
+        return techStacks.saveAndFlush(new TechStack("tech", "test-" + java.util.UUID.randomUUID(), 100, status));
     }
 }

@@ -49,10 +49,6 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
             + "and m.status <> 'WITHDRAWAL_PENDING' and p.category_id is not null", nativeQuery = true)
     List<Long> findPublicCategoryIds();
 
-    @Query(value = "select distinct pt.tag_id from post_tag pt join post p on p.id = pt.post_id "
-            + "join member m on m.id = p.author_member_id where p.visibility_status = 'PUBLIC' "
-            + "and not p.is_blocked and m.status <> 'WITHDRAWAL_PENDING'", nativeQuery = true)
-    List<Long> findPublicTagIds();
 
     @Modifying(flushAutomatically = true)
     @Query("update Post p set p.boardId = null, p.updatedAt = :now where p.author.id = :memberId and p.boardId = :boardId")

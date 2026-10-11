@@ -10,10 +10,10 @@ import com.pebble.api.project.domain.ProjectFeature;
 import com.pebble.api.project.domain.ProjectLifecycleStatus;
 import com.pebble.api.project.domain.ProjectLink;
 import com.pebble.api.project.domain.ProjectLinkType;
-import com.pebble.api.project.domain.ProjectTag;
+import com.pebble.api.project.domain.ProjectTechStack;
 import com.pebble.api.project.domain.ProjectVisibility;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -39,11 +39,11 @@ class ProjectPersistenceTest {
                 "d".repeat(20_000), "a".repeat(20_000), "e".repeat(10_000),
                 ProjectLifecycleStatus.COMPLETED, LocalDate.parse("2026-01-01"), LocalDate.parse("2026-02-01"),
                 ProjectVisibility.PUBLIC));
-        Tag tag = persistTag();
+        TechStack techStack = persistTechStack();
         entityManager.persist(new ProjectFeature(project, "f".repeat(100), "x".repeat(2_000), 0));
         entityManager.persist(new ProjectLink(project, ProjectLinkType.GITHUB, "l".repeat(100),
                 "u".repeat(2_048), 0));
-        entityManager.persist(new ProjectTag(project, tag, 0));
+        entityManager.persist(new ProjectTechStack(project, techStack, 0));
         entityManager.flush();
         entityManager.clear();
 
@@ -54,7 +54,7 @@ class ProjectPersistenceTest {
                 project.getId())).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from project_link where project_id = ?", Long.class,
                 project.getId())).isEqualTo(1);
-        assertThat(jdbc.queryForObject("select count(*) from project_tag where project_id = ?", Long.class,
+        assertThat(jdbc.queryForObject("select count(*) from project_tech_stack where project_id = ?", Long.class,
                 project.getId())).isEqualTo(1);
     }
 
@@ -71,14 +71,14 @@ class ProjectPersistenceTest {
     }
 
     @Test
-    void rejectsDuplicateTagOrders() {
+    void rejectsDuplicateTechStackOrders() {
         Project project = persistProject();
-        Tag first = persistTag();
-        Tag second = persistTag();
-        entityManager.persist(new ProjectTag(project, first, 0));
+        TechStack first = persistTechStack();
+        TechStack second = persistTechStack();
+        entityManager.persist(new ProjectTechStack(project, first, 0));
         entityManager.flush();
         assertThatThrownBy(() -> jdbc.update("""
-                insert into project_tag (project_id, tag_id, display_order, created_at)
+                insert into project_tech_stack (project_id, tech_stack_id, display_order, created_at)
                 values (?, ?, 0, now())
                 """, project.getId(), second.getId())).isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -113,11 +113,11 @@ class ProjectPersistenceTest {
         return member;
     }
 
-    private Tag persistTag() {
+    private TechStack persistTechStack() {
         String value = UUID.randomUUID().toString();
-        Tag tag = new Tag("Project " + value.substring(0, 8), "project-" + value, 0, TagStatus.ACTIVE);
-        entityManager.persist(tag);
+        TechStack techStack = new TechStack("Project " + value.substring(0, 8), "project-" + value, 0, TechStackStatus.ACTIVE);
+        entityManager.persist(techStack);
         entityManager.flush();
-        return tag;
+        return techStack;
     }
 }

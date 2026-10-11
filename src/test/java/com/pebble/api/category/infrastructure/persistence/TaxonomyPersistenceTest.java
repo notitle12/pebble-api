@@ -5,9 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.pebble.api.category.domain.Category;
 import com.pebble.api.category.domain.CategoryStatus;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.infrastructure.persistence.TagRepository;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.infrastructure.persistence.TechStackRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +26,7 @@ class TaxonomyPersistenceTest {
     private CategoryRepository categories;
 
     @Autowired
-    private TagRepository tags;
+    private TechStackRepository techStacks;
 
     @Autowired
     private EntityManager entityManager;
@@ -38,15 +38,15 @@ class TaxonomyPersistenceTest {
     void persistsTsidTimestampsAndParentWithoutSerializingAnEntityGraph() {
         Category root = categories.saveAndFlush(new Category(null, "Root", "test-root", 0, CategoryStatus.ACTIVE));
         Category child = categories.saveAndFlush(new Category(root, "Child", "test-child", 1, CategoryStatus.ACTIVE));
-        Tag tag = tags.saveAndFlush(new Tag("Test", "test-tag", 0, TagStatus.ACTIVE));
+        TechStack techStack = techStacks.saveAndFlush(new TechStack("Test", "test-techStack", 0, TechStackStatus.ACTIVE));
         entityManager.clear();
 
         assertThat(root.getId()).isPositive();
         assertThat(root.getCreatedAt()).isNotNull();
         assertThat(root.getUpdatedAt()).isNotNull();
-        assertThat(tag.getId()).isPositive();
-        assertThat(tag.getCreatedAt()).isNotNull();
-        assertThat(tag.getUpdatedAt()).isNotNull();
+        assertThat(techStack.getId()).isPositive();
+        assertThat(techStack.getCreatedAt()).isNotNull();
+        assertThat(techStack.getUpdatedAt()).isNotNull();
         assertThat(categories.findById(child.getId()).orElseThrow().getParent().getId()).isEqualTo(root.getId());
     }
 
@@ -59,9 +59,9 @@ class TaxonomyPersistenceTest {
     }
 
     @Test
-    void rejectsDuplicateTagSlug() {
-        tags.saveAndFlush(new Tag("One", "test-duplicate", 0, TagStatus.ACTIVE));
-        assertThatThrownBy(() -> tags.saveAndFlush(new Tag("Two", "test-duplicate", 1, TagStatus.INACTIVE)))
+    void rejectsDuplicateTechStackSlug() {
+        techStacks.saveAndFlush(new TechStack("One", "test-duplicate", 0, TechStackStatus.ACTIVE));
+        assertThatThrownBy(() -> techStacks.saveAndFlush(new TechStack("Two", "test-duplicate", 1, TechStackStatus.INACTIVE)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -90,9 +90,9 @@ class TaxonomyPersistenceTest {
     }
 
     @Test
-    void rejectsInvalidTagStatusInTheDatabase() {
+    void rejectsInvalidTechStackStatusInTheDatabase() {
         assertThatThrownBy(() -> jdbc.update("""
-                insert into tag (id, name, slug, display_order, status, created_at, updated_at)
+                insert into tech_stack (id, name, slug, display_order, status, created_at, updated_at)
                 values (1, 'Invalid', 'test-invalid-status', 0, 'DELETED', now(), now())
                 """)).isInstanceOf(DataIntegrityViolationException.class);
     }

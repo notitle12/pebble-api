@@ -37,17 +37,17 @@ public class ProjectController {
 
     @GetMapping("/api/v1/projects/search")
     public ApiResponse<ProjectPage> search(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("q", "page", "size", "sort", "tagId", "lifecycleStatus"));
+        checkQuery(query, Set.of("q", "page", "size", "sort", "techStackId", "lifecycleStatus"));
         return ApiResponse.of(page(likes.decorate(projects.search(ProjectWriteRequest.searchTerm(query.getFirst("q")),
-                optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
+                optionalId(query, "techStackId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/{memberId:[0-9]+}/projects")
     public ApiResponse<ProjectPage> member(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query,
                                            @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
+        checkQuery(query, Set.of("page", "size", "sort", "techStackId", "lifecycleStatus"));
         return ApiResponse.of(page(likes.decorate(projects.listMember(ProjectWriteRequest.id(memberId, "memberId"),
-                optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
+                optionalId(query, "techStackId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/me/projects")
@@ -76,9 +76,9 @@ public class ProjectController {
 
     @GetMapping("/api/v1/projects")
     public ApiResponse<ProjectPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("page", "size", "sort", "tagId", "lifecycleStatus"));
+        checkQuery(query, Set.of("page", "size", "sort", "techStackId", "lifecycleStatus"));
         return ApiResponse.of(page(likes.decorate(
-                projects.listPublic(optionalId(query, "tagId"), lifecycle(query), pageable(query)), requesterId(jwt))));
+                projects.listPublic(optionalId(query, "techStackId"), lifecycle(query), pageable(query)), requesterId(jwt))));
     }
 
     private Long optionalId(MultiValueMap<String, String> query, String field) {

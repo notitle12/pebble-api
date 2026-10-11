@@ -12,14 +12,14 @@ import com.pebble.api.project.domain.ProjectError;
 import com.pebble.api.project.domain.ProjectFeature;
 import com.pebble.api.project.domain.ProjectLifecycleStatus;
 import com.pebble.api.project.domain.ProjectLink;
-import com.pebble.api.project.domain.ProjectTag;
+import com.pebble.api.project.domain.ProjectTechStack;
 import com.pebble.api.project.domain.ProjectVisibility;
 import com.pebble.api.project.infrastructure.persistence.ProjectFeatureRepository;
 import com.pebble.api.project.infrastructure.persistence.ProjectLinkRepository;
 import com.pebble.api.project.infrastructure.persistence.ProjectRepository;
-import com.pebble.api.project.infrastructure.persistence.ProjectTagRepository;
-import com.pebble.api.tag.application.TagQueryService;
-import com.pebble.api.tag.domain.Tag;
+import com.pebble.api.project.infrastructure.persistence.ProjectTechStackRepository;
+import com.pebble.api.techstack.application.TechStackQueryService;
+import com.pebble.api.techstack.domain.TechStack;
 import com.pebble.api.post.application.PostProjectService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.Predicate;
@@ -44,9 +44,9 @@ public class ProjectService {
     private final ProjectRepository projects;
     private final ProjectFeatureRepository features;
     private final ProjectLinkRepository links;
-    private final ProjectTagRepository projectTags;
+    private final ProjectTechStackRepository projectTechStacks;
     private final MemberQueryService members;
-    private final TagQueryService tags;
+    private final TechStackQueryService techStacks;
     private final EntityManager entityManager;
     private final PostProjectService postProjects;
     private final com.pebble.api.project.infrastructure.persistence.ProjectMediaRepository media;
@@ -61,13 +61,13 @@ public class ProjectService {
     @Transactional
     public ProjectView create(long memberId, ProjectChanges input) {
         Member owner = members.findProfileCompletedForWrite(memberId);
-        List<Tag> selected = tags.resolveForContent(input.tagIds(), Set.of());
+        List<TechStack> selected = techStacks.resolveForContent(input.techStackIds(), Set.of());
         Project project = projects.saveAndFlush(new Project(owner, input.name(), input.summary(), input.description(),
                 input.architectureDescription(), input.executionInstructions(), input.lifecycleStatus(),
                 input.startedOn(), input.completedOn(), input.visibilityStatus()));
         replaceFeatures(project, input.features());
         replaceLinks(project, input.links());
-        replaceTags(project, selected, List.of());
+        replaceTechStacks(project, selected, List.of());
         projects.flush();
         return detailView(project, true);
     }
@@ -81,13 +81,13 @@ public class ProjectService {
         return detailView(project, owner);
     }
 
-    public Page<ProjectView> listPublic(Long tagId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
-        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, null), pageable), false);
+    public Page<ProjectView> listPublic(Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, null), pageable), false);
     }
 
-    public Page<ProjectView> listMember(long memberId, Long tagId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+    public Page<ProjectView> listMember(long memberId, Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
         members.findPublicById(memberId);
-        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, memberId), pageable), false);
+        return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, memberId), pageable), false);
     }
 
     public Page<ProjectView> listMine(long memberId, ProjectVisibility visibility, Pageable pageable) {
@@ -99,8 +99,8 @@ public class ProjectService {
         return page(projects.findAll(filter, pageable), true);
     }
 
-    public Page<ProjectView> search(String term, Long tagId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
-        return page(projects.findAll(publicFilter(tagId, lifecycleStatus, null).and(searchMatching(term)), pageable), false);
+    public Page<ProjectView> search(String term, Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, null).and(searchMatching(term)), pageable), false);
     }
 
     public Page<ProjectView> listForManagement(String q, ProjectVisibility visibility, Boolean blocked,
@@ -158,17 +158,17 @@ public class ProjectService {
         return (root, query, cb) -> {
             var lowered = cb.lower(cb.literal(pattern));
             var technology = query.subquery(Long.class);
-            var link = technology.from(ProjectTag.class);
+            var link = technology.from(ProjectTechStack.class);
             technology.select(link.get("project").get("id")).where(cb.equal(link.get("project").get("id"), root.get("id")),
-                    cb.like(cb.lower(link.get("tag").get("name")), lowered, '\\'));
-            // EXISTS로 여러 기술 Tag가 일치해도 목록과 집계가 중복되지 않게 한다.
+                    cb.like(cb.lower(link.get("techStack").get("name")), lowered, '\\'));
+            // EXISTS로 여러 기술 스택가 일치해도 목록과 집계가 중복되지 않게 한다.
             return cb.or(cb.like(cb.lower(root.get("name")), lowered, '\\'),
                     cb.like(cb.lower(root.get("summary")), lowered, '\\'),
                     cb.like(cb.lower(root.get("description")), lowered, '\\'), cb.exists(technology));
         };
     }
 
-    private Specification<Project> publicFilter(Long tagId, ProjectLifecycleStatus lifecycleStatus, Long ownerId) {
+    private Specification<Project> publicFilter(Long techStackId, ProjectLifecycleStatus lifecycleStatus, Long ownerId) {
         Specification<Project> filter = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("visibility"), ProjectVisibility.PUBLIC));
@@ -176,12 +176,12 @@ public class ProjectService {
             predicates.add(cb.notEqual(root.get("owner").get("status"), MemberStatus.WITHDRAWAL_PENDING));
             if (lifecycleStatus != null) predicates.add(cb.equal(root.get("lifecycleStatus"), lifecycleStatus));
             if (ownerId != null) predicates.add(cb.equal(root.get("owner").get("id"), ownerId));
-            if (tagId != null) {
+            if (techStackId != null) {
                 var subquery = query.subquery(Long.class);
-                var link = subquery.from(ProjectTag.class);
+                var link = subquery.from(ProjectTechStack.class);
                 subquery.select(link.get("project").get("id")).where(
                         cb.equal(link.get("project").get("id"), root.get("id")),
-                        cb.equal(link.get("tag").get("id"), tagId));
+                        cb.equal(link.get("techStack").get("id"), techStackId));
                 predicates.add(cb.exists(subquery));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
@@ -193,9 +193,9 @@ public class ProjectService {
     public ProjectView update(long projectId, long memberId, ProjectChanges input) {
         members.findProfileCompletedForWrite(memberId);
         Project project = ownedForUpdate(projectId, memberId);
-        List<ProjectTag> currentTags = projectTags.findForProjects(List.of(projectId));
-        List<Tag> selected = input.has("tagIds") ? tags.resolveForContent(input.tagIds(), currentTags.stream()
-                .map(link -> link.getTag().getId()).collect(Collectors.toSet())) : null;
+        List<ProjectTechStack> currentTechStacks = projectTechStacks.findForProjects(List.of(projectId));
+        List<TechStack> selected = input.has("techStackIds") ? techStacks.resolveForContent(input.techStackIds(), currentTechStacks.stream()
+                .map(link -> link.getTechStack().getId()).collect(Collectors.toSet())) : null;
         project.updateContent(input.has("name") ? input.name() : project.getName(),
                 input.has("summary") ? input.summary() : project.getSummary(),
                 input.has("description") ? input.description() : project.getDescription(),
@@ -207,7 +207,7 @@ public class ProjectService {
         if (input.has("visibilityStatus")) project.changeVisibility(input.visibilityStatus());
         if (input.has("features")) replaceFeatures(project, input.features());
         if (input.has("links")) replaceLinks(project, input.links());
-        if (selected != null) replaceTags(project, selected, currentTags);
+        if (selected != null) replaceTechStacks(project, selected, currentTechStacks);
         projects.flush();
         return detailView(project, true);
     }
@@ -247,28 +247,28 @@ public class ProjectService {
                 link.displayOrder())).toList());
     }
 
-    private void replaceTags(Project project, List<Tag> input, List<ProjectTag> current) {
-        projectTags.deleteForProject(project.getId());
-        projectTags.flush();
+    private void replaceTechStacks(Project project, List<TechStack> input, List<ProjectTechStack> current) {
+        projectTechStacks.deleteForProject(project.getId());
+        projectTechStacks.flush();
         // 벌크 삭제는 영속성 컨텍스트를 갱신하지 않으므로 같은 복합 ID를 다시 저장하기 전에 분리한다.
         current.forEach(entityManager::detach);
-        List<ProjectTag> replacement = new ArrayList<>();
-        for (int order = 0; order < input.size(); order++) replacement.add(new ProjectTag(project, input.get(order), order));
-        projectTags.saveAll(replacement);
+        List<ProjectTechStack> replacement = new ArrayList<>();
+        for (int order = 0; order < input.size(); order++) replacement.add(new ProjectTechStack(project, input.get(order), order));
+        projectTechStacks.saveAll(replacement);
     }
 
     private ProjectView detailView(Project project, boolean owner) {
         initializeOwner(project);
         return new ProjectView(project, features.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
                 links.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
-                projectTags.findForProjects(List.of(project.getId())).stream().map(ProjectTag::getTag).toList(), true, owner, 0, false, mediaViews(project));
+                projectTechStacks.findForProjects(List.of(project.getId())).stream().map(ProjectTechStack::getTechStack).toList(), true, owner, 0, false, mediaViews(project));
     }
 
     private Page<ProjectView> page(Page<Project> page, boolean owner) {
-        Map<Long, List<Tag>> byProject = new HashMap<>();
+        Map<Long, List<TechStack>> byProject = new HashMap<>();
         if (!page.isEmpty()) {
-            for (ProjectTag link : projectTags.findForProjects(page.getContent().stream().map(Project::getId).toList())) {
-                byProject.computeIfAbsent(link.getProject().getId(), id -> new ArrayList<>()).add(link.getTag());
+            for (ProjectTechStack link : projectTechStacks.findForProjects(page.getContent().stream().map(Project::getId).toList())) {
+                byProject.computeIfAbsent(link.getProject().getId(), id -> new ArrayList<>()).add(link.getTechStack());
             }
         }
         return page.map(project -> {
@@ -293,15 +293,15 @@ public class ProjectService {
     }
     private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }
 
-    public record ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
+    public record ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
                               boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media) {
-        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
                            boolean detail, boolean owner, long likeCount, boolean likedByMe) {
-            this(project, features, links, tags, detail, owner, likeCount, likedByMe, detail ? List.of() : null);
+            this(project, features, links, techStacks, detail, owner, likeCount, likedByMe, detail ? List.of() : null);
         }
-        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<Tag> tags,
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
                            boolean detail, boolean owner) {
-            this(project, features, links, tags, detail, owner, 0, false);
+            this(project, features, links, techStacks, detail, owner, 0, false);
         }
     }
 }
