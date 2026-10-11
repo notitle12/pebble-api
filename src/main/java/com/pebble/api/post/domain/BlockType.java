@@ -6,5 +6,6 @@ public enum BlockType {
     MARKDOWN,
     CODE,
     TABLE,
+    DB_SCHEMA,
     ARCHITECTURE
 }
