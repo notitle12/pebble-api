@@ -11,10 +11,9 @@ import com.pebble.api.post.domain.BlockType;
 import com.pebble.api.post.domain.CodeLanguage;
 import com.pebble.api.post.domain.Post;
 import com.pebble.api.post.domain.PostBlock;
-import com.pebble.api.post.domain.PostTag;
 import com.pebble.api.post.domain.PostVisibility;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.UUID;
@@ -51,125 +50,13 @@ class PostPersistenceTest {
     }
 
     @Test
-    void persistsTsidTimestampsAndReferencesAndAcceptsMaximumContentLengths() {
-        Member author = persistMember();
-        Category category = persistCategory();
-        Post post = posts.saveAndFlush(new Post(author, category, "t".repeat(200), "s".repeat(500),
-                PostVisibility.PUBLIC, null, 1));
-        PostBlock block = new PostBlock(post, BlockType.CODE, "x".repeat(50_000), CodeLanguage.JAVA,
-                "c".repeat(100), 0);
-        entityManager.persist(block);
-        entityManager.flush();
+    void persistsFreeTagsWithoutCatalogReferences() {
+        Post post = persistPost();
+        post.changeTags(java.util.List.of("회고", "JPA"));
+        posts.flush();
         entityManager.clear();
-
-        Post persisted = posts.findById(post.getId()).orElseThrow();
-        assertThat(persisted.getId()).isPositive();
-        assertThat(persisted.getCreatedAt()).isNotNull();
-        assertThat(persisted.getUpdatedAt()).isNotNull();
-        assertThat(persisted.getPublishedAt()).isNotNull();
-        assertThat(persisted.getAuthor().getId()).isEqualTo(author.getId());
-        assertThat(persisted.getCategory().getId()).isEqualTo(category.getId());
-        assertThat(jdbc.queryForObject("select char_length(content) from post_block where post_id = ?", Integer.class,
-                post.getId())).isEqualTo(50_000);
-    }
-
-    @Test
-    void acceptsNullableSlugAsFallback() {
-        Post post = posts.saveAndFlush(new Post(persistMember(), null, "No slug", null, PostVisibility.HIDDEN,
-                null, 1));
-
-        assertThat(jdbc.queryForObject("select slug from post where id = ?", String.class, post.getId())).isNull();
-    }
-
-    @Test
-    void rejectsTitleLongerThanTwoHundredCharacters() {
-        assertThatThrownBy(() -> posts.saveAndFlush(new Post(persistMember(), null, "t".repeat(201), null,
-                PostVisibility.HIDDEN, null, 1))).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsSummaryLongerThanFiveHundredCharacters() {
-        assertThatThrownBy(() -> posts.saveAndFlush(new Post(persistMember(), null, "title", "s".repeat(501),
-                PostVisibility.HIDDEN, null, 1))).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsMissingPostAuthor() {
-        assertThatThrownBy(() -> insertPost(10_000L, 9_999_999L, 1L, null, "Missing author", null, "HIDDEN", false,
-                null, null)).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsMissingPostCategory() {
-        assertThatThrownBy(() -> insertPost(10_001L, persistMember().getId(), 1L, 9_999_999L, "Missing category", null,
-                "HIDDEN", false, null, null)).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsDuplicateBlockOrder() {
-        Post post = persistPost();
-        entityManager.persist(new PostBlock(post, BlockType.TEXT, "first", null, null, 0));
-        entityManager.persist(new PostBlock(post, BlockType.TEXT, "second", null, null, 0));
-
-        // EntityManager 직접 호출에는 Repository의 Spring 예외 변환이 적용되지 않는다.
-        assertThatThrownBy(entityManager::flush)
-                .isInstanceOfSatisfying(org.hibernate.exception.ConstraintViolationException.class,
-                        violation -> assertThat(violation.getConstraintName()).isEqualTo("uk_post_block_order"));
-    }
-
-    @Test
-    void rejectsNegativeBlockOrder() {
-        Post post = persistPost();
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into post_block (id, post_id, block_type, content, display_order)
-                values (20001, ?, 'TEXT', 'body', -1)
-                """, post.getId())).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsCodeBlockWithoutLanguage() {
-        Post post = persistPost();
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into post_block (id, post_id, block_type, content, display_order)
-                values (20002, ?, 'CODE', 'body', 0)
-                """, post.getId())).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsBlockContentLongerThanFiftyThousandCharacters() {
-        Post post = persistPost();
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into post_block (id, post_id, block_type, content, display_order)
-                values (20003, ?, 'TEXT', ?, 0)
-                """, post.getId(), "x".repeat(50_001))).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsPostTagDuplicateCompositeKey() {
-        Post post = persistPost();
-        Tag tag = persistTag();
-        entityManager.persist(new PostTag(post, tag));
-        entityManager.flush();
-
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into post_tag (post_id, tag_id, created_at) values (?, ?, now())
-                """, post.getId(), tag.getId())).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsMissingPostTagPost() {
-        Tag tag = persistTag();
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into post_tag (post_id, tag_id, created_at) values (30001, ?, now())
-                """, tag.getId())).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void rejectsMissingPostTagTag() {
-        Post post = persistPost();
-        assertThatThrownBy(() -> jdbc.update("""
-                insert into post_tag (post_id, tag_id, created_at) values (?, 30002, now())
-                """, post.getId())).isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(posts.findById(post.getId()).orElseThrow().getTags()).containsExactly("회고", "JPA");
+        assertThat(jdbc.queryForObject("select to_regclass('post_tag') is null", Boolean.class)).isTrue();
     }
 
     @Test
@@ -239,11 +126,11 @@ class PostPersistenceTest {
         return category;
     }
 
-    private Tag persistTag() {
-        Tag tag = new Tag("Post test", "post-test-tag", 0, TagStatus.ACTIVE);
-        entityManager.persist(tag);
+    private TechStack persistTechStack() {
+        TechStack techStack = new TechStack("Post test", "post-test-techStack", 0, TechStackStatus.ACTIVE);
+        entityManager.persist(techStack);
         entityManager.flush();
-        return tag;
+        return techStack;
     }
 
     private Post persistPost() {

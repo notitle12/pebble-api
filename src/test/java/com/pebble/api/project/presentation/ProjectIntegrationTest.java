@@ -21,9 +21,9 @@ import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
 import com.pebble.api.member.infrastructure.persistence.MemberRepository;
 import com.pebble.api.support.AuthenticationTestSupport;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.infrastructure.persistence.TagRepository;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.infrastructure.persistence.TechStackRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.Comparator;
@@ -54,7 +54,7 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     @Autowired MemberRepository members;
     @Autowired MemberProfileService profiles;
     @Autowired AccessTokenService tokens;
-    @Autowired TagRepository tags;
+    @Autowired TechStackRepository techStacks;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
     @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
@@ -69,9 +69,9 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void createsProjectReturnsLocationAndStringIdsThenLoadsFullDetail() throws Exception {
-        Tag tag = tag("Spring", TagStatus.ACTIVE);
+        TechStack techStack = techStack("Spring", TechStackStatus.ACTIVE);
         ResultActions created = create(owner, "PUBLIC", "Pebble API", "summary", "description",
-                List.of(tag), List.of(feature("OAuth login", "Login with OAuth")),
+                List.of(techStack), List.of(feature("OAuth login", "Login with OAuth")),
                 List.of(link("GITHUB", "Source", "https://github.com/example/pebble", 0)),
                 "IN_PROGRESS", "2026-01-02", null);
         String id = response(created).at("/data/id").asText();
@@ -79,7 +79,7 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
         created.andExpect(status().isCreated())
                 .andExpect(header().string(HttpHeaders.LOCATION, PATH + "/" + id))
                 .andExpect(jsonPath("$.data.owner.id").value(owner.getId().toString()))
-                .andExpect(jsonPath("$.data.tags[0].id").value(tag.getId().toString()))
+                .andExpect(jsonPath("$.data.techStacks[0].id").value(techStack.getId().toString()))
                 .andExpect(jsonPath("$.data.features[0].title").value("OAuth login"))
                 .andExpect(jsonPath("$.data.features[0].displayOrder").value(0))
                 .andExpect(jsonPath("$.data.links[0].linkType").value("GITHUB"))
@@ -101,8 +101,8 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void patchPreservesOmittedFieldsAppliesNullAndReplacesArrays() throws Exception {
-        Tag first = tag("first", TagStatus.ACTIVE);
-        Tag second = tag("second", TagStatus.ACTIVE);
+        TechStack first = techStack("first", TechStackStatus.ACTIVE);
+        TechStack second = techStack("second", TechStackStatus.ACTIVE);
         String id = projectId(create(owner, "PUBLIC", "Project", "summary", "description",
                 List.of(first), List.of(feature("first feature", "first description")),
                 List.of(link("GITHUB", "source", "https://example.com/one", 4)), "COMPLETED", "2025-01-01", "2025-12-31"));
@@ -113,49 +113,49 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(jsonPath("$.data.features.length()").value(1))
                 .andExpect(jsonPath("$.data.features[0].title").value("first feature"))
                 .andExpect(jsonPath("$.data.links[0].displayOrder").value(4))
-                .andExpect(jsonPath("$.data.tags[0].id").value(first.getId().toString()));
+                .andExpect(jsonPath("$.data.techStacks[0].id").value(first.getId().toString()));
 
         patch(id, "{\"summary\":null,\"description\":null,\"startedOn\":null,\"completedOn\":null,"
-                        + "\"tagIds\":[\"" + second.getId() + "\"],\"features\":[{\"title\":\"replacement\",\"description\":\"new\"}],\"links\":[]}")
+                        + "\"techStackIds\":[\"" + second.getId() + "\"],\"features\":[{\"title\":\"replacement\",\"description\":\"new\"}],\"links\":[]}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.summary").isEmpty())
                 .andExpect(jsonPath("$.data.description").doesNotExist()).andExpect(jsonPath("$.data.startedOn").isEmpty())
-                .andExpect(jsonPath("$.data.completedOn").isEmpty()).andExpect(jsonPath("$.data.tags.length()").value(1))
-                .andExpect(jsonPath("$.data.tags[0].id").value(second.getId().toString()))
+                .andExpect(jsonPath("$.data.completedOn").isEmpty()).andExpect(jsonPath("$.data.techStacks.length()").value(1))
+                .andExpect(jsonPath("$.data.techStacks[0].id").value(second.getId().toString()))
                 .andExpect(jsonPath("$.data.features.length()").value(1))
                 .andExpect(jsonPath("$.data.features[0].title").value("replacement"))
                 .andExpect(jsonPath("$.data.links").isEmpty());
         assertThat(jdbc.queryForObject("select count(*) from project_feature where project_id=?", Long.class, Long.parseLong(id))).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from project_link where project_id=?", Long.class, Long.parseLong(id))).isZero();
-        assertThat(jdbc.queryForObject("select count(*) from project_tag where project_id=?", Long.class, Long.parseLong(id))).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from project_tech_stack where project_id=?", Long.class, Long.parseLong(id))).isEqualTo(1);
     }
 
     @Test
-    void publicListFiltersByTagLifecycleAndPaginatesUsingStableDefaultOrder() throws Exception {
-        Tag selected = tag("selected", TagStatus.ACTIVE);
-        Tag otherTag = tag("other", TagStatus.ACTIVE);
+    void publicListFiltersByTechStackLifecycleAndPaginatesUsingStableDefaultOrder() throws Exception {
+        TechStack selected = techStack("selected", TechStackStatus.ACTIVE);
+        TechStack otherTechStack = techStack("other", TechStackStatus.ACTIVE);
         String first = projectId(create(owner, "PUBLIC", "first", null, null, List.of(selected), List.of(), List.of(), "IN_PROGRESS", null, null));
         String second = projectId(create(owner, "PUBLIC", "second", null, null, List.of(selected), List.of(), List.of(), "IN_PROGRESS", null, null));
         create(owner, "PUBLIC", "completed", null, null, List.of(selected), List.of(), List.of(), "COMPLETED", null, null);
-        create(owner, "PUBLIC", "different tag", null, null, List.of(otherTag), List.of(), List.of(), "IN_PROGRESS", null, null);
+        create(owner, "PUBLIC", "different techStack", null, null, List.of(otherTechStack), List.of(), List.of(), "IN_PROGRESS", null, null);
         create(owner, "HIDDEN", "hidden", null, null, List.of(selected), List.of(), List.of(), "IN_PROGRESS", null, null);
         em.flush();
         jdbc.update("update project set published_at='2026-01-01T00:00:00Z' where id in (?,?)", Long.parseLong(first), Long.parseLong(second));
         em.clear();
         List<String> sorted = List.of(first, second).stream().sorted(Comparator.<String>comparingLong(Long::parseLong).reversed()).toList();
-        mvc.perform(get(PATH).param("tagId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
+        mvc.perform(get(PATH).param("techStackId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS").param("size", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
                 .andExpect(jsonPath("$.data.totalPages").value(2)).andExpect(jsonPath("$.data.content.length()").value(1))
                 .andExpect(jsonPath("$.data.content[0].id").value(sorted.get(0)))
                 .andExpect(jsonPath("$.data.content[0].description").doesNotExist())
                 .andExpect(jsonPath("$.data.content[0].features").doesNotExist())
                 .andExpect(jsonPath("$.data.hasNext").value(true));
-        mvc.perform(get(PATH).param("tagId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS")
+        mvc.perform(get(PATH).param("techStackId", selected.getId().toString()).param("lifecycleStatus", "IN_PROGRESS")
                         .param("page", "1").param("size", "1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(sorted.get(1)))
                 .andExpect(jsonPath("$.data.hasPrevious").value(true));
         mvc.perform(get(PATH).param("lifecycleStatus", "COMPLETED"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1));
-        mvc.perform(get(PATH).param("tagId", otherTag.getId().toString()))
+        mvc.perform(get(PATH).param("techStackId", otherTechStack.getId().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1));
     }
 
@@ -195,32 +195,32 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void rejectsNewInactiveTagAndKeepsExistingInactiveReference() throws Exception {
-        Tag tag = tag("existing", TagStatus.ACTIVE);
-        String id = projectId(create(owner, "PUBLIC", "with tag", null, null, List.of(tag), List.of(), List.of(), "IN_PROGRESS", null, null));
+    void rejectsNewInactiveTechStackAndKeepsExistingInactiveReference() throws Exception {
+        TechStack techStack = techStack("existing", TechStackStatus.ACTIVE);
+        String id = projectId(create(owner, "PUBLIC", "with techStack", null, null, List.of(techStack), List.of(), List.of(), "IN_PROGRESS", null, null));
         em.flush();
-        jdbc.update("update tag set status='INACTIVE' where id=?", tag.getId());
+        jdbc.update("update tech_stack set status='INACTIVE' where id=?", techStack.getId());
         em.clear();
         patch(id, "{\"name\":\"still linked\"}").andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.tags[0].status").value("INACTIVE"));
-        patch(id, "{\"tagIds\":[\"" + tag.getId() + "\"]}").andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.tags[0].status").value("INACTIVE"));
+                .andExpect(jsonPath("$.data.techStacks[0].status").value("INACTIVE"));
+        patch(id, "{\"techStackIds\":[\"" + techStack.getId() + "\"]}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.techStacks[0].status").value("INACTIVE"));
         em.clear();
-        mvc.perform(get("/api/v1/tags")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[*].id", org.hamcrest.Matchers.hasItem(tag.getId().toString())));
-        mvc.perform(get(PATH).param("tagId", tag.getId().toString())).andExpect(status().isOk())
+        mvc.perform(get("/api/v1/tech-stacks")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].id", org.hamcrest.Matchers.hasItem(techStack.getId().toString())));
+        mvc.perform(get(PATH).param("techStackId", techStack.getId().toString())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1));
         patch(id, "{\"visibilityStatus\":\"HIDDEN\"}").andExpect(status().isOk());
-        mvc.perform(get("/api/v1/tags")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(tag.getId().toString()))));
-        create(owner, "PUBLIC", "new selection", null, null, List.of(tag), List.of(), List.of(), "IN_PROGRESS", null, null)
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("INACTIVE_TAG"));
+        mvc.perform(get("/api/v1/tech-stacks")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(techStack.getId().toString()))));
+        create(owner, "PUBLIC", "new selection", null, null, List.of(techStack), List.of(), List.of(), "IN_PROGRESS", null, null)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("INACTIVE_TECH_STACK"));
     }
 
     @Test
-    void validatesLengthsDatesEnumsDuplicateTagsNestedObjectsAndUnknownFields() throws Exception {
-        Tag tag = tag("validation", TagStatus.ACTIVE);
-        create(owner, "PUBLIC", "x".repeat(120), "s".repeat(500), "d".repeat(20_000), List.of(tag),
+    void validatesLengthsDatesEnumsDuplicateTechStacksNestedObjectsAndUnknownFields() throws Exception {
+        TechStack techStack = techStack("validation", TechStackStatus.ACTIVE);
+        create(owner, "PUBLIC", "x".repeat(120), "s".repeat(500), "d".repeat(20_000), List.of(techStack),
                 List.of(feature("f".repeat(100), "d".repeat(2_000))),
                 List.of(link("OTHER", "l".repeat(100), "https://example.com/" + "x".repeat(2_000 - 20), 0)),
                 "COMPLETED", "2024-02-29", "2025-03-01").andExpect(status().isCreated());
@@ -233,7 +233,7 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
                 "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"startedOn\":\"2025-02-29\"}",
                 "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"unknown\":true}",
                 "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"isBlocked\":true}",
-                "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"tagIds\":[\"" + tag.getId() + "\",\"" + tag.getId() + "\"]}",
+                "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"techStackIds\":[\"" + techStack.getId() + "\",\"" + techStack.getId() + "\"]}",
                 "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"features\":[{\"title\":\"ok\",\"description\":\"d\",\"other\":1}]}",
                 "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"features\":[{\"title\":\"" + "f".repeat(101) + "\",\"description\":\"d\"}]}",
                 "{\"name\":\"x\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"links\":[{\"linkType\":\"WEB\",\"url\":\"https://example.com\",\"displayOrder\":0}]}",
@@ -263,23 +263,23 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void reordersRetainedTagsAndPersistsRepeatedReplacementWithoutLosingLinks() throws Exception {
-        Tag first = tag("first", TagStatus.ACTIVE);
-        Tag second = tag("second", TagStatus.ACTIVE);
+    void reordersRetainedTechStacksAndPersistsRepeatedReplacementWithoutLosingLinks() throws Exception {
+        TechStack first = techStack("first", TechStackStatus.ACTIVE);
+        TechStack second = techStack("second", TechStackStatus.ACTIVE);
         String id = projectId(create(owner, "PUBLIC", "ordered", null, null, List.of(second, first),
                 List.of(feature("original", "original")), List.of(), "IN_PROGRESS", null, null));
         em.clear();
-        patch(id, "{\"tagIds\":[\"" + first.getId() + "\",\"" + second.getId() + "\"]}")
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.tags[0].id").value(first.getId().toString()));
+        patch(id, "{\"techStackIds\":[\"" + first.getId() + "\",\"" + second.getId() + "\"]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.techStacks[0].id").value(first.getId().toString()));
         em.clear();
-        patch(id, "{\"tagIds\":[\"" + second.getId() + "\",\"" + first.getId() + "\"],"
+        patch(id, "{\"techStackIds\":[\"" + second.getId() + "\",\"" + first.getId() + "\"],"
                 + "\"features\":[{\"title\":\"changed\",\"description\":\"changed\"}]}").andExpect(status().isOk());
         em.clear();
         mvc.perform(get(PATH + "/" + id)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.tags[0].id").value(second.getId().toString()))
-                .andExpect(jsonPath("$.data.tags[1].id").value(first.getId().toString()))
+                .andExpect(jsonPath("$.data.techStacks[0].id").value(second.getId().toString()))
+                .andExpect(jsonPath("$.data.techStacks[1].id").value(first.getId().toString()))
                 .andExpect(jsonPath("$.data.features[0].title").value("changed"));
-        assertThat(jdbc.queryForList("select tag_id from project_tag where project_id=? order by display_order",
+        assertThat(jdbc.queryForList("select tech_stack_id from project_tech_stack where project_id=? order by display_order",
                 Long.class, Long.parseLong(id))).containsExactly(second.getId(), first.getId());
     }
 
@@ -325,33 +325,33 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
                 + "\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"startedOn\":null}"));
         for (String bad : List.of("{\"name\":\"" + "😀".repeat(121) + "\"}", "{\"name\":\"\\u0000\"}",
                 "{\"name\":\"\\uD800\"}", "{\"startedOn\":\"+10000-01-01\"}", "{\"features\":null}",
-                "{\"tagIds\":[1]}", "{\"links\":[{\"linkType\":\"OTHER\",\"url\":\"/relative\",\"displayOrder\":0}]}",
+                "{\"techStackIds\":[1]}", "{\"links\":[{\"linkType\":\"OTHER\",\"url\":\"/relative\",\"displayOrder\":0}]}",
                 "{\"links\":[{\"linkType\":\"OTHER\",\"url\":\"https://user:pass@example.com\",\"displayOrder\":0}]}")) {
             patch(id, bad).andExpect(status().isBadRequest());
         }
         for (String[] parameter : List.of(new String[]{"size", "101"}, new String[]{"page", "-1"},
                 new String[]{"sort", "name,asc"}, new String[]{"lifecycleStatus", "DONE"},
-                new String[]{"tagId", "0"}, new String[]{"visibilityStatus", "HIDDEN"})) {
+                new String[]{"techStackId", "0"}, new String[]{"visibilityStatus", "HIDDEN"})) {
             mvc.perform(get(PATH).param(parameter[0], parameter[1])).andExpect(status().isBadRequest());
         }
         mvc.perform(get(PATH).param("size", "1", "2")).andExpect(status().isBadRequest());
         mvc.perform(get(PATH).param("sort", "createdAt,asc")).andExpect(status().isOk());
-        mvc.perform(get(PATH).param("tagId", "999999999")).andExpect(status().isOk())
+        mvc.perform(get(PATH).param("techStackId", "999999999")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(0));
         mvc.perform(get(PATH + "/search")).andExpect(status().isBadRequest());
         mvc.perform(get(PATH + "/" + id)).andExpect(jsonPath("$.data.isBlocked").doesNotExist());
     }
 
     private ResultActions create(Member member, String visibility, String name, String summary, String description,
-                                 List<Tag> selected, List<ObjectNode> features, List<ObjectNode> links,
+                                 List<TechStack> selected, List<ObjectNode> features, List<ObjectNode> links,
                                  String lifecycle, String startedOn, String completedOn) throws Exception {
         ObjectNode json = mapper.createObjectNode().put("name", name).put("lifecycleStatus", lifecycle).put("visibilityStatus", visibility);
         if (summary != null) json.put("summary", summary);
         if (description != null) json.put("description", description);
         if (startedOn != null) json.put("startedOn", startedOn);
         if (completedOn != null) json.put("completedOn", completedOn);
-        ArrayNode tagIds = json.putArray("tagIds");
-        selected.forEach(tag -> tagIds.add(tag.getId().toString()));
+        ArrayNode techStackIds = json.putArray("techStackIds");
+        selected.forEach(techStack -> techStackIds.add(techStack.getId().toString()));
         ArrayNode featureArray = json.putArray("features");
         features.forEach(featureArray::add);
         ArrayNode linkArray = json.putArray("links");
@@ -377,8 +377,8 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
         return mapper.createObjectNode().put("linkType", type).put("label", label).put("url", url).put("displayOrder", displayOrder);
     }
 
-    private Tag tag(String name, TagStatus status) {
-        return tags.saveAndFlush(new Tag(name, "tag-" + UUID.randomUUID(), 0, status));
+    private TechStack techStack(String name, TechStackStatus status) {
+        return techStacks.saveAndFlush(new TechStack(name, "techStack-" + UUID.randomUUID(), 0, status));
     }
 
     private String projectId(ResultActions result) throws Exception {

@@ -290,7 +290,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
                 "withdrawal-" + member.getId(), null);
         var createdProject = mvc.perform(post("/api/v1/projects").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"withdrawal project\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"tagIds\":[],\"features\":[],\"links\":[]}"))
+                        .content("{\"name\":\"withdrawal project\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\",\"techStackIds\":[],\"features\":[],\"links\":[]}"))
                 .andExpect(status().isCreated());
         String projectId = mapper.readTree(createdProject.andReturn().getResponse().getContentAsString()).at("/data/id").asText();
         var createdBoard = mvc.perform(post("/api/v1/boards").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
@@ -298,7 +298,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isCreated());
         String boardId = mapper.readTree(createdBoard.andReturn().getResponse().getContentAsString()).at("/data/id").asText();
         String postJson = "{\"title\":\"withdrawal post\",\"summary\":null,\"visibilityStatus\":\"PUBLIC\","
-                + "\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}],\"tagIds\":[],\"boardId\":\"" + boardId + "\"}";
+                + "\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}],\"tags\":[],\"boardId\":\"" + boardId + "\"}";
         var createdPost = mvc.perform(post("/api/v1/posts").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
                         .contentType(MediaType.APPLICATION_JSON).content(postJson)).andExpect(status().isCreated());
         String postId = mapper.readTree(createdPost.andReturn().getResponse().getContentAsString()).at("/data/id").asText();

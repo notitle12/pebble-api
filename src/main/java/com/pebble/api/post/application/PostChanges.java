@@ -9,16 +9,16 @@ import java.util.Set;
 
 /** 수정 시 생략과 명시적 null을 구분하는 입력이다. */
 public record PostChanges(Set<String> supplied, String title, String summary, Long categoryId,
-                          List<Long> tagIds, List<BlockInput> blocks, PostVisibility visibilityStatus, String slug,
+                          List<String> tags, List<BlockInput> blocks, PostVisibility visibilityStatus, String slug,
                           Integer displayOrder, Long boardId, Long projectId, Boolean draft, Long thumbnailImageId) {
     public boolean has(String field) {
         return supplied.contains(field);
     }
 
-    public PostChanges(Set<String> supplied, String title, String summary, Long categoryId, List<Long> tagIds,
+    public PostChanges(Set<String> supplied, String title, String summary, Long categoryId, List<String> tags,
                        List<BlockInput> blocks, PostVisibility visibilityStatus, String slug, Integer displayOrder,
                        Long boardId, Long projectId, Boolean draft) {
-        this(supplied, title, summary, categoryId, tagIds, blocks, visibilityStatus, slug, displayOrder, boardId,
+        this(supplied, title, summary, categoryId, tags, blocks, visibilityStatus, slug, displayOrder, boardId,
                 projectId, draft, null);
     }
 

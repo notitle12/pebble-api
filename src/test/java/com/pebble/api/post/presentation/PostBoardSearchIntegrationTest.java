@@ -102,7 +102,7 @@ class PostBoardSearchIntegrationTest extends AuthenticationTestSupport {
 
     private String createPost(String title, String visibility, String boardId) throws Exception {
         ObjectNode body = mapper.createObjectNode().put("title", title).put("visibilityStatus", visibility);
-        body.putArray("tagIds");
+        body.putArray("tags");
         if (boardId != null) body.put("boardId", boardId);
         ArrayNode blocks = body.putArray("blocks");
         blocks.add(mapper.createObjectNode().put("type", "TEXT").put("content", "search body"));

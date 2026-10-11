@@ -1,4 +1,4 @@
-package com.pebble.api.tag.domain;
+package com.pebble.api.techstack.domain;
 
 import com.pebble.api.global.persistence.BaseTimeEntity;
 import com.pebble.api.global.id.TsidGenerator;
@@ -11,8 +11,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "tag")
-public class Tag extends BaseTimeEntity {
+@Table(name = "tech_stack")
+public class TechStack extends BaseTimeEntity {
 
     @Id
     private Long id;
@@ -28,12 +28,12 @@ public class Tag extends BaseTimeEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private TagStatus status;
+    private TechStackStatus status;
 
-    protected Tag() {
+    protected TechStack() {
     }
 
-    public Tag(String name, String slug, Integer displayOrder, TagStatus status) {
+    public TechStack(String name, String slug, Integer displayOrder, TechStackStatus status) {
         this.name = name;
         this.slug = slug;
         this.displayOrder = displayOrder;
@@ -47,7 +47,7 @@ public class Tag extends BaseTimeEntity {
         }
     }
 
-    public void update(String name, String slug, int displayOrder, TagStatus status) {
+    public void update(String name, String slug, int displayOrder, TechStackStatus status) {
         this.name = name;
         this.slug = slug;
         this.displayOrder = displayOrder;
@@ -70,7 +70,7 @@ public class Tag extends BaseTimeEntity {
         return displayOrder;
     }
 
-    public TagStatus getStatus() {
+    public TechStackStatus getStatus() {
         return status;
     }
 }

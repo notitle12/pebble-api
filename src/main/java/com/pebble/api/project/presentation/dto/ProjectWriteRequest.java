@@ -20,7 +20,7 @@ import java.util.Set;
 /** Project 요청 JSON의 필드 존재 여부와 형식을 검증한다. */
 public final class ProjectWriteRequest {
     private static final Set<String> FIELDS = Set.of("name", "summary", "description", "architectureDescription",
-            "executionInstructions", "lifecycleStatus", "startedOn", "completedOn", "tagIds", "features",
+            "executionInstructions", "lifecycleStatus", "startedOn", "completedOn", "techStackIds", "features",
             "links", "visibilityStatus");
 
     private ProjectWriteRequest() { }
@@ -45,14 +45,14 @@ public final class ProjectWriteRequest {
                 ? enumValue(json.get("lifecycleStatus"), ProjectLifecycleStatus.class, "lifecycleStatus") : null;
         LocalDate startedOn = json.has("startedOn") ? date(json.get("startedOn"), "startedOn") : null;
         LocalDate completedOn = json.has("completedOn") ? date(json.get("completedOn"), "completedOn") : null;
-        List<Long> tagIds = json.has("tagIds") ? ids(json.get("tagIds"), "tagIds") : (create ? List.of() : null);
+        List<Long> techStackIds = json.has("techStackIds") ? ids(json.get("techStackIds"), "techStackIds") : (create ? List.of() : null);
         List<FeatureInput> features = json.has("features") ? features(json.get("features")) : (create ? List.of() : null);
         List<LinkInput> links = json.has("links") ? links(json.get("links")) : (create ? List.of() : null);
         ProjectVisibility visibility = json.has("visibilityStatus")
                 ? enumValue(json.get("visibilityStatus"), ProjectVisibility.class, "visibilityStatus") : null;
         if (visibility == ProjectVisibility.DELETED) fail("visibilityStatus", "PUBLIC 또는 HIDDEN을 지정해 주세요.");
         return new ProjectChanges(Set.copyOf(supplied), name, summary, description, architecture, execution,
-                lifecycle, startedOn, completedOn, tagIds, features, links, visibility);
+                lifecycle, startedOn, completedOn, techStackIds, features, links, visibility);
     }
 
     public static long id(String value, String field) {
@@ -77,7 +77,7 @@ public final class ProjectWriteRequest {
         for (JsonNode item : node) {
             if (!item.isTextual()) fail(field, "ID는 문자열로 입력해 주세요.");
             long id = id(item.textValue(), field);
-            if (!distinct.add(id)) fail(field, "중복된 Tag를 지정할 수 없습니다.");
+            if (!distinct.add(id)) fail(field, "중복된 기술 스택를 지정할 수 없습니다.");
             result.add(id);
         }
         return List.copyOf(result);

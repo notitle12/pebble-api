@@ -89,7 +89,7 @@ class BlogToolsIntegrationTest extends AuthenticationTestSupport {
   mvc.perform(get(path()+"/posts").param("q","x","y")).andExpect(status().isBadRequest());
   mvc.perform(get(path()+"/posts").param("q","x".repeat(201))).andExpect(status().isBadRequest());
  }
- private void createPost(Member member,String title,String visibility)throws Exception{mvc.perform(post("/api/v1/posts").header("Authorization",bearer(member)).contentType("application/json").content(mapper.writeValueAsString(java.util.Map.of("title",title,"visibilityStatus",visibility,"tagIds",java.util.List.of(),"blocks",java.util.List.of(java.util.Map.of("type","TEXT","content","검색88 본문")))))).andExpect(status().isCreated());}
+ private void createPost(Member member,String title,String visibility)throws Exception{mvc.perform(post("/api/v1/posts").header("Authorization",bearer(member)).contentType("application/json").content(mapper.writeValueAsString(java.util.Map.of("title",title,"visibilityStatus",visibility,"tags",java.util.List.of(),"blocks",java.util.List.of(java.util.Map.of("type","TEXT","content","검색88 본문")))))).andExpect(status().isCreated());}
  private String bearer(Member member){return "Bearer "+tokens.issueForMember(member.getId(),Instant.now());}
  private String path(){return "/api/v1/blogs/"+owner.getHandle();}
  private Member blog(){String key=UUID.randomUUID().toString().substring(0,12);var member=new Member("writer-"+key,null,MemberStatus.ACTIVE,null,null);member.completeProfile("블로그-"+key,"blog-"+key,member.getNickname(),Instant.now());return members.saveAndFlush(member);}

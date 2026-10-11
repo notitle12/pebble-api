@@ -18,7 +18,7 @@ import java.util.Locale;
 /** JSON 필드 존재 여부와 형식을 검증하고 업무 입력으로 변환한다. */
 public final class PostWriteRequest {
     private static final Set<String> FIELDS = Set.of("title", "summary", "blocks", "categoryId",
-            "tagIds", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft",
+            "tags", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft",
             "thumbnailImageId");
 
     private PostWriteRequest() {
@@ -36,18 +36,19 @@ public final class PostWriteRequest {
         Long categoryId = json.hasNonNull("categoryId") ? id(json.get("categoryId"), "categoryId") : null;
         Long boardId = json.hasNonNull("boardId") ? id(json.get("boardId"), "boardId") : null;
         Long projectId = json.hasNonNull("projectId") ? id(json.get("projectId"), "projectId") : null;
-        List<Long> tags = null;
-        if (json.has("tagIds")) {
-            JsonNode node = json.get("tagIds");
-            if (!node.isArray()) fail("tagIds", "ID 배열을 입력해 주세요.");
-            tags = new ArrayList<>();
-            Set<Long> distinct = new HashSet<>();
+        List<String> tags = null;
+        if (json.has("tags")) {
+            JsonNode node = json.get("tags");
+            if (!node.isArray() || node.size() > 20) fail("tags", "태그를 최대 20개까지 입력해 주세요.");
+            var distinct = new java.util.LinkedHashSet<String>();
             for (JsonNode tag : node) {
-                long value = id(tag, "tagIds");
-                if (!distinct.add(value)) fail("tagIds", "중복된 Tag를 지정할 수 없습니다.");
-                tags.add(value);
+                String value = text(tag, "tags", 100, false, true);
+                value = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKC).strip().replaceFirst("^#+", "").strip();
+                validateText(value, "tags", 50, true);
+                if (value.codePoints().anyMatch(Character::isISOControl) || value.contains("#")) fail("tags", "태그에는 #이나 제어 문자를 넣을 수 없습니다.");
+                distinct.add(value);
             }
-            tags = List.copyOf(tags);
+            tags = List.copyOf(distinct);
         } else if (create) {
             tags = List.of();
         }

@@ -71,16 +71,16 @@ public class PostController {
 
     @GetMapping("/api/v1/posts")
     public ApiResponse<PostPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId", "authorId"));
-        return ApiResponse.of(page(likes.decorate(posts.listPublic(optionalId(query, "categoryId"), optionalId(query, "tagId"),
+        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "authorId"));
+        return ApiResponse.of(page(likes.decorate(posts.listPublic(optionalId(query, "categoryId"),
                 optionalId(query, "authorId"), pageable(query, "publishedAt")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/posts/search")
     public ApiResponse<PostPage> search(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("q", "page", "size", "sort", "categoryId", "tagId", "authorId"));
+        checkQuery(query, Set.of("q", "page", "size", "sort", "categoryId", "authorId"));
         return ApiResponse.of(page(likes.decorate(posts.search(PostWriteRequest.searchTerm(query.getFirst("q")),
-                optionalId(query, "categoryId"), optionalId(query, "tagId"), optionalId(query, "authorId"),
+                optionalId(query, "categoryId"), optionalId(query, "authorId"),
                 pageable(query, "publishedAt")), requesterId(jwt))));
     }
 
@@ -103,24 +103,24 @@ public class PostController {
     @GetMapping("/api/v1/members/{memberId:[0-9]+}/posts")
     public ApiResponse<PostPage> blog(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query,
                                       @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId"));
-        return ApiResponse.of(page(likes.decorate(posts.listPublic(optionalId(query, "categoryId"), optionalId(query, "tagId"),
+        checkQuery(query, Set.of("page", "size", "sort", "categoryId"));
+        return ApiResponse.of(page(likes.decorate(posts.listPublic(optionalId(query, "categoryId"),
                 PostWriteRequest.id(memberId, "memberId"), pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/blogs/{handle}/posts")
     public ApiResponse<PostPage> publicBlog(@PathVariable String handle, @RequestParam MultiValueMap<String, String> query,
                                             @AuthenticationPrincipal Jwt jwt) {
-        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "tagId", "q", "placement"));
+        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "q", "placement"));
         String placement = query.getFirst("placement");
         if (query.containsKey("placement") && (!Set.of("boards", "projects").contains(placement == null ? "" : placement) || query.containsKey("q"))) {
             throw invalid("placement");
         }
         var result = placement != null
-                ? posts.listBlogPlacement(handle, placement, optionalId(query, "categoryId"), optionalId(query, "tagId"), pageable(query, "displayOrder"))
+                ? posts.listBlogPlacement(handle, placement, optionalId(query, "categoryId"), pageable(query, "displayOrder"))
                 : query.containsKey("q")
-                ? posts.searchBlog(handle, PostWriteRequest.searchTerm(query.getFirst("q")), optionalId(query, "categoryId"), optionalId(query, "tagId"), pageable(query, "displayOrder"))
-                : posts.listBlog(handle, optionalId(query, "categoryId"), optionalId(query, "tagId"), pageable(query, "displayOrder"));
+                ? posts.searchBlog(handle, PostWriteRequest.searchTerm(query.getFirst("q")), optionalId(query, "categoryId"), pageable(query, "displayOrder"))
+                : posts.listBlog(handle, optionalId(query, "categoryId"), pageable(query, "displayOrder"));
         return ApiResponse.of(page(likes.decorate(result, requesterId(jwt))));
     }
 
