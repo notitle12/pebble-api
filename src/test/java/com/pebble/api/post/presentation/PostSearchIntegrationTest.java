@@ -21,9 +21,9 @@ import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
 import com.pebble.api.member.infrastructure.persistence.MemberRepository;
 import com.pebble.api.support.AuthenticationTestSupport;
-import com.pebble.api.tag.domain.Tag;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.infrastructure.persistence.TagRepository;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.infrastructure.persistence.TechStackRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.Comparator;
@@ -56,7 +56,7 @@ class PostSearchIntegrationTest extends AuthenticationTestSupport {
     @Autowired MemberRepository members;
     @Autowired MemberProfileService profiles;
     @Autowired CategoryRepository categories;
-    @Autowired TagRepository tags;
+    @Autowired TechStackRepository techStacks;
     @Autowired AccessTokenService tokens;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
@@ -71,74 +71,67 @@ class PostSearchIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void searchesTitleBlockContentBlockTitleCategoryParentAndTagAsOrTargets() throws Exception {
+    void searchesTitleBlockContentBlockTitleCategoryParentAndTechStackAsOrTargets() throws Exception {
         Category categoryParent = category(null, "Parent Needle phrase", CategoryStatus.ACTIVE);
         Category category = category(categoryParent, "Category unusual", CategoryStatus.ACTIVE);
-        Tag tag = tag("Tag unusual", TagStatus.ACTIVE);
+        TechStack techStack = techStack("TechStack unusual", TechStackStatus.ACTIVE);
         String title = create(owner, "needle phrase in title", "ordinary summary", "ordinary content", "ordinary block", null, List.of(), null);
         String content = create(owner, "plain title", "ordinary summary", "needle phrase in content", "ordinary block", null, List.of(), null);
         String blockTitle = create(owner, "another title", "ordinary summary", "ordinary content", "needle phrase block title", null, List.of(), null);
         String categoryMatch = create(owner, "category post", "ordinary summary", "ordinary content", "ordinary block", category, List.of(), null);
-        String tagMatch = create(owner, "tag post", "ordinary summary", "ordinary content", "ordinary block", null, List.of(tag), null);
+        String tagMatch = create(owner, "techStack post", "ordinary summary", "ordinary content", "ordinary block", null, List.of(techStack), null);
         em.flush();
         jdbc.update("update category set name='needle phrase child' where id=?", category.getId());
         jdbc.update("update category set name='needle phrase parent' where id=?", categoryParent.getId());
-        jdbc.update("update tag set name='needle phrase tag' where id=?", tag.getId());
+        jdbc.update("update tech_stack set name='needle phrase techStack' where id=?", techStack.getId());
         em.clear();
 
         mvc.perform(search("NEEDLE PHRASE"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(5))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(4))
                 .andExpect(jsonPath("$.data.content[*].id").value(org.hamcrest.Matchers.containsInAnyOrder(
-                        title, content, blockTitle, categoryMatch, tagMatch)))
+                        title, content, blockTitle, categoryMatch)))
                 .andExpect(jsonPath("$.data.content[0].blocks").doesNotExist())
                 .andExpect(jsonPath("$.data.content[0].isBlocked").doesNotExist())
                 .andExpect(jsonPath("$.data.content[0].blockedByAdminId").doesNotExist());
         mvc.perform(search("NEEDLE PHRASE").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(5))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(4))
                 .andExpect(jsonPath("$.data.content[0].isBlocked").doesNotExist());
         mvc.perform(search("needle phrase").param("categoryId", category.getId().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].id").value(categoryMatch));
-        mvc.perform(search("needle phrase").param("tagId", tag.getId().toString()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
-                .andExpect(jsonPath("$.data.content[0].id").value(tagMatch));
+        mvc.perform(search("needle phrase").param("techStackId", techStack.getId().toString())).andExpect(status().isBadRequest());
         mvc.perform(search("needle phrase").param("authorId", other.getId().toString()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(0));
     }
 
     @Test
-    void doesNotDuplicatePostsForMultipleMatchingBlocksOrTagsAndCombinesFiltersWithAnd() throws Exception {
+    void doesNotDuplicatePostsForMultipleMatchingBlocksOrTechStacksAndCombinesFiltersWithAnd() throws Exception {
         Category category = category(null, "Filter Category", CategoryStatus.ACTIVE);
-        Tag matchingTag = tag("Filter Tag", TagStatus.ACTIVE);
-        Tag secondTag = tag("Filter Tag Extra", TagStatus.ACTIVE);
+        TechStack matchingTechStack = techStack("Filter TechStack", TechStackStatus.ACTIVE);
+        TechStack secondTechStack = techStack("Filter TechStack Extra", TechStackStatus.ACTIVE);
         String match = create(owner, "filter post", "summary", "same needle in content", "same needle in title", category,
-                List.of(matchingTag, secondTag), null);
-        create(other, "filter post other author", "summary", "same needle", "same needle", category, List.of(matchingTag), null);
-        create(owner, "filter post other category", "summary", "same needle", "ordinary", null, List.of(matchingTag), null);
-        create(owner, "filter post other tag", "summary", "same needle", "ordinary", category, List.of(), null);
+                List.of(matchingTechStack, secondTechStack), null);
+        create(other, "filter post other author", "summary", "same needle", "same needle", category, List.of(matchingTechStack), null);
+        create(owner, "filter post other category", "summary", "same needle", "ordinary", null, List.of(matchingTechStack), null);
+        create(owner, "filter post other techStack", "summary", "same needle", "ordinary", category, List.of(), null);
 
-        mvc.perform(search("same needle").param("categoryId", category.getId().toString())
-                        .param("tagId", matchingTag.getId().toString()).param("authorId", owner.getId().toString()))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
-                .andExpect(jsonPath("$.data.content.length()").value(1)).andExpect(jsonPath("$.data.content[0].id").value(match));
-        mvc.perform(search("Filter Tag").param("categoryId", category.getId().toString())
-                        .param("authorId", owner.getId().toString()).param("size", "1"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
-                .andExpect(jsonPath("$.data.totalPages").value(1)).andExpect(jsonPath("$.data.content[0].id").value(match));
+        mvc.perform(search("same needle").param("categoryId", category.getId().toString()).param("authorId", owner.getId().toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2));
+        mvc.perform(search("Filter TechStack")).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(0));
     }
 
     @Test
     void matchesInactiveTaxonomyStillReferencedByPublicPosts() throws Exception {
         Category parent = category(null, "category", CategoryStatus.ACTIVE);
         Category category = category(parent, "child category", CategoryStatus.ACTIVE);
-        Tag tag = tag("old tag", TagStatus.ACTIVE);
-        String postId = create(owner, "taxonomy post", "summary", "body", "block", category, List.of(tag), null);
+        TechStack techStack = techStack("old techStack", TechStackStatus.ACTIVE);
+        String postId = create(owner, "taxonomy post", "summary", "body", "block", category, List.of(techStack), null);
         em.flush();
         jdbc.update("update category set name='inactive category match', status='INACTIVE' where id=?", category.getId());
         jdbc.update("update category set name='inactive parent match', status='INACTIVE' where id=?", parent.getId());
-        jdbc.update("update tag set name='inactive tag match', status='INACTIVE' where id=?", tag.getId());
+        jdbc.update("update tech_stack set name='inactive techStack match', status='INACTIVE' where id=?", techStack.getId());
         em.clear();
-        for (String q : List.of("inactive category match", "inactive parent match", "inactive tag match")) {
+        for (String q : List.of("inactive category match", "inactive parent match")) {
             mvc.perform(search(q)).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
                     .andExpect(jsonPath("$.data.content[0].id").value(postId));
         }
@@ -177,7 +170,7 @@ class PostSearchIntegrationTest extends AuthenticationTestSupport {
                 get(PATH).param("q", "\uD800"), get(PATH).param("q", "one", "two"),
                 get(PATH).param("q", "valid").param("unknown", "1"),
                 get(PATH).param("q", "valid").param("categoryId", "0"),
-                get(PATH).param("q", "valid").param("tagId", "abc"),
+                get(PATH).param("q", "valid").param("techStackId", "abc"),
                 get(PATH).param("q", "valid").param("authorId", "9223372036854775808"),
                 get(PATH).param("q", "valid").param("size", "0"),
                 get(PATH).param("q", "valid").param("size", "101"),
@@ -255,20 +248,20 @@ class PostSearchIntegrationTest extends AuthenticationTestSupport {
     }
 
     private String create(Member author, String title, String summary, String blockContent, String blockTitle,
-                          Category category, List<Tag> selected, String slug) throws Exception {
+                          Category category, List<TechStack> selected, String slug) throws Exception {
         return create(author, title, summary, blockContent, blockTitle, category, selected, slug, "PUBLIC");
     }
 
     private String create(Member author, String title, String summary, String blockContent, String blockTitle,
-                          Category category, List<Tag> selected, String slug, String visibility) throws Exception {
+                          Category category, List<TechStack> selected, String slug, String visibility) throws Exception {
         ObjectNode json = mapper.createObjectNode();
         json.put("title", title);
         json.put("summary", summary);
         json.put("visibilityStatus", visibility);
         if (slug != null) json.put("slug", slug);
         if (category != null) json.put("categoryId", category.getId().toString());
-        ArrayNode tagIds = json.putArray("tagIds");
-        selected.forEach(tag -> tagIds.add(tag.getId().toString()));
+        ArrayNode techStackIds = json.putArray("tags");
+        selected.forEach(techStack -> techStackIds.add(techStack.getName()));
         json.putArray("blocks")
                 .add(mapper.createObjectNode().put("type", "TEXT").put("content", blockContent).put("title", blockTitle))
                 .add(mapper.createObjectNode().put("type", "CODE").put("language", "JAVA").put("content", blockContent).put("title", blockTitle));
@@ -282,8 +275,8 @@ class PostSearchIntegrationTest extends AuthenticationTestSupport {
         return categories.saveAndFlush(new Category(parent, name, "category-" + UUID.randomUUID(), 0, status));
     }
 
-    private Tag tag(String name, TagStatus status) {
-        return tags.saveAndFlush(new Tag(name, "tag-" + UUID.randomUUID(), 0, status));
+    private TechStack techStack(String name, TechStackStatus status) {
+        return techStacks.saveAndFlush(new TechStack(name, "techStack-" + UUID.randomUUID(), 0, status));
     }
 
     private JsonNode response(ResultActions result) throws Exception {

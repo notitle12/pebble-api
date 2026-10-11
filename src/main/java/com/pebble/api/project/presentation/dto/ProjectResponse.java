@@ -5,7 +5,7 @@ import com.pebble.api.project.application.ProjectService.ProjectView;
 import com.pebble.api.project.domain.ProjectLifecycleStatus;
 import com.pebble.api.project.domain.ProjectLinkType;
 import com.pebble.api.project.domain.ProjectVisibility;
-import com.pebble.api.tag.domain.TagStatus;
+import com.pebble.api.techstack.domain.TechStackStatus;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,7 +16,7 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                               @JsonInclude(JsonInclude.Include.NON_NULL) String architectureDescription,
                               @JsonInclude(JsonInclude.Include.NON_NULL) String executionInstructions,
                               ProjectLifecycleStatus lifecycleStatus, LocalDate startedOn, LocalDate completedOn,
-                              List<Technology> tags,
+                              List<Technology> techStacks,
                               @JsonInclude(JsonInclude.Include.NON_NULL) List<Feature> features,
                               @JsonInclude(JsonInclude.Include.NON_NULL) List<Link> links,
                               @JsonInclude(JsonInclude.Include.NON_NULL) List<ProjectMediaResponse> media,
@@ -34,8 +34,8 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                 view.detail() ? project.getArchitectureDescription() : null,
                 view.detail() ? project.getExecutionInstructions() : null,
                 project.getLifecycleStatus(), project.getStartedOn(), project.getCompletedOn(),
-                view.tags().stream().map(tag -> new Technology(tag.getId().toString(), tag.getName(), tag.getSlug(),
-                        tag.getStatus())).toList(),
+                view.techStacks().stream().map(techStack -> new Technology(techStack.getId().toString(), techStack.getName(), techStack.getSlug(),
+                        techStack.getStatus())).toList(),
                 view.features() == null ? null : view.features().stream().map(feature -> new Feature(feature.getId().toString(),
                         feature.getTitle(), feature.getDescription(), feature.getDisplayOrder())).toList(),
                 view.links() == null ? null : view.links().stream().map(link -> new Link(link.getId().toString(),
@@ -45,7 +45,7 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
     }
 
     public record Owner(String id, String handle, String blogName, String nickname, String profileImageUrl) { }
-    public record Technology(String id, String name, String slug, TagStatus status) { }
+    public record Technology(String id, String name, String slug, TechStackStatus status) { }
     public record Feature(String id, String title, String description, int displayOrder) { }
     public record Link(String id, ProjectLinkType linkType, String label, String url, int displayOrder) { }
 

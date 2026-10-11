@@ -48,7 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
 class AdminClassificationIntegrationTest extends AuthenticationTestSupport {
     private static final String PASSWORD = "Classification-Integration-2026";
     private static final String CATEGORIES = "/api/v1/admin/categories";
-    private static final String TAGS = "/api/v1/admin/tags";
+    private static final String TAGS = "/api/v1/admin/tech-stacks";
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired AdminAccountRepository accounts;
@@ -105,9 +105,9 @@ class AdminClassificationIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void createsAndUpdatesTagsWithNormalizedSlugAndInactiveStatus() throws Exception {
+    void createsAndUpdatesTechStacksWithNormalizedSlugAndInactiveStatus() throws Exception {
         String slugSuffix = suffix();
-        String id = create(TAGS, managerToken, "{\"name\":\"Tag\",\"slug\":\"MiXeD-" + slugSuffix + "\"}", 201);
+        String id = create(TAGS, managerToken, "{\"name\":\"TechStack\",\"slug\":\"MiXeD-" + slugSuffix + "\"}", 201);
         patchRequest(TAGS, id, masterToken, "{\"status\":\"INACTIVE\",\"displayOrder\":7}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.slug").value("mixed-" + slugSuffix)).andExpect(jsonPath("$.data.status").value("INACTIVE"))
                 .andExpect(jsonPath("$.data.displayOrder").value(7));

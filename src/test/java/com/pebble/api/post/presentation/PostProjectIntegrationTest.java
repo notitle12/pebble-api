@@ -130,7 +130,7 @@ class PostProjectIntegrationTest extends AuthenticationTestSupport {
     void relatedListValidatesQueriesAndCors() throws Exception {
         String project = project(owner, "PUBLIC");
         String path = "/api/v1/projects/" + project + "/posts";
-        for (String[] parameter : new String[][]{{"projectId", project}, {"sort", "name,asc"}, {"size", "101"}, {"tagId", "1"}}) {
+        for (String[] parameter : new String[][]{{"projectId", project}, {"sort", "name,asc"}, {"size", "101"}, {"techStackId", "1"}}) {
             mvc.perform(get(path).param(parameter[0], parameter[1])).andExpect(status().isBadRequest());
         }
         mvc.perform(get(path).param("size", "1", "2")).andExpect(status().isBadRequest());

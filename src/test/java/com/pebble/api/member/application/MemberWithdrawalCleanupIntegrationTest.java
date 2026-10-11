@@ -33,7 +33,7 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
     @Autowired JdbcTemplate jdbc;
     private final List<Long> fixtureMembers = new ArrayList<>();
     private long sharedCategoryId;
-    private long sharedTagId;
+    private long sharedTechStackId;
 
     @AfterEach
     void removeFixtures() {
@@ -45,7 +45,7 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
             jdbc.update("delete from member where id=?", id);
         }
         if (sharedCategoryId != 0) jdbc.update("delete from category where id=?", sharedCategoryId);
-        if (sharedTagId != 0) jdbc.update("delete from tag where id=?", sharedTagId);
+        if (sharedTechStackId != 0) jdbc.update("delete from tech_stack where id=?", sharedTechStackId);
     }
 
     @Test
@@ -87,7 +87,7 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
         assertThat(count("post", "author_member_id", retainedOwner.getId())).isEqualTo(2);
         assertThat(count("project", "owner_member_id", retainedOwner.getId())).isEqualTo(2);
         assertThat(jdbc.queryForObject("select count(*) from category where id=?", Long.class, shared[0])).isEqualTo(1);
-        assertThat(jdbc.queryForObject("select count(*) from tag where id=?", Long.class, shared[1])).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from tech_stack where id=?", Long.class, shared[1])).isEqualTo(1);
 
         // 테스트용으로 추가한 초과 깊이 게시판을 지우면 실패한 회원을 다시 파기할 수 있다.
         jdbc.update("delete from board where owner_member_id=? and id=?", broken.getId(), brokenDeepestBoardId);
@@ -97,7 +97,7 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select count(*) from post where author_member_id=?", Long.class, retainedOwner.getId())).isEqualTo(2);
         assertThat(jdbc.queryForObject("select count(*) from project where owner_member_id=?", Long.class, retainedOwner.getId())).isEqualTo(2);
         assertThat(jdbc.queryForObject("select count(*) from category where id=?", Long.class, shared[0])).isEqualTo(1);
-        assertThat(jdbc.queryForObject("select count(*) from tag where id=?", Long.class, shared[1])).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from tech_stack where id=?", Long.class, shared[1])).isEqualTo(1);
         assertThat(identities.findByProviderAndProviderSubject(OAuthProvider.NAVER, subject)).isEmpty();
         assertThat(withdrawals.deleteExpired(broken.getId())).isFalse();
     }
@@ -133,16 +133,16 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
     private long[] ensureSharedClassifications() {
         if (sharedCategoryId == 0) {
             sharedCategoryId = TsidGenerator.generate();
-            sharedTagId = TsidGenerator.generate();
+            sharedTechStackId = TsidGenerator.generate();
             jdbc.update("insert into category(id, name, slug, display_order, status, created_at, updated_at) values (?, 'Shared category', ?, 0, 'ACTIVE', now(), now())",
                     sharedCategoryId, "cleanup-category-" + sharedCategoryId);
-            jdbc.update("insert into tag(id, name, slug, display_order, status, created_at, updated_at) values (?, 'Shared tag', ?, 0, 'ACTIVE', now(), now())",
-                    sharedTagId, "cleanup-tag-" + sharedTagId);
+            jdbc.update("insert into tech_stack(id, name, slug, display_order, status, created_at, updated_at) values (?, 'Shared techStack', ?, 0, 'ACTIVE', now(), now())",
+                    sharedTechStackId, "cleanup-techStack-" + sharedTechStackId);
         }
-        return new long[]{sharedCategoryId, sharedTagId};
+        return new long[]{sharedCategoryId, sharedTechStackId};
     }
 
-    private ContentFixture insertOwnedContent(long ownerId, long retainedOwner, long categoryId, long tagId) {
+    private ContentFixture insertOwnedContent(long ownerId, long retainedOwner, long categoryId, long techStackId) {
         long[] boardIds = insertBoardChainAndIds(ownerId, 3);
         long projectId = TsidGenerator.generate();
         long postId = TsidGenerator.generate();
@@ -154,11 +154,10 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
                 TsidGenerator.generate(), projectId);
         jdbc.update("insert into project_link(id, project_id, link_type, label, url, display_order, created_at) values (?, ?, 'GITHUB', 'source', 'https://example.test', 0, now())",
                 TsidGenerator.generate(), projectId);
-        jdbc.update("insert into project_tag(project_id, tag_id, display_order, created_at) values (?, ?, 0, now())", projectId, tagId);
+        jdbc.update("insert into project_tech_stack(project_id, tech_stack_id, display_order, created_at) values (?, ?, 0, now())", projectId, techStackId);
         jdbc.update("insert into post(id, author_member_id, post_number, category_id, title, visibility_status, deleted_at, project_id, board_id, created_at, updated_at) values (?, ?, 1, ?, 'own post', 'DELETED', now(), ?, ?, now(), now())",
                 postId, ownerId, categoryId, projectId, boardIds[0]);
         jdbc.update("insert into post_block(id, post_id, block_type, content, display_order) values (?, ?, 'TEXT', 'body', 0)", TsidGenerator.generate(), postId);
-        jdbc.update("insert into post_tag(post_id, tag_id, created_at) values (?, ?, now())", postId, tagId);
         jdbc.update("insert into project(id, owner_member_id, name, lifecycle_status, visibility_status, created_at, updated_at) values (?, ?, 'retained project', 'IN_PROGRESS', 'PUBLIC', now(), now())",
                 retainedProjectId, retainedOwner);
         long retainedPostNumber = count("post", "author_member_id", retainedOwner) + 1;
@@ -202,10 +201,9 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
         assertThat(count("post", "id", f.ownPostId())).isEqualTo(1);
         assertThat(count("project", "id", f.ownProjectId())).isEqualTo(1);
         assertThat(count("post_block", "post_id", f.ownPostId())).isEqualTo(1);
-        assertThat(count("post_tag", "post_id", f.ownPostId())).isEqualTo(1);
         assertThat(count("project_feature", "project_id", f.ownProjectId())).isEqualTo(1);
         assertThat(count("project_link", "project_id", f.ownProjectId())).isEqualTo(1);
-        assertThat(count("project_tag", "project_id", f.ownProjectId())).isEqualTo(1);
+        assertThat(count("project_tech_stack", "project_id", f.ownProjectId())).isEqualTo(1);
         assertThat(count("post_comment", "id", f.ownCommentId())).isEqualTo(1);
         assertThat(count("project_comment", "id", f.ownProjectCommentId())).isEqualTo(1);
         assertThat(count("post_like", "id", f.ownPostLikeId())).isEqualTo(1);
@@ -221,10 +219,9 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
         assertThat(count("project", "id", f.ownProjectId())).isZero();
         assertThat(count("board", "owner_member_id", ownerId)).isZero();
         assertThat(count("post_block", "post_id", f.ownPostId())).isZero();
-        assertThat(count("post_tag", "post_id", f.ownPostId())).isZero();
         assertThat(count("project_feature", "project_id", f.ownProjectId())).isZero();
         assertThat(count("project_link", "project_id", f.ownProjectId())).isZero();
-        assertThat(count("project_tag", "project_id", f.ownProjectId())).isZero();
+        assertThat(count("project_tech_stack", "project_id", f.ownProjectId())).isZero();
         assertThat(count("post_comment", "post_id", f.ownPostId())).isZero();
         assertThat(count("project_comment", "project_id", f.ownProjectId())).isZero();
         assertThat(count("post_like", "post_id", f.ownPostId())).isZero();

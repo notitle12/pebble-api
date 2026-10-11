@@ -5,8 +5,8 @@ import com.pebble.api.category.application.CategoryChanges;
 import com.pebble.api.category.domain.CategoryStatus;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
-import com.pebble.api.tag.domain.TagStatus;
-import com.pebble.api.tag.application.TagChanges;
+import com.pebble.api.techstack.domain.TechStackStatus;
+import com.pebble.api.techstack.application.TechStackChanges;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -33,7 +33,7 @@ public final class AdminClassificationWriteRequest {
         return new CategoryChanges(Set.copyOf(supplied), name, slug, parentId, order, status);
     }
 
-    public static TagChanges tag(JsonNode json, boolean create) {
+    public static TechStackChanges techStack(JsonNode json, boolean create) {
         object(json);
         fields(json, TAG_FIELDS);
         requiredOnCreate(json, create, "name", "slug");
@@ -42,8 +42,8 @@ public final class AdminClassificationWriteRequest {
         String name = json.has("name") ? name(json.get("name")) : null;
         String slug = json.has("slug") ? slug(json.get("slug")) : null;
         Integer order = json.has("displayOrder") ? Integer.valueOf(order(json.get("displayOrder"))) : create ? Integer.valueOf(0) : null;
-        TagStatus status = json.has("status") ? tagStatus(json.get("status")) : null;
-        return new TagChanges(Set.copyOf(supplied), name, slug, order, status);
+        TechStackStatus status = json.has("status") ? techStackStatus(json.get("status")) : null;
+        return new TechStackChanges(Set.copyOf(supplied), name, slug, order, status);
     }
 
     private static void object(JsonNode node) { if (node == null || !node.isObject()) throw invalid(); }
@@ -96,8 +96,8 @@ public final class AdminClassificationWriteRequest {
     private static CategoryStatus categoryStatus(JsonNode node) {
         try { return CategoryStatus.valueOf(textStatus(node)); } catch (IllegalArgumentException e) { throw invalid(); }
     }
-    private static TagStatus tagStatus(JsonNode node) {
-        try { return TagStatus.valueOf(textStatus(node)); } catch (IllegalArgumentException e) { throw invalid(); }
+    private static TechStackStatus techStackStatus(JsonNode node) {
+        try { return TechStackStatus.valueOf(textStatus(node)); } catch (IllegalArgumentException e) { throw invalid(); }
     }
     private static String textStatus(JsonNode node) { if (node == null || !node.isTextual()) throw invalid(); return node.textValue(); }
     private static ApplicationException invalid() { return new ApplicationException(GlobalErrorCode.INVALID_REQUEST); }

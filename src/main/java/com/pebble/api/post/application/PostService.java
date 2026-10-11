@@ -12,23 +12,15 @@ import com.pebble.api.post.application.PostChanges.BlockInput;
 import com.pebble.api.post.domain.Post;
 import com.pebble.api.post.domain.PostBlock;
 import com.pebble.api.post.domain.PostError;
-import com.pebble.api.post.domain.PostTag;
 import com.pebble.api.post.domain.PostVisibility;
 import com.pebble.api.post.infrastructure.persistence.PostRepository;
 import com.pebble.api.post.infrastructure.persistence.PostBlockRepository;
-import com.pebble.api.post.infrastructure.persistence.PostTagRepository;
-import com.pebble.api.tag.application.TagQueryService;
-import com.pebble.api.tag.domain.Tag;
 import com.pebble.api.project.application.ProjectQueryService;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.JoinType;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,10 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class PostService {
     private final PostRepository posts;
     private final PostBlockRepository blocks;
-    private final PostTagRepository postTags;
     private final MemberQueryService members;
     private final CategoryQueryService categories;
-    private final TagQueryService tags;
     private final BoardQueryService boards;
     private final ProjectQueryService projects;
     private final org.springframework.beans.factory.ObjectProvider<com.pebble.api.global.media.R2ObjectStorage> mediaStorage;
@@ -63,7 +53,6 @@ public class PostService {
         if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);
         if (input.projectId() != null) projects.resolveForPost(input.projectId(), memberId);
         Category category = input.categoryId() == null ? null : categories.resolveForPost(input.categoryId(), null);
-        List<Tag> selected = tags.resolveForPost(input.tagIds(), Set.of());
         List<Post> ordered = posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, PostVisibility.DELETED);
         int position = input.displayOrder() == null ? 0 : input.displayOrder();
         if (position > ordered.size()) throw invalidOrder();
@@ -79,7 +68,7 @@ public class PostService {
         applyOrder(ordered);
         replaceBlocks(post, input.blocks());
         if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
-        postTags.saveAll(selected.stream().map(tag -> new PostTag(post, tag)).toList());
+        post.changeTags(input.tags());
         posts.flush();
         return detailView(post, true);
     }
@@ -146,9 +135,6 @@ public class PostService {
             category = input.categoryId() == null ? null : categories.resolveForPost(input.categoryId(),
                     category == null ? null : category.getId());
         }
-        List<PostTag> currentTags = postTags.findForPosts(List.of(postId));
-        List<Tag> selected = input.has("tagIds") ? tags.resolveForPost(input.tagIds(), currentTags.stream()
-                .map(link -> link.getTag().getId()).collect(Collectors.toSet())) : null;
         post.updateContent(input.has("title") ? input.title() : post.getTitle(),
                 input.has("summary") ? input.summary() : post.getSummary(), category);
         if (input.has("visibilityStatus")) post.changeVisibility(input.visibilityStatus());
@@ -156,13 +142,7 @@ public class PostService {
         if (input.has("blocks")) replaceBlocks(post, input.blocks());
         if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
         else if (input.has("blocks")) thumbnails.clearIfNoLongerReferenced(post);
-        if (selected != null) {
-            Set<Long> newIds = selected.stream().map(Tag::getId).collect(Collectors.toSet());
-            Set<Long> oldIds = currentTags.stream().map(link -> link.getTag().getId()).collect(Collectors.toSet());
-            postTags.deleteAll(currentTags.stream().filter(link -> !newIds.contains(link.getTag().getId())).toList());
-            postTags.saveAll(selected.stream().filter(tag -> !oldIds.contains(tag.getId()))
-                    .map(tag -> new PostTag(post, tag)).toList());
-        }
+        if (input.has("tags")) post.changeTags(input.tags());
         posts.flush();
         return detailView(post, true);
     }
@@ -176,12 +156,12 @@ public class PostService {
         applyOrder(posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, PostVisibility.DELETED));
     }
 
-    public Page<PostView> listPublic(Long categoryId, Long tagId, Long authorId, Pageable pageable) {
-        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null), pageable), false);
+    public Page<PostView> listPublic(Long categoryId, Long authorId, Pageable pageable) {
+        return page(posts.findAll(publicFilter(categoryId, authorId, null), pageable), false);
     }
 
-    public Page<PostView> search(String term, Long categoryId, Long tagId, Long authorId, Pageable pageable) {
-        return page(posts.findAll(publicFilter(categoryId, tagId, authorId, null).and(searchMatching(term)), pageable), false);
+    public Page<PostView> search(String term, Long categoryId, Long authorId, Pageable pageable) {
+        return page(posts.findAll(publicFilter(categoryId, authorId, null).and(searchMatching(term)), pageable), false);
     }
 
     private Specification<Post> searchMatching(String term) {
@@ -196,14 +176,9 @@ public class PostService {
             body.select(block.get("post").get("id")).where(cb.equal(block.get("post").get("id"), root.get("id")),
                     cb.or(cb.like(cb.lower(block.get("content")), loweredPattern, '\\'),
                             cb.like(cb.lower(block.get("title")), loweredPattern, '\\')));
-            var technology = query.subquery(Long.class);
-            var link = technology.from(PostTag.class);
-            technology.select(link.get("post").get("id")).where(cb.equal(link.get("post").get("id"), root.get("id")),
-                    cb.like(cb.lower(link.get("tag").get("name")), loweredPattern, '\\'));
-            // 본문과 Tag는 EXISTS로 검색해 여러 일치 항목이 있어도 글과 집계를 중복하지 않는다.
             return cb.or(cb.like(cb.lower(root.get("title")), loweredPattern, '\\'), cb.exists(body),
                     cb.like(cb.lower(category.get("name")), loweredPattern, '\\'),
-                    cb.like(cb.lower(parent.get("name")), loweredPattern, '\\'), cb.exists(technology));
+                    cb.like(cb.lower(parent.get("name")), loweredPattern, '\\'));
         };
     }
 
@@ -248,16 +223,16 @@ public class PostService {
 
     public Page<PostView> listBoard(long ownerId, long boardId, Pageable pageable) {
         boards.requirePublic(ownerId, boardId);
-        return page(posts.findAll(publicFilter(null, null, ownerId, boardId), pageable), false);
+        return page(posts.findAll(publicFilter(null, ownerId, boardId), pageable), false);
     }
 
     public Page<PostView> listProject(long projectId, Pageable pageable) {
         long ownerId = projects.requirePublic(projectId);
         Specification<Post> placement = (root, query, cb) -> cb.equal(root.get("projectId"), projectId);
-        return page(posts.findAll(publicFilter(null, null, ownerId, null).and(placement), pageable), false);
+        return page(posts.findAll(publicFilter(null, ownerId, null).and(placement), pageable), false);
     }
 
-    private Specification<Post> publicFilter(Long categoryId, Long tagId, Long authorId, Long boardId) {
+    private Specification<Post> publicFilter(Long categoryId, Long authorId, Long boardId) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("visibility"), PostVisibility.PUBLIC));
@@ -270,13 +245,6 @@ public class PostService {
             }
             if (boardId != null) predicates.add(cb.equal(root.get("boardId"), boardId));
             if (authorId != null) predicates.add(cb.equal(root.get("author").get("id"), authorId));
-            if (tagId != null) {
-                var subquery = query.subquery(Long.class);
-                var link = subquery.from(PostTag.class);
-                subquery.select(link.get("post").get("id")).where(cb.equal(link.get("post").get("id"), root.get("id")),
-                        cb.equal(link.get("tag").get("id"), tagId));
-                predicates.add(cb.exists(subquery));
-            }
             return cb.and(predicates.toArray(Predicate[]::new));
         };
     }
@@ -290,19 +258,19 @@ public class PostService {
         return page(posts.findAll(filter, pageable), true);
     }
 
-    public Page<PostView> listBlog(String handle, Long categoryId, Long tagId, Pageable pageable) {
-        return listPublic(categoryId, tagId, members.findPublicBlog(handle).getId(), pageable);
+    public Page<PostView> listBlog(String handle, Long categoryId, Pageable pageable) {
+        return listPublic(categoryId, members.findPublicBlog(handle).getId(), pageable);
     }
 
-    public Page<PostView> listBlogPlacement(String handle, String placement, Long categoryId, Long tagId, Pageable pageable) {
+    public Page<PostView> listBlogPlacement(String handle, String placement, Long categoryId, Pageable pageable) {
         long memberId = members.findPublicBlog(handle).getId();
         Specification<Post> placementFilter = (root, query, cb) -> cb.isNotNull(root.get(
                 "boards".equals(placement) ? "boardId" : "projectId"));
-        return page(posts.findAll(publicFilter(categoryId, tagId, memberId, null).and(placementFilter), pageable), false);
+        return page(posts.findAll(publicFilter(categoryId, memberId, null).and(placementFilter), pageable), false);
     }
 
-    public Page<PostView> searchBlog(String handle, String term, Long categoryId, Long tagId, Pageable pageable) {
-        return search(term, categoryId, tagId, members.findPublicBlog(handle).getId(), pageable);
+    public Page<PostView> searchBlog(String handle, String term, Long categoryId, Pageable pageable) {
+        return search(term, categoryId, members.findPublicBlog(handle).getId(), pageable);
     }
 
     private Post ownedForUpdate(long postId, long memberId) {
@@ -344,17 +312,11 @@ public class PostService {
     private PostView detailView(Post post, boolean owner) {
         initializeRelations(post);
         return new PostView(post, blocks.findByPostIdOrderByDisplayOrderAsc(post.getId()),
-                postTags.findForPosts(List.of(post.getId())).stream().map(PostTag::getTag).toList(), owner, 0, false, thumbnailUrl(post));
+                post.getTags(), owner, 0, false, thumbnailUrl(post));
     }
 
     private Page<PostView> page(Page<Post> page, boolean owner) {
-        Map<Long, List<Tag>> byPost = new HashMap<>();
-        if (!page.isEmpty()) {
-            for (PostTag link : postTags.findForPosts(page.getContent().stream().map(Post::getId).toList())) {
-                byPost.computeIfAbsent(link.getPost().getId(), id -> new ArrayList<>()).add(link.getTag());
-            }
-        }
-        return page.map(post -> new PostView(post, null, List.copyOf(byPost.getOrDefault(post.getId(), List.of())), owner, 0, false, thumbnailUrl(post)));
+        return page.map(post -> new PostView(post, null, post.getTags(), owner, 0, false, thumbnailUrl(post)));
     }
 
     private void initializeRelations(Post post) {
@@ -378,12 +340,12 @@ public class PostService {
         return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
     }
 
-    public record PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner,
+    public record PostView(Post post, List<PostBlock> blocks, List<String> tags, boolean owner,
                            long likeCount, boolean likedByMe, String thumbnailUrl) {
-        public PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner, long likeCount, boolean likedByMe) {
+        public PostView(Post post, List<PostBlock> blocks, List<String> tags, boolean owner, long likeCount, boolean likedByMe) {
             this(post, blocks, tags, owner, likeCount, likedByMe, null);
         }
-        public PostView(Post post, List<PostBlock> blocks, List<Tag> tags, boolean owner) {
+        public PostView(Post post, List<PostBlock> blocks, List<String> tags, boolean owner) {
             this(post, blocks, tags, owner, 0, false);
         }
     }
