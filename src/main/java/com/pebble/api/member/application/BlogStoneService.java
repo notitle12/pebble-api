@@ -23,6 +23,9 @@ public class BlogStoneService {
     private final MemberQueryService members;
     private final PostQueryService posts;
     public record Stone(String id, List<String> postIds, double x, double y, double rotation, @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) Integer shape) { }
+    public record Garden(long publicationCount) { }
+    public Garden mineGarden(long memberId) { members.findProfileCompleted(memberId);return new Garden(posts.publicationCount(memberId)); }
+    public Garden publicGarden(String handle) { return new Garden(posts.publicationCount(members.findPublicBlog(handle).getId())); }
     public record Layout(int version, List<Stone> stones) { }
     public record View(int version, List<Stone> stones, List<PostQueryService.StonePost> posts) { }
 
