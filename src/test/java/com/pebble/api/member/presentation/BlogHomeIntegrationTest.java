@@ -154,6 +154,27 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select count(*) from blog_stone_layout where member_id=?",Integer.class,owner.getId())).isZero();
     }
 
+    @Test void gardenCountsFirstPublicationOnceAndKeepsRecordsAfterDeletion() throws Exception {
+        String auth=bearer(owner),endpoint="/api/v1/members/me/stone-garden";
+        mvc.perform(get(endpoint)).andExpect(status().isUnauthorized());
+        mvc.perform(get(endpoint).header("Authorization",auth)).andExpect(jsonPath("$.data.publicationCount").value(0));
+        var draft=mapper.createObjectNode().put("title","first").put("visibilityStatus","HIDDEN").put("draft",true);
+        draft.putArray("blocks").addObject().put("type","TEXT").put("content","record");
+        var result=mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/posts").header("Authorization",auth).contentType("application/json").content(draft.toString())).andExpect(status().isCreated()).andReturn();
+        String id=mapper.readTree(result.getResponse().getContentAsString()).at("/data/id").asText();
+        mvc.perform(get(endpoint).header("Authorization",auth)).andExpect(jsonPath("$.data.publicationCount").value(0));
+        for(String content:List.of("{\"draft\":false,\"visibilityStatus\":\"PUBLIC\"}","{\"title\":\"edited\"}","{\"visibilityStatus\":\"HIDDEN\"}","{\"visibilityStatus\":\"PUBLIC\"}"))
+            mvc.perform(patch("/api/v1/posts/"+id).header("Authorization",auth).contentType("application/json").content(content)).andExpect(status().isOk());
+        mvc.perform(delete("/api/v1/posts/"+id).header("Authorization",auth)).andExpect(status().isNoContent());
+        mvc.perform(get(endpoint).header("Authorization",auth)).andExpect(jsonPath("$.data.publicationCount").value(1));
+        mvc.perform(get(path().replace("/home","/stone-garden"))).andExpect(jsonPath("$.data.publicationCount").value(1));
+        mvc.perform(get(endpoint).header("Authorization",bearer(other))).andExpect(jsonPath("$.data.publicationCount").value(0));
+        mvc.perform(get(endpoint+"?count=1000").header("Authorization",auth)).andExpect(status().isBadRequest());
+        jdbc.update("delete from post where id=?",Long.parseLong(id));
+        jdbc.update("delete from member where id=?",owner.getId());
+        assertThat(jdbc.queryForObject("select count(*) from post_publication_history where member_id=?",Long.class,owner.getId())).isZero();
+    }
+
     private Map<String,Object> settings(List<String> ids) { return new java.util.LinkedHashMap<>(Map.of("sections",List.of(section("ACTIVITY",true),section("TECH_STACKS",true),section("PROJECTS",true),section("RECENT_POSTS",true)),"techStacks",List.of(),"featuredProjectIds",ids)); }
     private Map<String,Object> section(String key,boolean visible) { return Map.of("key",key,"visible",visible); }
     private String mine() { return "/api/v1/members/me/blog-home"; }

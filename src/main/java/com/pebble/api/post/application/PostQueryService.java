@@ -15,6 +15,9 @@ public class PostQueryService {
     private final PostRepository posts;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
+    @Transactional(readOnly = true)
+    public long publicationCount(long memberId) { return jdbc.queryForObject("select count(*) from post_publication_history where member_id=?",Long.class,memberId); }
+
     public record ActivityDay(java.time.LocalDate date, long count) { }
 
     @Transactional(readOnly = true)

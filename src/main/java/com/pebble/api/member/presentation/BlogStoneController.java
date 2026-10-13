@@ -19,6 +19,14 @@ import org.springframework.web.bind.annotation.*;
 public class BlogStoneController {
     private final BlogStoneService stones;
     private final ObjectMapper mapper;
+    @GetMapping("/api/v1/blogs/{handle}/stone-garden")
+    public ApiResponse<BlogStoneService.Garden> publicGarden(@PathVariable String handle,HttpServletRequest request,@RequestBody(required=false) String body) {
+        noPayload(request,body);
+        if(!handle.matches("^[a-z][a-z0-9_-]{1,28}[a-z0-9_]$"))throw new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
+        return ApiResponse.of(stones.publicGarden(handle));
+    }
+    @GetMapping("/api/v1/members/me/stone-garden")
+    public ApiResponse<BlogStoneService.Garden> mineGarden(@AuthenticationPrincipal Jwt jwt,HttpServletRequest request,@RequestBody(required=false) String body) { noPayload(request,body);return ApiResponse.of(stones.mineGarden(member(jwt))); }
     @GetMapping("/api/v1/blogs/{handle}/stones")
     public ApiResponse<BlogStoneService.View> publicView(@PathVariable String handle,HttpServletRequest request,@RequestBody(required=false) String body) {
         noPayload(request,body);
