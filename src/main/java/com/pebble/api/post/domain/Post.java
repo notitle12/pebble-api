@@ -73,6 +73,13 @@ public class Post extends BaseTimeEntity {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
+    @Column(name = "board_display_order", nullable = false)
+    private int boardDisplayOrder;
+
+    public int getBoardDisplayOrder() { return boardDisplayOrder; }
+
+    public void changeBoardOrder(int position) { ensureNotDeleted(); boardDisplayOrder=position; }
+
     @Column(columnDefinition = "TEXT")
     private String summary;
 

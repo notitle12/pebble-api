@@ -19,7 +19,7 @@ import java.util.Locale;
 public final class PostWriteRequest {
     private static final Set<String> FIELDS = Set.of("title", "summary", "blocks", "categoryId",
             "tags", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft",
-            "thumbnailImageId");
+            "thumbnailImageId", "boardDisplayOrder");
 
     private PostWriteRequest() {
     }
@@ -98,6 +98,13 @@ public final class PostWriteRequest {
             if (!node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() < 0) fail("displayOrder", "0 이상의 정수 위치를 입력해 주세요.");
             order = node.intValue();
         }
+        Integer boardOrder=null;
+        if(json.has("boardDisplayOrder")) {
+            JsonNode node=json.get("boardDisplayOrder");
+            if(create || json.has("displayOrder") || json.has("boardId") || !node.isIntegralNumber() || !node.canConvertToInt() || node.intValue()<0)
+                fail("boardDisplayOrder", "게시판 안의 순서만 0 이상의 정수로 지정해 주세요.");
+            boardOrder=node.intValue();
+        }
         Boolean draft = null;
         if (json.has("draft")) {
             if (!json.get("draft").isBoolean()) fail("draft", "boolean 값을 지정해 주세요.");
@@ -109,7 +116,7 @@ public final class PostWriteRequest {
             fail("thumbnailImageId", "초안 생성 후 본문 이미지를 업로드한 다음 수정 요청에서 선택해 주세요.");
         }
         return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order,
-                boardId, projectId, draft, thumbnailImageId);
+                boardId, projectId, draft, thumbnailImageId, boardOrder);
     }
 
     public static long id(String value, String field) {

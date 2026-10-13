@@ -44,6 +44,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     private static final String PATH = "/api/v1/posts";
     private static final String ORIGIN = "http://localhost:3000";
     @Autowired MockMvc mvc;
+    @Autowired com.pebble.api.board.application.BoardService boardService;
     @Autowired ObjectMapper mapper;
     @Autowired MemberRepository members;
     @Autowired com.pebble.api.post.infrastructure.persistence.PostRepository postRepository;
@@ -61,6 +62,40 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     void setup() {
         owner = initializedMember("owner");
         other = initializedMember("other");
+    }
+
+    @Test
+    void boardOrderIsIndependentOfGlobalOrderAndIncludesPrivateOwnerPosts() throws Exception {
+        long boardA=boardService.create(owner.getId(),new com.pebble.api.board.application.BoardChanges(java.util.Set.of("name"),"A",null,0)).getId();
+        long boardB=boardService.create(owner.getId(),new com.pebble.api.board.application.BoardChanges(java.util.Set.of("name"),"B",null,1)).getId();
+        String a=create(owner,"HIDDEN",null,List.of()),b=create(owner,"PUBLIC",null,List.of()),c=create(owner,"PUBLIC",null,List.of());
+        change(a,"{\"boardId\":\""+boardA+"\"}").andExpect(status().isOk());
+        change(b,"{\"boardId\":\""+boardB+"\"}").andExpect(status().isOk());
+        change(c,"{\"boardId\":\""+boardA+"\"}").andExpect(status().isOk());
+        var global=response(mvc.perform(get("/api/v1/members/me/posts").header(HttpHeaders.AUTHORIZATION,bearer(owner)))).at("/data/content");
+        change(a,"{\"boardDisplayOrder\":0}").andExpect(status().isOk());
+        var after=response(mvc.perform(get("/api/v1/members/me/posts").header(HttpHeaders.AUTHORIZATION,bearer(owner)))).at("/data/content");
+        for(int i=0;i<global.size();i++){assertThat(after.get(i).get("id")).isEqualTo(global.get(i).get("id"));assertThat(after.get(i).get("displayOrder")).isEqualTo(global.get(i).get("displayOrder"));}
+        mvc.perform(get("/api/v1/members/me/posts").param("boardId",Long.toString(boardA)).header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[0].id").value(a)).andExpect(jsonPath("$.data.content[0].visibilityStatus").value("HIDDEN"));
+        change(c,"{\"displayOrder\":0}").andExpect(status().isOk());
+        mvc.perform(get("/api/v1/members/me/posts").param("boardId",Long.toString(boardA)).header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(jsonPath("$.data.content[0].id").value(a));
+        mvc.perform(get(PATH+"/"+b).header(HttpHeaders.AUTHORIZATION,bearer(owner))).andExpect(jsonPath("$.data.boardDisplayOrder").value(0));
+        mvc.perform(get(PATH+"/"+a).header(HttpHeaders.AUTHORIZATION,bearer(owner))).andExpect(status().isOk());
+        mvc.perform(get(PATH+"/"+a).header(HttpHeaders.AUTHORIZATION,bearer(other))).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/members/me/posts").param("boardId",Long.toString(boardA)).header(HttpHeaders.AUTHORIZATION,bearer(other))).andExpect(status().isNotFound());
+        mvc.perform(patch(PATH+"/"+a).header(HttpHeaders.AUTHORIZATION,bearer(other)).contentType(MediaType.APPLICATION_JSON).content("{\"boardDisplayOrder\":0}")).andExpect(status().isNotFound());
+        change(a,"{\"boardDisplayOrder\":2}").andExpect(status().isBadRequest());
+        change(a,"{\"boardDisplayOrder\":0,\"displayOrder\":1}").andExpect(status().isBadRequest());
+        change(a,"{\"boardId\":null}").andExpect(status().isOk());
+        change(a,"{\"boardDisplayOrder\":0}").andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/members/me/posts").param("boardId",Long.toString(boardA)).header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(jsonPath("$.data.content[0].id").value(c)).andExpect(jsonPath("$.data.content[0].boardDisplayOrder").value(0));
+        mvc.perform(delete(PATH+"/"+c).header(HttpHeaders.AUTHORIZATION,bearer(owner))).andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/members/me/posts").param("boardId",Long.toString(boardA)).header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(jsonPath("$.data.totalElements").value(0));
     }
 
     @Test

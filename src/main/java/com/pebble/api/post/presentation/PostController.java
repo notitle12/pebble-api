@@ -86,7 +86,7 @@ public class PostController {
 
     @GetMapping("/api/v1/members/me/posts")
     public ApiResponse<PostPage> mine(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
-        checkQuery(query, Set.of("page", "size", "sort", "visibilityStatus"));
+        checkQuery(query, Set.of("page", "size", "sort", "visibilityStatus", "boardId"));
         PostVisibility visibility = null;
         if (query.containsKey("visibilityStatus")) {
             try {
@@ -97,7 +97,7 @@ public class PostController {
             }
         }
         return ApiResponse.of(page(likes.decorate(
-                posts.listMine(memberId(jwt), visibility, pageable(query, "displayOrder")), requesterId(jwt))));
+                posts.listMine(memberId(jwt), visibility, optionalId(query,"boardId"), pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/{memberId:[0-9]+}/posts")
