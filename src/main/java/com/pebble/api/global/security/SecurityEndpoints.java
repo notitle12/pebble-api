@@ -73,6 +73,8 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.GET, "/api/v1/blogs/{handle}/links", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/blogs/{handle}/home", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/blogs/{handle}/stones", Access.PUBLIC),
+            new Endpoint(HttpMethod.GET, "/api/v1/blogs/{handle}/stone-garden", Access.PUBLIC),
+            new Endpoint(HttpMethod.GET, "/api/v1/members/me/stone-garden", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/blog-stones", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/blog-stones/posts", Access.USER),
             new Endpoint(HttpMethod.PUT, "/api/v1/members/me/blog-stones", Access.USER),

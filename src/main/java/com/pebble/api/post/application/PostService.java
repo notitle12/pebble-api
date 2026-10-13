@@ -40,6 +40,7 @@ public class PostService {
     private final ProjectQueryService projects;
     private final org.springframework.beans.factory.ObjectProvider<com.pebble.api.global.media.R2ObjectStorage> mediaStorage;
     private final PostThumbnailService thumbnails;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @Transactional
     public void purgeForMember(long memberId) {
@@ -70,7 +71,14 @@ public class PostService {
         if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
         post.changeTags(input.tags());
         posts.flush();
+        recordPublication(post);
         return detailView(post, true);
+    }
+
+    private void recordPublication(Post post) {
+        if(post.isDraft() || post.getVisibility()!=PostVisibility.PUBLIC || post.getPublishedAt()==null)return;
+        jdbc.update("insert into post_publication_history(post_id,member_id,first_published_at) values (?,?,?) on conflict(post_id) do nothing",
+                post.getId(),post.getAuthor().getId(),java.sql.Timestamp.from(post.getPublishedAt()));
     }
 
     public PostView detail(long postId, Long requesterId) {
@@ -144,6 +152,7 @@ public class PostService {
         else if (input.has("blocks")) thumbnails.clearIfNoLongerReferenced(post);
         if (input.has("tags")) post.changeTags(input.tags());
         posts.flush();
+        recordPublication(post);
         return detailView(post, true);
     }
 
