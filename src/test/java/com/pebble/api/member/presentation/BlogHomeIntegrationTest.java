@@ -149,6 +149,7 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(put("/api/v1/members/me/blog-stones").header("Authorization",bearer(owner)).contentType("application/json").content("{\"version\":0,\"stones\":[]}")).andExpect(status().isOk());
         owner.requestWithdrawal(Instant.now());members.saveAndFlush(owner);
         mvc.perform(get(path().replace("/home","/stones"))).andExpect(status().isNotFound());
+        jdbc.update("delete from post where author_member_id=?",owner.getId());
         jdbc.update("delete from member where id=?",owner.getId());
         assertThat(jdbc.queryForObject("select count(*) from blog_stone_layout where member_id=?",Integer.class,owner.getId())).isZero();
     }
