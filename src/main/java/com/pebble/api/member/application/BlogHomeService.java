@@ -30,9 +30,12 @@ public class BlogHomeService {
     private final Clock clock;
 
     public record Section(String key, boolean visible) { }
-    public record Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds) { }
+    public record Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay) {
+        public Settings { if (activityDisplay == null) activityDisplay = "GRASS"; }
+        public Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds) { this(sections, techStacks, featuredProjectIds, "GRASS"); }
+    }
     public record Activity(LocalDate from, LocalDate to, String timeZone, List<PostQueryService.ActivityDay> days) { }
-    public record Home(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, Activity activity) { }
+    public record Home(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Activity activity) { }
 
     public Settings mine(long memberId) {
         members.findProfileCompleted(memberId);
@@ -71,7 +74,7 @@ public class BlogHomeService {
         LocalDate to = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul")));
         LocalDate from = to.minusYears(1).plusDays(1);
         boolean activityVisible = settings.sections().stream().anyMatch(section -> section.key().equals("ACTIVITY") && section.visible());
-        return new Home(settings.sections(), settings.techStacks(), List.copyOf(publicProjects),
+        return new Home(settings.sections(), settings.techStacks(), List.copyOf(publicProjects), settings.activityDisplay(),
                 new Activity(from, to, "Asia/Seoul", activityVisible ? posts.publicActivity(memberId, from, to) : List.of()));
     }
 
