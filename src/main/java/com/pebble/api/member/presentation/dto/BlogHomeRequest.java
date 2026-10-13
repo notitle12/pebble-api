@@ -14,7 +14,14 @@ public final class BlogHomeRequest {
     private BlogHomeRequest() { }
 
     public static BlogHomeService.Settings parse(JsonNode json) {
-        fields(json, Set.of("sections", "techStacks", "featuredProjectIds"));
+        if (json == null || !json.isObject()) throw MediaRequest.invalid();
+        fields(json, json.has("activityDisplay") ? Set.of("sections", "techStacks", "featuredProjectIds", "activityDisplay") : Set.of("sections", "techStacks", "featuredProjectIds"));
+        String activityDisplay = "GRASS";
+        if (json.has("activityDisplay")) {
+            var display = json.get("activityDisplay");
+            if (!display.isTextual() || !Set.of("GRASS", "STONES").contains(display.textValue())) throw MediaRequest.invalid();
+            activityDisplay = display.textValue();
+        }
         var sectionNodes = array(json.get("sections"), 4);
         if (sectionNodes.size() != 4) throw MediaRequest.invalid();
         List<BlogHomeService.Section> sections = new ArrayList<>();
@@ -42,7 +49,7 @@ public final class BlogHomeRequest {
             try { Long.parseLong(item.textValue()); } catch (NumberFormatException exception) { throw MediaRequest.invalid(); }
             ids.add(item.textValue());
         }
-        return new BlogHomeService.Settings(List.copyOf(sections), List.copyOf(stacks), List.copyOf(ids));
+        return new BlogHomeService.Settings(List.copyOf(sections), List.copyOf(stacks), List.copyOf(ids), activityDisplay);
     }
 
     private static JsonNode array(JsonNode node, int max) {

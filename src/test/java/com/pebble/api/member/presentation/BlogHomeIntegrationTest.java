@@ -114,6 +114,45 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select count(*) from blog_home_settings where member_id=?",Integer.class,owner.getId())).isZero();
     }
 
+    @Test void stonesMergeRecordsWithoutDuplicationAndProtectVersionsAndOwnership() throws Exception {
+        long first=post(owner,Instant.now(),"PUBLIC",false,false),second=post(owner,Instant.now(),"PUBLIC",false,false),foreign=post(other,Instant.now(),"PUBLIC",false,false);
+        String mineStones="/api/v1/members/me/blog-stones";
+        var merged=Map.of("id","stone-a","postIds",List.of(Long.toString(first),Long.toString(second)),"x",500,"y",300,"rotation",10);
+        mvc.perform(get(mineStones)).andExpect(status().isUnauthorized());
+        mvc.perform(put(mineStones).contentType("application/json").content("{}")).andExpect(status().isForbidden());
+        mvc.perform(get(mineStones).header("Authorization",bearer(owner))).andExpect(jsonPath("$.data.version").value(0));
+        String body=mapper.writeValueAsString(Map.of("version",0,"stones",List.of(merged)));
+        mvc.perform(put(mineStones).header("Authorization",bearer(owner)).contentType("application/json").content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.data.version").value(1)).andExpect(jsonPath("$.data.stones[0].postIds.length()").value(2));
+        mvc.perform(put(mineStones).header("Authorization",bearer(owner)).contentType("application/json").content(body)).andExpect(status().isConflict());
+        mvc.perform(get(path().replace("/home","/stones"))).andExpect(status().isOk()).andExpect(jsonPath("$.data.posts.length()").value(2));
+        mvc.perform(get(mineStones).header("Authorization",bearer(other))).andExpect(jsonPath("$.data.stones.length()").value(0));
+        var bad=new java.util.LinkedHashMap<String,Object>(merged);bad.put("postIds",List.of(Long.toString(foreign)));
+        mvc.perform(put(mineStones).header("Authorization",bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(Map.of("version",1,"stones",List.of(bad))))).andExpect(status().isNotFound());
+        bad.put("id","stone-b");bad.put("postIds",List.of(Long.toString(first)));
+        mvc.perform(put(mineStones).header("Authorization",bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(Map.of("version",1,"stones",List.of(merged,bad))))).andExpect(status().isBadRequest());
+        for(Object invalid:List.of(-1,1001,"500")){bad.put("x",invalid);mvc.perform(put(mineStones).header("Authorization",bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(Map.of("version",1,"stones",List.of(bad))))).andExpect(status().isBadRequest());}
+        jdbc.update("update post set visibility_status='HIDDEN' where id=?",first);
+        mvc.perform(get(path().replace("/home","/stones"))).andExpect(jsonPath("$.data.stones[0].postIds.length()").value(1)).andExpect(jsonPath("$.data.posts[0].id").value(Long.toString(second)));
+        jdbc.update("update post set visibility_status='DELETED' where id=?",second);
+        mvc.perform(get(path().replace("/home","/stones"))).andExpect(jsonPath("$.data.stones.length()").value(0)).andExpect(jsonPath("$.data.posts.length()").value(0));
+    }
+
+    @Test void stoneInventoryAndDisplayChoiceStayPrivateAndCascadeOnWithdrawal() throws Exception {
+        post(owner,Instant.now(),"PUBLIC",false,false);post(owner,Instant.now(),"HIDDEN",false,false);post(other,Instant.now(),"PUBLIC",false,false);
+        String inventory="/api/v1/members/me/blog-stones/posts";
+        mvc.perform(get(inventory).header("Authorization",bearer(owner))).andExpect(status().isOk()).andExpect(jsonPath("$.data.content.length()").value(1)).andExpect(jsonPath("$.data.hasNext").value(false));
+        for(String query:List.of("?page=-1","?page=0&page=1","?page=01","?memberId=1"))mvc.perform(get(inventory+query).header("Authorization",bearer(owner))).andExpect(status().isBadRequest());
+        var input=settings(List.of());input.put("activityDisplay","STONES");
+        mvc.perform(put(mine()).header("Authorization",bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input))).andExpect(status().isOk()).andExpect(jsonPath("$.data.activityDisplay").value("STONES"));
+        mvc.perform(get(path())).andExpect(jsonPath("$.data.activityDisplay").value("STONES"));
+        input.put("activityDisplay","INVALID");mvc.perform(put(mine()).header("Authorization",bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input))).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/v1/members/me/blog-stones").header("Authorization",bearer(owner)).contentType("application/json").content("{\"version\":0,\"stones\":[]}")).andExpect(status().isOk());
+        owner.requestWithdrawal(Instant.now());members.saveAndFlush(owner);
+        mvc.perform(get(path().replace("/home","/stones"))).andExpect(status().isNotFound());
+        jdbc.update("delete from member where id=?",owner.getId());
+        assertThat(jdbc.queryForObject("select count(*) from blog_stone_layout where member_id=?",Integer.class,owner.getId())).isZero();
+    }
+
     private Map<String,Object> settings(List<String> ids) { return new java.util.LinkedHashMap<>(Map.of("sections",List.of(section("ACTIVITY",true),section("TECH_STACKS",true),section("PROJECTS",true),section("RECENT_POSTS",true)),"techStacks",List.of(),"featuredProjectIds",ids)); }
     private Map<String,Object> section(String key,boolean visible) { return Map.of("key",key,"visible",visible); }
     private String mine() { return "/api/v1/members/me/blog-home"; }
@@ -121,5 +160,5 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
     private String bearer(Member member) { return "Bearer "+tokens.issueForMember(member.getId(),Instant.now()); }
     private Member blog() { String key=UUID.randomUUID().toString().substring(0,12);var m=new Member("writer-"+key,null,MemberStatus.ACTIVE,null,null);m.completeProfile("blog-"+key,"blog-"+key,m.getNickname(),Instant.now());return members.saveAndFlush(m); }
     private long project(Member member,String visibility) { long id=TsidGenerator.generate();jdbc.update("insert into project(id,owner_member_id,name,lifecycle_status,visibility_status,created_at,updated_at) values(?,?,?,'IN_PROGRESS',?,now(),now())",id,member.getId(),"대표 프로젝트",visibility);return id; }
-    private void post(Member member,Instant published,String visibility,boolean blocked,boolean draft) { long id=TsidGenerator.generate();jdbc.update("insert into post(id,post_number,author_member_id,title,visibility_status,is_blocked,is_draft,published_at,created_at,updated_at,blocked_at,blocked_by_admin_id) values(?,?,?,?,?,?,?,?,now(),now(),?,?)",id,id,member.getId(),"활동 검증",visibility,blocked,draft,java.sql.Timestamp.from(published),blocked?java.sql.Timestamp.from(Instant.now()):null,blocked?1L:null); }
+    private long post(Member member,Instant published,String visibility,boolean blocked,boolean draft) { long id=TsidGenerator.generate();jdbc.update("insert into post(id,post_number,author_member_id,title,visibility_status,is_blocked,is_draft,published_at,created_at,updated_at,blocked_at,blocked_by_admin_id) values(?,?,?,?,?,?,?,?,now(),now(),?,?)",id,id,member.getId(),"활동 검증",visibility,blocked,draft,java.sql.Timestamp.from(published),blocked?java.sql.Timestamp.from(Instant.now()):null,blocked?1L:null); return id; }
 }
