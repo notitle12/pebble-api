@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Page;
 
-public record PostResponse(String id, String postNumber, String slug, String urlKey, int displayOrder, Author author, String title, String summary,
+public record PostResponse(String id, String postNumber, String slug, String urlKey, int displayOrder, int boardDisplayOrder, Author author, String title, String summary,
                            @JsonInclude(JsonInclude.Include.NON_NULL) List<Block> blocks,
                            Classification category, List<String> tags,
                            String boardId, String projectId, String thumbnailUrl, String thumbnailImageId, boolean draft,
@@ -24,7 +24,7 @@ public record PostResponse(String id, String postNumber, String slug, String url
         var post = view.post();
         var member = post.getAuthor();
         var category = post.getCategory();
-        return new PostResponse(post.getId().toString(), Long.toString(post.getPostNumber()), post.getSlug(), post.getSlug() == null ? Long.toString(post.getPostNumber()) : post.getSlug(), post.getDisplayOrder(),
+        return new PostResponse(post.getId().toString(), Long.toString(post.getPostNumber()), post.getSlug(), post.getSlug() == null ? Long.toString(post.getPostNumber()) : post.getSlug(), post.getDisplayOrder(), post.getBoardDisplayOrder(),
                 new Author(member.getId().toString(), member.getHandle(), member.getBlogName(), member.getNickname(),
                 imageUrl.apply(member)), post.getTitle(), post.getSummary(),
                 view.blocks() == null ? null : view.blocks().stream().map(block -> new Block(block.getType(),

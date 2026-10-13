@@ -64,6 +64,7 @@ public class PostService {
         Post post = posts.saveAndFlush(new Post(author, category, input.title(), input.summary(), input.visibilityStatus(), slug, lastNumber + 1));
         post.initializeDraft(Boolean.TRUE.equals(input.draft()));
         post.changeBoard(input.boardId());
+        moveToBoardStart(post, null);
         post.changeProject(input.projectId());
         ordered.add(position, post);
         applyOrder(ordered);
@@ -130,9 +131,11 @@ public class PostService {
                 post.finalizeDraft(address);
             }
         }
+        Long previousBoard=post.getBoardId();
         if (input.has("boardId")) {
             if (input.boardId() != null) boards.resolveForPost(input.boardId(), memberId);
             post.changeBoard(input.boardId());
+            if(!java.util.Objects.equals(previousBoard,input.boardId())) moveToBoardStart(post,previousBoard);
         }
         if (input.has("projectId")) {
             if (input.projectId() != null) projects.resolveForPost(input.projectId(), memberId);
@@ -147,6 +150,7 @@ public class PostService {
                 input.has("summary") ? input.summary() : post.getSummary(), category);
         if (input.has("visibilityStatus")) post.changeVisibility(input.visibilityStatus());
         if (input.has("displayOrder")) move(post, input.displayOrder());
+        if (input.has("boardDisplayOrder")) moveInBoard(post,input.boardDisplayOrder());
         if (input.has("blocks")) replaceBlocks(post, input.blocks());
         if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
         else if (input.has("blocks")) thumbnails.clearIfNoLongerReferenced(post);
@@ -163,6 +167,7 @@ public class PostService {
         post.delete();
         posts.flush();
         applyOrder(posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, PostVisibility.DELETED));
+        normalizeBoard(memberId,post.getBoardId());
     }
 
     public Page<PostView> listPublic(Long categoryId, Long authorId, Pageable pageable) {
@@ -222,6 +227,7 @@ public class PostService {
         if (post.getVisibility() == PostVisibility.DELETED) return;
         post.delete();
         posts.flush();
+        normalizeBoard(post.getAuthor().getId(),post.getBoardId());
     }
 
     private Post forManagementUpdate(long id) {
@@ -232,7 +238,7 @@ public class PostService {
 
     public Page<PostView> listBoard(long ownerId, long boardId, Pageable pageable) {
         boards.requirePublic(ownerId, boardId);
-        return page(posts.findAll(publicFilter(null, ownerId, boardId), pageable), false);
+        return page(posts.findAll(publicFilter(null, ownerId, boardId), boardPageable(pageable)), false);
     }
 
     public Page<PostView> listProject(long projectId, Pageable pageable) {
@@ -258,13 +264,17 @@ public class PostService {
         };
     }
 
-    public Page<PostView> listMine(long memberId, PostVisibility visibility, Pageable pageable) {
+    public Page<PostView> listMine(long memberId, PostVisibility visibility, Pageable pageable) { return listMine(memberId,visibility,null,pageable); }
+
+    public Page<PostView> listMine(long memberId, PostVisibility visibility, Long boardId, Pageable pageable) {
         members.findActiveById(memberId);
+        if(boardId!=null)boards.resolveForPost(boardId,memberId);
         Specification<Post> filter = (root, query, cb) -> cb.and(
                 cb.equal(root.get("author").get("id"), memberId),
                 cb.notEqual(root.get("visibility"), PostVisibility.DELETED),
-                visibility == null ? cb.conjunction() : cb.equal(root.get("visibility"), visibility));
-        return page(posts.findAll(filter, pageable), true);
+                visibility == null ? cb.conjunction() : cb.equal(root.get("visibility"), visibility),
+                boardId==null ? cb.conjunction() : cb.equal(root.get("boardId"),boardId));
+        return page(posts.findAll(filter, boardId==null?pageable:boardPageable(pageable)), true);
     }
 
     public Page<PostView> listBlog(String handle, Long categoryId, Pageable pageable) {
@@ -300,6 +310,33 @@ public class PostService {
                     block.alignment()));
         }
         blocks.saveAll(replacement);
+    }
+
+    private Pageable boardPageable(Pageable pageable) {
+        return org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(),pageable.getPageSize(),
+                org.springframework.data.domain.Sort.by(pageable.getSort().stream().map(order->order.getProperty().equals("displayOrder")?order.withProperty("boardDisplayOrder"):order).toList()));
+    }
+    private List<Post> boardPosts(long memberId,Long boardId) {
+        return posts.findByAuthorIdAndBoardIdAndVisibilityNotOrderByBoardDisplayOrderAscIdAsc(memberId,boardId,PostVisibility.DELETED);
+    }
+    private void normalizeBoard(long memberId,Long boardId) {
+        if(boardId==null)return;
+        var rows=boardPosts(memberId,boardId);
+        for(int index=0;index<rows.size();index++)rows.get(index).changeBoardOrder(index);
+    }
+    private void moveToBoardStart(Post post,Long previousBoard) {
+        normalizeBoard(post.getAuthor().getId(),previousBoard);
+        if(post.getBoardId()==null){post.changeBoardOrder(0);return;}
+        var rows=boardPosts(post.getAuthor().getId(),post.getBoardId());
+        rows.removeIf(row->row.getId().equals(post.getId()));rows.add(0,post);
+        for(int index=0;index<rows.size();index++)rows.get(index).changeBoardOrder(index);
+    }
+    private void moveInBoard(Post post,int position) {
+        if(post.getBoardId()==null)throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR,"boardDisplayOrder","게시판에 속한 글만 순서를 바꿀 수 있어요.");
+        var rows=boardPosts(post.getAuthor().getId(),post.getBoardId());
+        if(position>=rows.size())throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR,"boardDisplayOrder","게시판의 글 수 안에서 순서를 지정해 주세요.");
+        rows.removeIf(row->row.getId().equals(post.getId()));rows.add(position,post);
+        for(int index=0;index<rows.size();index++)rows.get(index).changeBoardOrder(index);
     }
 
     private void move(Post post, int position) {
