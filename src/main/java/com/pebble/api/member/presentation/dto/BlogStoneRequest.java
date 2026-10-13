@@ -17,7 +17,9 @@ public final class BlogStoneRequest {
         var stones=new ArrayList<BlogStoneService.Stone>();
         var seenIds=new HashSet<String>();var seenPosts=new HashSet<String>();
         for(var node:nodes) {
-            fields(node, Set.of("id", "postIds", "x", "y", "rotation"));
+            fields(node, node.has("shape")?Set.of("id", "postIds", "x", "y", "rotation", "shape"):Set.of("id", "postIds", "x", "y", "rotation"));
+            Integer shape=null;
+            if(node.has("shape")){var value=node.get("shape");if(!value.isIntegralNumber()||!value.canConvertToInt()||value.intValue()<0||value.intValue()>5)throw MediaRequest.invalid();shape=value.intValue();}
             var id=node.get("id");
             if(!id.isTextual() || !id.textValue().matches("[a-zA-Z0-9_-]{1,64}") || !seenIds.add(id.textValue())) throw MediaRequest.invalid();
             var sources=node.get("postIds");
@@ -29,7 +31,7 @@ public final class BlogStoneRequest {
                 postIds.add(source.textValue());
             }
             if(seenPosts.size()>2000) throw MediaRequest.invalid();
-            stones.add(new BlogStoneService.Stone(id.textValue(), java.util.List.copyOf(postIds), number(node.get("x"),0,1000),number(node.get("y"),0,360),number(node.get("rotation"),-180,180)));
+            stones.add(new BlogStoneService.Stone(id.textValue(), java.util.List.copyOf(postIds), number(node.get("x"),0,1000),number(node.get("y"),0,360),number(node.get("rotation"),-180,180),shape));
         }
         return new BlogStoneService.Layout(json.get("version").intValue(), java.util.List.copyOf(stones));
     }

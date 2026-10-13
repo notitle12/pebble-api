@@ -22,7 +22,7 @@ public class BlogStoneService {
     private final ObjectMapper mapper;
     private final MemberQueryService members;
     private final PostQueryService posts;
-    public record Stone(String id, List<String> postIds, double x, double y, double rotation) { }
+    public record Stone(String id, List<String> postIds, double x, double y, double rotation, @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) Integer shape) { }
     public record Layout(int version, List<Stone> stones) { }
     public record View(int version, List<Stone> stones, List<PostQueryService.StonePost> posts) { }
 
@@ -47,7 +47,7 @@ public class BlogStoneService {
     private View visible(long memberId, Layout layout) {
         var sources = posts.stonePosts(memberId, ids(layout), false);
         Set<String> allowed = sources.stream().map(PostQueryService.StonePost::id).collect(Collectors.toSet());
-        var visible = layout.stones().stream().map(stone -> new Stone(stone.id(), stone.postIds().stream().filter(allowed::contains).toList(), stone.x(), stone.y(), stone.rotation())).filter(stone -> !stone.postIds().isEmpty()).toList();
+        var visible = layout.stones().stream().map(stone -> new Stone(stone.id(), stone.postIds().stream().filter(allowed::contains).toList(), stone.x(), stone.y(), stone.rotation(), stone.shape())).filter(stone -> !stone.postIds().isEmpty()).toList();
         return new View(layout.version(), visible, sources);
     }
     private List<Long> ids(Layout layout) { return layout.stones().stream().flatMap(stone -> stone.postIds().stream()).map(Long::parseLong).toList(); }
