@@ -20,6 +20,8 @@ import org.springframework.data.repository.query.Param;
 public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificationExecutor<Post> {
     List<Post> findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(Long authorId, PostVisibility visibility);
 
+    List<Post> findByAuthorIdAndBoardIdAndVisibilityNotOrderByBoardDisplayOrderAscIdAsc(Long authorId, Long boardId, PostVisibility visibility);
+
     @Override
     @EntityGraph(attributePaths = {"author", "category"})
     Optional<Post> findById(Long id);
