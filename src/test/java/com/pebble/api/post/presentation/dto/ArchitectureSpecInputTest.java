@@ -20,6 +20,30 @@ class ArchitectureSpecInputTest {
          "edges":[{"id":"sql","source":"app","target":"db","label":"SQL"}]}
         """;
 
+    @Test void acceptsGenericGroupCategoriesAndOptionalDetails() throws Exception {
+        ObjectNode value = spec();
+        ((ObjectNode) value.withArray("groups").get(0)).put("type", "CLOUD").put("label", "");
+        ((ObjectNode) value.withArray("groups").get(1)).put("type", "CONTAINER").put("label", "");
+        validate(value.toString());
+        ((ObjectNode) value.withArray("groups").get(0)).put("type", "CONTAINER");
+        reject(value.toString());
+        ((ObjectNode) value.withArray("groups").get(0)).put("type", "CUSTOM").put("typeLabel", "VPC");
+        validate(value.toString());
+        ((ObjectNode) value.withArray("groups").get(0)).put("label", "x".repeat(101));
+        reject(value.toString());
+    }
+
+    @Test void acceptsExpandedTechnologyIconsButRejectsExternalImages() throws Exception {
+        ObjectNode value = spec();
+        ObjectNode node = (ObjectNode) value.withArray("nodes").get(0);
+        for (String icon : List.of("JAVA", "SPRING_BOOT", "PYTHON", "NEXTJS", "MYSQL", "KUBERNETES", "GOOGLE_CLOUD", "PYTORCH", "OPENAI", "GITHUB_ACTIONS")) {
+            node.put("icon", icon); validate(value.toString());
+        }
+        for (String icon : List.of("https://example.com/icon.svg", "UNKNOWN", "<svg/>")) {
+            node.put("icon", icon); reject(value.toString());
+        }
+    }
+
     @Test void preservesNestedGroupsAndAllowsDirectedCyclesAndPlainTextLabels() throws Exception {
         ObjectNode spec = spec();
         spec.withArray("edges").addObject().put("id", "reply").put("source", "db").put("target", "app").putNull("label");
