@@ -13,12 +13,31 @@ import java.util.Set;
 public final class ProjectDocumentInput {
     private ProjectDocumentInput() { }
     public static void validate(JsonNode document) {
-        object(document, Set.of("version","teamSize","role","sections"));
+        object(document, Set.of("version","teamSize","role","sections","teamComposition","roles"));
         if (!document.path("version").isInt() || document.path("version").asInt()!=1
                 || document.toString().length()>350_000) fail();
         JsonNode team=document.get("teamSize");
         if (team!=null&&!team.isNull()&&(!team.isInt()||team.asInt()<1||team.asInt()>10000)) fail();
-        text(document.get("role"),200,true);
+        text(document.get("role"),10000,true);
+        JsonNode composition=document.get("teamComposition");
+        if(composition!=null){
+            if(!composition.isArray()||composition.size()>20)fail();
+            Set<String> jobs=new HashSet<>();int total=0;
+            for(JsonNode item:composition){
+                object(item,Set.of("role","count"));
+                String job=text(item.get("role"),40,false);JsonNode count=item.get("count");
+                if(!job.equals(job.strip())||job.isBlank()||!jobs.add(job.toLowerCase(java.util.Locale.ROOT))
+                        ||count==null||!count.isInt()||count.asInt()<0||count.asInt()>10000)fail();
+                total+=count.asInt();
+            }
+            if(total>10000||(total>0&&(team==null||team.isNull()||team.asInt()!=total))||(total==0&&team!=null&&!team.isNull()))fail();
+        }
+        JsonNode roles=document.get("roles");
+        if(roles!=null){
+            if(!roles.isArray()||roles.size()>10)fail();
+            Set<String> unique=new HashSet<>();
+            for(JsonNode role:roles){String value=text(role,200,false);if(value.isBlank()||!value.equals(value.strip())||!unique.add(value))fail();}
+        }
         JsonNode sections=document.get("sections");
         if(sections==null||!sections.isArray()||sections.size()>6)fail();
         Set<String> seen=new HashSet<>();
