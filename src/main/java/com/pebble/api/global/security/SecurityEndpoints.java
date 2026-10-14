@@ -52,6 +52,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.DELETE, "/api/v1/admin/projects/{id:[0-9]+}", Access.ADMIN),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/posts", Access.USER),
+            new Endpoint(HttpMethod.GET, "/api/v1/members/me/blog/posts", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/boards", Access.USER),
             new Endpoint(HttpMethod.PUT, "/api/v1/members/me/boards", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/projects", Access.USER),

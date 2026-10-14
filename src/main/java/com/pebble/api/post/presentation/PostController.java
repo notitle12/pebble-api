@@ -100,6 +100,18 @@ public class PostController {
                 posts.listMine(memberId(jwt), visibility, optionalId(query,"boardId"), pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
+    @GetMapping("/api/v1/members/me/blog/posts")
+    public ApiResponse<PostPage> ownBlog(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size", "sort", "boardId", "q", "placement"));
+        String placement = query.getFirst("placement");
+        if (query.containsKey("placement") && (!Set.of("boards", "projects").contains(placement == null ? "" : placement)
+                || query.containsKey("q") || query.containsKey("boardId"))) throw invalid("placement");
+        if (query.containsKey("q") && query.containsKey("boardId")) throw invalid("q");
+        String term = query.containsKey("q") ? PostWriteRequest.searchTerm(query.getFirst("q")) : null;
+        return ApiResponse.of(page(likes.decorate(posts.listOwnBlog(memberId(jwt), optionalId(query, "boardId"),
+                term, placement, pageable(query, "displayOrder")), requesterId(jwt))));
+    }
+
     @GetMapping("/api/v1/members/{memberId:[0-9]+}/posts")
     public ApiResponse<PostPage> blog(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query,
                                       @AuthenticationPrincipal Jwt jwt) {
