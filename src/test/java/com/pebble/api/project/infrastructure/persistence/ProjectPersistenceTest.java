@@ -34,6 +34,30 @@ class ProjectPersistenceTest {
     @Autowired JdbcTemplate jdbc;
 
     @Test
+    void paginatedProjectsLoadDifferentOwnersWithoutAdditionalSelects() {
+        var ids = java.util.stream.IntStream.range(0, 3).mapToObj(i -> persistProject().getId()).toList();
+        entityManager.flush();
+        entityManager.clear();
+        var statistics = entityManager.getEntityManagerFactory()
+                .unwrap(org.hibernate.SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            var page = projects.findAll((root, query, cb) -> root.get("id").in(ids),
+                    org.springframework.data.domain.PageRequest.of(0, 2));
+            assertThat(page.getTotalElements()).isEqualTo(3);
+            assertThat(page.getContent()).hasSize(2);
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(2);
+            for (Project project : page) {
+                assertThat(project.getOwner().getNickname()).isNotBlank();
+            }
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(2);
+        } finally {
+            statistics.setStatisticsEnabled(false);
+        }
+    }
+
+    @Test
     void persistsProjectAndOrderedChildrenAtDocumentedLimits() {
         Project project = projects.saveAndFlush(new Project(persistMember(), "n".repeat(120), "s".repeat(500),
                 "d".repeat(20_000), "a".repeat(20_000), "e".repeat(10_000),
