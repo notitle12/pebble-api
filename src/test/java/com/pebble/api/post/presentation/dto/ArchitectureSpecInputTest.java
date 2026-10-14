@@ -30,6 +30,22 @@ class ArchitectureSpecInputTest {
         assertThat(parsed.language()).isNull();
     }
 
+    @Test void preservesCustomTypeLabelsAndRejectsInvalidOrBuiltInOverrides() throws Exception {
+        ObjectNode value = spec();
+        ObjectNode group = (ObjectNode) value.withArray("groups").get(0);
+        ObjectNode node = (ObjectNode) value.withArray("nodes").get(0);
+        group.put("type", "CUSTOM").put("typeLabel", "개발 환경");
+        node.put("type", "CUSTOM").put("typeLabel", "인증 서버");
+        validate(value.toString());
+        for (String label : List.of("", " ", "😀".repeat(51))) {
+            node.put("typeLabel", label); reject(value.toString());
+        }
+        node.put("typeLabel", "😀".repeat(50)); validate(value.toString());
+        node.put("type", "APP"); reject(value.toString());
+        node.putNull("typeLabel"); validate(value.toString());
+        group.put("type", "AWS"); reject(value.toString());
+    }
+
     @Test void rejectsMalformedVersionsUnknownFieldsAndDuplicateJsonKeys() {
         for (String value : List.of("null", "[]", "{", VALID + " {}", VALID.replace("1,", "2,"),
                 VALID.replace("1,", "1.0,"), VALID.replace("1,", "\"1\","),
