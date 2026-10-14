@@ -65,6 +65,7 @@ public class ProjectService {
         Project project = projects.saveAndFlush(new Project(owner, input.name(), input.summary(), input.description(),
                 input.architectureDescription(), input.executionInstructions(), input.lifecycleStatus(),
                 input.startedOn(), input.completedOn(), input.visibilityStatus()));
+        if(input.has("document")){validateDocumentImages(project,input.document());project.changeDocument(input.document());}
         replaceFeatures(project, input.features());
         replaceLinks(project, input.links());
         replaceTechStacks(project, selected, List.of());
@@ -205,6 +206,7 @@ public class ProjectService {
                 input.has("startedOn") ? input.startedOn() : project.getStartedOn(),
                 input.has("completedOn") ? input.completedOn() : project.getCompletedOn());
         if (input.has("visibilityStatus")) project.changeVisibility(input.visibilityStatus());
+        if(input.has("document")){validateDocumentImages(project,input.document());project.changeDocument(input.document());}
         if (input.has("features")) replaceFeatures(project, input.features());
         if (input.has("links")) replaceLinks(project, input.links());
         if (selected != null) replaceTechStacks(project, selected, currentTechStacks);
@@ -261,7 +263,7 @@ public class ProjectService {
         initializeOwner(project);
         return new ProjectView(project, features.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
                 links.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
-                projectTechStacks.findForProjects(List.of(project.getId())).stream().map(ProjectTechStack::getTechStack).toList(), true, owner, 0, false, mediaViews(project));
+                projectTechStacks.findForProjects(List.of(project.getId())).stream().map(ProjectTechStack::getTechStack).toList(), true, owner, 0, false, mediaViews(project,owner));
     }
 
     private Page<ProjectView> page(Page<Project> page, boolean owner) {
@@ -278,12 +280,32 @@ public class ProjectService {
         });
     }
 
-    private List<ProjectMediaView> mediaViews(Project project) {
+    private List<ProjectMediaView> mediaViews(Project project,boolean owner) {
         var client = mediaStorage.getIfAvailable();
         boolean visible = client != null && isPublic(project);
         return media.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()).stream()
-                .map(item -> ProjectMediaView.from(item, visible ? client.signedUrl(item.getStorageKey()) : null,
-                        visible ? client.signedUrl(item.getThumbnailStorageKey()) : null)).toList();
+                .filter(item->owner||item.getMediaRole()!=com.pebble.api.project.domain.MediaRole.BODY||referencesImage(project,item.getId()))
+                .map(item -> ProjectMediaView.from(item, visible||owner&&client!=null&&item.getMediaRole()==com.pebble.api.project.domain.MediaRole.BODY ? client.signedUrl(item.getStorageKey()) : null,
+                        visible||owner&&client!=null&&item.getMediaRole()==com.pebble.api.project.domain.MediaRole.BODY ? client.signedUrl(item.getThumbnailStorageKey()) : null)).toList();
+    }
+
+    static boolean referencesImage(Project project,long imageId){
+        return project.getDocument()!=null&&project.getDocument().toString().contains("/projects/"+project.getId()+"/media/"+imageId+"/content");
+    }
+    private void validateDocumentImages(Project project,com.fasterxml.jackson.databind.JsonNode document){
+        if(document==null)return;
+        var pattern=java.util.regex.Pattern.compile("/projects/([1-9][0-9]{0,18})/media/([1-9][0-9]{0,18})/content");
+        var matcher=pattern.matcher(document.toString());
+        var ids=new java.util.HashSet<Long>();
+        while(matcher.find()){
+            try{
+                if(Long.parseLong(matcher.group(1))!=project.getId())throw notFound();
+                ids.add(Long.parseLong(matcher.group(2)));
+            }catch(NumberFormatException e){throw notFound();}
+        }
+        var owned=media.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()).stream()
+                .filter(item->item.getMediaRole()==com.pebble.api.project.domain.MediaRole.BODY).map(com.pebble.api.project.domain.ProjectMedia::getId).collect(Collectors.toSet());
+        if(!owned.containsAll(ids))throw notFound();
     }
 
     private void initializeOwner(Project project) { project.getOwner().getNickname(); }

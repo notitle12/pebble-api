@@ -14,7 +14,7 @@ import java.util.Locale;
 import java.util.Set;
 
 /** TABLE 블록의 버전과 구조를 검사한다. 임의 SQL이나 HTML로 실행하지 않는다. */
-final class TableSpecInput {
+public final class TableSpecInput {
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(8).maxStringLength(50000).build())
@@ -24,7 +24,7 @@ final class TableSpecInput {
 
     private TableSpecInput() {}
 
-    static void validate(String content, String field) {
+    public static void validate(String content, String field) {
         JsonNode table;
         try { table = JSON.readTree(content); }
         catch (JsonProcessingException exception) {

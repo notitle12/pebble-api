@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 /** 제한형 아키텍처의 요소·참조를 검사한다. 범위가 제한된 좌표와 기술 아이콘을 허용하고 실행 코드는 받지 않는다. */
-final class ArchitectureSpecInput {
+public final class ArchitectureSpecInput {
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(8).maxStringLength(50000).build())
@@ -27,7 +27,7 @@ final class ArchitectureSpecInput {
             "CACHE", "STORAGE", "CLIENT", "CLOUD", "CONTAINER");
     private ArchitectureSpecInput() {}
 
-    static void validate(String content, String field) {
+    public static void validate(String content, String field) {
         JsonNode spec;
         try { spec = JSON.readTree(content); }
         catch (JsonProcessingException exception) {

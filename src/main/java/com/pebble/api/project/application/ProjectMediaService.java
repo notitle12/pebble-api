@@ -31,6 +31,14 @@ public class ProjectMediaService {
     private final ObjectProvider<R2ObjectStorage> storage;
     private final MediaDeletionQueue deletion;
 
+    public ProjectMediaView replaceCover(long memberId,long projectId,byte[] source){
+        owned(memberId,projectId);
+        media.findByProjectIdOrderByDisplayOrderAscIdAsc(projectId).stream()
+                .filter(item->item.getMediaRole()==MediaRole.THUMBNAIL).forEach(media::delete);
+        media.flush();
+        return upload(memberId,projectId,source,MediaRole.THUMBNAIL,null,0);
+    }
+
     public ProjectMediaView upload(
             long memberId, long projectId, byte[] source, MediaRole role, String altText, int order) {
         Project project = owned(memberId, projectId);
@@ -77,6 +85,17 @@ public class ProjectMediaService {
         projects.flush();
     }
 
+    @Transactional(readOnly=true)
+    public String publicBodyUrl(long projectId,long mediaId){
+        Project project=projects.findById(projectId).orElseThrow(ProjectMediaService::notFound);
+        if(project.getVisibility()!=ProjectVisibility.PUBLIC||project.isBlocked()
+                ||project.getOwner().getStatus()==com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING
+                ||!ProjectService.referencesImage(project,mediaId))throw notFound();
+        ProjectMedia item=item(projectId,mediaId);
+        if(item.getMediaRole()!=MediaRole.BODY)throw notFound();
+        return client().signedUrl(item.getStorageKey());
+    }
+
     private Project owned(long memberId, long projectId) {
         members.findProfileCompletedForWrite(memberId);
         Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectMediaService::notFound);
@@ -94,7 +113,7 @@ public class ProjectMediaService {
     }
 
     private ProjectMediaView view(ProjectMedia item, Project project, R2ObjectStorage client) {
-        boolean visible = project.getVisibility() == ProjectVisibility.PUBLIC && !project.isBlocked() && client != null;
+        boolean visible = client!=null&&(item.getMediaRole()==MediaRole.BODY||project.getVisibility() == ProjectVisibility.PUBLIC && !project.isBlocked());
         return ProjectMediaView.from(
                 item,
                 visible ? client.signedUrl(item.getStorageKey()) : null,

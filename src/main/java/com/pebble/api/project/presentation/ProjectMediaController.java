@@ -31,6 +31,12 @@ public class ProjectMediaController {
     private final ProjectMediaService media;
     private final ObjectMapper mapper;
 
+    @org.springframework.web.bind.annotation.GetMapping("/{mediaId:[0-9]+}/content")
+    public ResponseEntity<Void> bodyContent(@PathVariable String projectId,@PathVariable String mediaId){
+        return ResponseEntity.status(302).cacheControl(org.springframework.http.CacheControl.noStore())
+                .location(java.net.URI.create(media.publicBodyUrl(id(projectId),id(mediaId)))).build();
+    }
+
     @PostMapping(consumes = "multipart/form-data")
     public ResponseEntity<ApiResponse<ProjectMediaResponse>> upload(
             @PathVariable String projectId,

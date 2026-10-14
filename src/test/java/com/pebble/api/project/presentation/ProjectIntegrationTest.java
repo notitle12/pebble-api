@@ -68,6 +68,17 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void documentRoundTripPreservesOmittedFieldsAndCanBeCleared() throws Exception {
+        String id=projectId(create(owner,"PUBLIC","Document",null,null,List.of(),List.of(),List.of(),"IN_PROGRESS",null,null));
+        String document="{\"version\":1,\"teamSize\":3,\"role\":\"백엔드\",\"sections\":[{\"key\":\"BACKGROUND\",\"blocks\":[{\"type\":\"HTML\",\"content\":\"<p>배경과 목적</p>\",\"language\":null,\"title\":null}]}]}";
+        patch(id,"{\"document\":"+document+"}").andExpect(status().isOk()).andExpect(jsonPath("$.data.document.teamSize").value(3));
+        patch(id,"{\"summary\":\"changed\"}").andExpect(status().isOk()).andExpect(jsonPath("$.data.document.role").value("백엔드"));
+        mvc.perform(get(PATH+"/"+id)).andExpect(status().isOk()).andExpect(jsonPath("$.data.document.sections[0].blocks[0].content").value("<p>배경과 목적</p>"));
+        mvc.perform(get(PATH)).andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].document").doesNotExist());
+        patch(id,"{\"document\":null}").andExpect(status().isOk()).andExpect(jsonPath("$.data.document").doesNotExist());
+    }
+
+    @Test
     void createsProjectReturnsLocationAndStringIdsThenLoadsFullDetail() throws Exception {
         TechStack techStack = techStack("Spring", TechStackStatus.ACTIVE);
         ResultActions created = create(owner, "PUBLIC", "Pebble API", "summary", "description",
