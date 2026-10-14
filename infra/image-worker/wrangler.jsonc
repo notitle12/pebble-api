@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pebble-images",
+  "account_id": "ae87d49be319ec8a092f90acc9554383",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-04",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "images.pebble-log.com", "custom_domain": true }],
+  "vars": { "MEDIA_CDN_BASE_URL": "https://images.pebble-log.com" },
+  "r2_buckets": [{ "binding": "MEDIA_BUCKET", "bucket_name": "pebble-media" }],
+  "observability": { "enabled": false }
+}

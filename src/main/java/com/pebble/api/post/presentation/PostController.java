@@ -1,0 +1,202 @@
+package com.pebble.api.post.presentation;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.pebble.api.global.exception.ApplicationException;
+import com.pebble.api.global.exception.GlobalErrorCode;
+import com.pebble.api.global.presentation.response.ApiResponse;
+import com.pebble.api.like.application.PostLikeService;
+import com.pebble.api.post.application.PostService;
+import com.pebble.api.post.domain.PostVisibility;
+import com.pebble.api.post.presentation.dto.PostResponse;
+import com.pebble.api.post.presentation.dto.PostResponse.PostPage;
+import com.pebble.api.post.presentation.dto.PostWriteRequest;
+import java.util.Set;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+public class PostController {
+    private final com.pebble.api.member.application.MemberProfileImages profileImages;
+    private final PostService posts;
+    private final PostLikeService likes;
+
+    @PostMapping(value = "/api/v1/posts", consumes = "application/json")
+    public ResponseEntity<ApiResponse<PostResponse>> create(@AuthenticationPrincipal Jwt jwt, @RequestBody JsonNode request) {
+        PostResponse response = response(likes.decorate(
+                posts.create(memberId(jwt), PostWriteRequest.parse(request, true)), requesterId(jwt)));
+        return ResponseEntity.created(org.springframework.web.util.UriComponentsBuilder.fromPath("/api/v1/blogs/{handle}/posts/{key}")
+                .buildAndExpand(response.author().handle(), response.urlKey()).encode().toUri()).body(ApiResponse.of(response));
+    }
+
+    @GetMapping("/api/v1/posts/{postId:[0-9]+}")
+    public ApiResponse<PostResponse> detail(@PathVariable String postId, @AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.of(response(likes.decorate(
+                posts.detail(PostWriteRequest.id(postId, "postId"), requesterId(jwt)), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/blogs/{handle}/posts/{postKey}")
+    public ApiResponse<PostResponse> publicAddress(@PathVariable String handle, @PathVariable String postKey, @AuthenticationPrincipal Jwt jwt) {
+        Long requester = requesterId(jwt);
+        return ApiResponse.of(response(likes.decorate(postKey.matches("[0-9]+")
+                ? posts.detailByNumber(handle, PostWriteRequest.id(postKey, "postNumber"), requester)
+                : posts.detailBySlug(handle, PostWriteRequest.normalizeSlug(postKey), requester), requester)));
+    }
+
+    @PatchMapping(value = "/api/v1/posts/{postId:[0-9]+}", consumes = "application/json")
+    public ApiResponse<PostResponse> update(@PathVariable String postId, @AuthenticationPrincipal Jwt jwt,
+                                            @RequestBody JsonNode request) {
+        return ApiResponse.of(response(likes.decorate(posts.update(PostWriteRequest.id(postId, "postId"), memberId(jwt),
+                PostWriteRequest.parse(request, false)), requesterId(jwt))));
+    }
+
+    @DeleteMapping("/api/v1/posts/{postId:[0-9]+}")
+    public ResponseEntity<Void> delete(@PathVariable String postId, @AuthenticationPrincipal Jwt jwt) {
+        posts.delete(PostWriteRequest.id(postId, "postId"), memberId(jwt));
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/v1/posts")
+    public ApiResponse<PostPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "authorId"));
+        return ApiResponse.of(page(likes.decorate(posts.listPublic(optionalId(query, "categoryId"),
+                optionalId(query, "authorId"), pageable(query, "publishedAt")), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/posts/search")
+    public ApiResponse<PostPage> search(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("q", "page", "size", "sort", "categoryId", "authorId"));
+        return ApiResponse.of(page(likes.decorate(posts.search(PostWriteRequest.searchTerm(query.getFirst("q")),
+                optionalId(query, "categoryId"), optionalId(query, "authorId"),
+                pageable(query, "publishedAt")), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/members/me/posts")
+    public ApiResponse<PostPage> mine(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size", "sort", "visibilityStatus", "boardId"));
+        PostVisibility visibility = null;
+        if (query.containsKey("visibilityStatus")) {
+            try {
+                visibility = PostVisibility.valueOf(query.getFirst("visibilityStatus"));
+                if (visibility == PostVisibility.DELETED) throw new IllegalArgumentException();
+            } catch (IllegalArgumentException exception) {
+                throw invalid("visibilityStatus");
+            }
+        }
+        return ApiResponse.of(page(likes.decorate(
+                posts.listMine(memberId(jwt), visibility, optionalId(query,"boardId"), pageable(query, "displayOrder")), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/members/me/blog/posts")
+    public ApiResponse<PostPage> ownBlog(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size", "sort", "boardId", "q", "placement"));
+        String placement = query.getFirst("placement");
+        if (query.containsKey("placement") && (!Set.of("boards", "projects").contains(placement == null ? "" : placement)
+                || query.containsKey("q") || query.containsKey("boardId"))) throw invalid("placement");
+        if (query.containsKey("q") && query.containsKey("boardId")) throw invalid("q");
+        String term = query.containsKey("q") ? PostWriteRequest.searchTerm(query.getFirst("q")) : null;
+        return ApiResponse.of(page(likes.decorate(posts.listOwnBlog(memberId(jwt), optionalId(query, "boardId"),
+                term, placement, pageable(query, "displayOrder")), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/members/{memberId:[0-9]+}/posts")
+    public ApiResponse<PostPage> blog(@PathVariable String memberId, @RequestParam MultiValueMap<String, String> query,
+                                      @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size", "sort", "categoryId"));
+        return ApiResponse.of(page(likes.decorate(posts.listPublic(optionalId(query, "categoryId"),
+                PostWriteRequest.id(memberId, "memberId"), pageable(query, "displayOrder")), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/blogs/{handle}/posts")
+    public ApiResponse<PostPage> publicBlog(@PathVariable String handle, @RequestParam MultiValueMap<String, String> query,
+                                            @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size", "sort", "categoryId", "q", "placement"));
+        String placement = query.getFirst("placement");
+        if (query.containsKey("placement") && (!Set.of("boards", "projects").contains(placement == null ? "" : placement) || query.containsKey("q"))) {
+            throw invalid("placement");
+        }
+        var result = placement != null
+                ? posts.listBlogPlacement(handle, placement, optionalId(query, "categoryId"), pageable(query, "displayOrder"))
+                : query.containsKey("q")
+                ? posts.searchBlog(handle, PostWriteRequest.searchTerm(query.getFirst("q")), optionalId(query, "categoryId"), pageable(query, "displayOrder"))
+                : posts.listBlog(handle, optionalId(query, "categoryId"), pageable(query, "displayOrder"));
+        return ApiResponse.of(page(likes.decorate(result, requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/members/{memberId:[0-9]+}/boards/{boardId:[0-9]+}/posts")
+    public ApiResponse<PostPage> board(@PathVariable String memberId, @PathVariable String boardId,
+                                      @RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size", "sort"));
+        return ApiResponse.of(page(likes.decorate(posts.listBoard(PostWriteRequest.id(memberId, "memberId"),
+                PostWriteRequest.id(boardId, "boardId"), pageable(query, "displayOrder")), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/projects/{projectId:[0-9]+}/posts")
+    public ApiResponse<PostPage> project(@PathVariable String projectId, @RequestParam MultiValueMap<String, String> query,
+                                         @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size", "sort"));
+        return ApiResponse.of(page(likes.decorate(posts.listProject(PostWriteRequest.id(projectId, "projectId"),
+                pageable(query, "publishedAt")), requesterId(jwt))));
+    }
+
+    private long memberId(Jwt jwt) {
+        return Long.parseLong(jwt.getSubject().substring("member:".length()));
+    }
+
+    private Long requesterId(Jwt jwt) {
+        return jwt != null && "USER".equals(jwt.getClaimAsString("role")) ? memberId(jwt) : null;
+    }
+
+    private Long optionalId(MultiValueMap<String, String> query, String field) {
+        return query.containsKey(field) ? PostWriteRequest.id(query.getFirst(field), field) : null;
+    }
+
+    private PageRequest pageable(MultiValueMap<String, String> query, String defaultField) {
+        int page = integer(query.getFirst("page"), 0, "page");
+        int size = integer(query.getFirst("size"), 20, "size");
+        if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) throw invalid("page/size");
+        String value = query.getFirst("sort");
+        String[] parts = value == null ? new String[]{defaultField, defaultField.equals("displayOrder") ? "asc" : "desc"} : value.split(",", -1);
+        Set<String> allowed = defaultField.equals("displayOrder") ? Set.of("publishedAt", "createdAt", "displayOrder") : Set.of("publishedAt", "createdAt");
+        if (parts.length != 2 || !allowed.contains(parts[0])
+                || !Set.of("asc", "desc").contains(parts[1])) throw invalid("sort");
+        Sort.Direction direction = Sort.Direction.fromString(parts[1]);
+        return PageRequest.of(page, size, Sort.by(direction, parts[0], "id"));
+    }
+
+    private int integer(String value, int fallback, String field) {
+        if (value == null) return fallback;
+        try {
+            if (!value.matches("[0-9]+")) throw new NumberFormatException();
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            throw invalid(field);
+        }
+    }
+
+    private void checkQuery(MultiValueMap<String, String> query, Set<String> allowed) {
+        for (var entry : query.entrySet()) {
+            if (!allowed.contains(entry.getKey()) || entry.getValue().size() != 1) throw invalid(entry.getKey());
+        }
+    }
+
+    private ApplicationException invalid(String field) {
+        return new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, field, "지원되는 요청 값을 입력해 주세요.");
+    }
+    private PostResponse response(com.pebble.api.post.application.PostService.PostView view) { return PostResponse.from(view, profileImages::url); }
+    private PostPage page(org.springframework.data.domain.Page<com.pebble.api.post.application.PostService.PostView> view) { return PostPage.from(view, profileImages::url); }
+
+}

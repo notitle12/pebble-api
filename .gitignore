@@ -16,8 +16,12 @@ bin/
 .env
 .env.*
 *.env
+!.env.example
+!.env.prod.example
 application-local.yml
+application-local.yaml
 application-secret.yml
+application-secret.yaml
 application-secret.properties
 *.pem
 *.key
@@ -33,6 +37,7 @@ application-secret.properties
 
 ### Logs ###
 *.log
+/logs/
 logs/
 
 ### IntelliJ IDEA ###
@@ -62,3 +67,9 @@ out/
 /dist/
 /nbdist/
 /.nb-gradle/
+
+# Project documents are maintained in the local shared documentation folder.
+/docs/
+*.md
+*.mdx
+!/.github/**/*.md
