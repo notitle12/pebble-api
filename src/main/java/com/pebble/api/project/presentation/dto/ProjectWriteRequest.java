@@ -21,7 +21,7 @@ import java.util.Set;
 public final class ProjectWriteRequest {
     private static final Set<String> FIELDS = Set.of("name", "summary", "description", "architectureDescription",
             "executionInstructions", "lifecycleStatus", "startedOn", "completedOn", "techStackIds", "features",
-            "links", "visibilityStatus");
+            "links", "visibilityStatus", "document");
 
     private ProjectWriteRequest() { }
 
@@ -51,8 +51,11 @@ public final class ProjectWriteRequest {
         ProjectVisibility visibility = json.has("visibilityStatus")
                 ? enumValue(json.get("visibilityStatus"), ProjectVisibility.class, "visibilityStatus") : null;
         if (visibility == ProjectVisibility.DELETED) fail("visibilityStatus", "PUBLIC 또는 HIDDEN을 지정해 주세요.");
+        JsonNode document = json.get("document");
+        if (document != null && !document.isNull()) ProjectDocumentInput.validate(document);
         return new ProjectChanges(Set.copyOf(supplied), name, summary, description, architecture, execution,
-                lifecycle, startedOn, completedOn, techStackIds, features, links, visibility);
+                lifecycle, startedOn, completedOn, techStackIds, features, links, visibility,
+                document == null || document.isNull() ? null : document.deepCopy());
     }
 
     public static long id(String value, String field) {

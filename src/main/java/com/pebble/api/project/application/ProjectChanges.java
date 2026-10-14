@@ -11,7 +11,14 @@ public record ProjectChanges(Set<String> supplied, String name, String summary, 
                              String architectureDescription, String executionInstructions,
                              ProjectLifecycleStatus lifecycleStatus, LocalDate startedOn, LocalDate completedOn,
                              List<Long> techStackIds, List<FeatureInput> features, List<LinkInput> links,
-                             ProjectVisibility visibilityStatus) {
+                             ProjectVisibility visibilityStatus, com.fasterxml.jackson.databind.JsonNode document) {
+    public ProjectChanges(Set<String> supplied, String name, String summary, String description,
+                          String architectureDescription, String executionInstructions,
+                          ProjectLifecycleStatus lifecycleStatus, LocalDate startedOn, LocalDate completedOn,
+                          List<Long> techStackIds, List<FeatureInput> features, List<LinkInput> links, ProjectVisibility visibilityStatus) {
+        this(supplied,name,summary,description,architectureDescription,executionInstructions,lifecycleStatus,startedOn,completedOn,
+                techStackIds,features,links,visibilityStatus,null);
+    }
     public boolean has(String field) { return supplied.contains(field); }
     public record FeatureInput(String title, String description) { }
     public record LinkInput(ProjectLinkType type, String label, String url, int displayOrder) { }
