@@ -20,12 +20,11 @@ public final class ArchitectureSpecInput {
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(8).maxStringLength(50000).build())
             .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-    private static final Set<String> GROUP_TYPES = Set.of("ORACLE_CLOUD", "AWS", "CLOUDFLARE", "DOCKER", "CUSTOM");
+    private static final Set<String> GROUP_TYPES = Set.of("ORACLE_CLOUD", "AWS", "CLOUDFLARE", "DOCKER", "CLOUD", "CONTAINER", "CUSTOM");
     private static final Set<String> NODE_TYPES = Set.of("CLIENT", "APP", "DATABASE", "CACHE", "STORAGE", "PROXY", "CUSTOM");
-    private static final Set<String> ICONS = Set.of("AWS", "ORACLE_CLOUD", "CLOUDFLARE", "DOCKER", "SPRING",
-            "POSTGRESQL", "REDIS", "R2", "WORKERS", "NGINX", "NODEJS", "REACT", "SERVER", "DATABASE",
-            "CACHE", "STORAGE", "CLIENT", "CLOUD", "CONTAINER");
+    private static final Set<String> ICONS = Set.of("ANDROID", "ANGULAR", "AWS", "AZURE", "C", "CACHE", "CLIENT", "CLOUD", "CLOUDFLARE", "CONTAINER", "CPP", "CSHARP", "CSS", "DART", "DATABASE", "DJANGO", "DOCKER", "DOCKER_COMPOSE", "DOTNET", "ELASTICSEARCH", "EXPRESS", "FASTAPI", "FIGMA", "FIREBASE", "FLASK", "FLUTTER", "GIT", "GITHUB_ACTIONS", "GITLAB_CI", "GO", "GOOGLE_CLOUD", "GRAFANA", "GRAPHQL", "HIBERNATE", "HTML", "HUGGING_FACE", "IOS", "JAVA", "JAVASCRIPT", "JENKINS", "JPA", "KAFKA", "KOTLIN", "KUBERNETES", "LANGCHAIN", "LARAVEL", "LINUX", "MARIADB", "MONGODB", "MYSQL", "NAVER_CLOUD", "NESTJS", "NETLIFY", "NEXTJS", "NGINX", "NODEJS", "NUXT", "OLLAMA", "OPENAI", "OPENSEARCH", "ORACLE", "ORACLE_CLOUD", "PHP", "POSTGRESQL", "PROMETHEUS", "PYTHON", "PYTORCH", "R2", "RABBITMQ", "REACT", "REACT_NATIVE", "REDIS", "RUBY", "RUBY_ON_RAILS", "RUST", "SCIKIT_LEARN", "SENTRY", "SERVER", "SPRING", "SPRING_BOOT", "SQLITE", "STORAGE", "STRIPE", "SUPABASE", "SVELTE", "SVELTEKIT", "SWIFT", "TAILWIND_CSS", "TENSORFLOW", "TERRAFORM", "TOSS_PAYMENTS", "TYPESCRIPT", "VERCEL", "VUEJS", "WORKERS");
     private ArchitectureSpecInput() {}
+    private static boolean container(String type) { return "DOCKER".equals(type) || "CONTAINER".equals(type); }
 
     public static void validate(String content, String field) {
         JsonNode spec;
@@ -51,7 +50,7 @@ public final class ArchitectureSpecInput {
             String id = uniqueId(group.get("id"), prefix + ".id", ids);
             String type = text(group.get("type"), prefix + ".type", 40, true);
             if (!GROUP_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 그룹입니다.");
-            text(group.get("label"), prefix + ".label", 100, true);
+            text(group.get("label"), prefix + ".label", 100, false);
             customTypeLabel(group, type, prefix);
             JsonNode bounds = group.get("bounds");
             if (bounds != null && !bounds.isNull()) {
@@ -70,9 +69,9 @@ public final class ArchitectureSpecInput {
         for (JsonNode group : groups) {
             String prefix = field + ".groups[" + index++ + "]";
             String parent = optionalId(group, "parentId", prefix);
-            if (parent != null && (!group.get("type").textValue().equals("DOCKER")
-                    || !groupTypes.containsKey(parent) || groupTypes.get(parent).equals("DOCKER")))
-                fail(prefix + ".parentId", "Docker만 클라우드 그룹 안에 배치할 수 있습니다.");
+            if (parent != null && (!container(group.get("type").textValue())
+                    || !groupTypes.containsKey(parent) || container(groupTypes.get(parent))))
+                fail(prefix + ".parentId", "컨테이너만 상위 그룹 안에 배치할 수 있습니다.");
         }
         index = 0;
         for (JsonNode node : nodes) {
