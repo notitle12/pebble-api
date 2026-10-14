@@ -133,6 +133,41 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void projectBodyImagesRequirePublishedReferenceAndOwnerForWrites() throws Exception {
+        var image=projectMedia.upload(owner.getId(),projectId,png(),MediaRole.BODY,null,0);
+        String path="/api/v1/projects/"+projectId+"/media/"+image.id()+"/content";
+        assertThat(image.url()).startsWith("https://media.test/");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+        var document=mapper.createObjectNode().put("version",1).putNull("teamSize").put("role","");
+        document.putArray("sections").addObject().put("key","BACKGROUND").putArray("blocks").addObject().put("type","HTML").put("content","<img src=\"https://api.example"+path+"\">");
+        mvc.perform(patch("/api/v1/projects/"+projectId).header(HttpHeaders.AUTHORIZATION,bearer(owner)).header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .contentType("application/json").content(mapper.createObjectNode().set("document",document).toString()))
+                .andExpect(status().isOk());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isFound()).andExpect(header().string("Cache-Control","no-store"));
+        jdbc.update("update project set visibility_status='HIDDEN' where id=?",projectId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/projects/"+projectId).header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.media[0].url").isNotEmpty());
+        assertThatThrownBy(()->projectMedia.upload(other.getId(),projectId,png(),MediaRole.BODY,null,0)).isInstanceOf(ApplicationException.class);
+        document.withArray("sections").get(0).withArray("blocks").get(0).deepCopy();
+        ((com.fasterxml.jackson.databind.node.ObjectNode)document.withArray("sections").get(0).withArray("blocks").get(0)).put("content","<img src=\"https://api.example/api/v1/projects/999/media/"+image.id()+"/content\">");
+        mvc.perform(patch("/api/v1/projects/"+projectId).header(HttpHeaders.AUTHORIZATION,bearer(owner)).header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .contentType("application/json").content(mapper.createObjectNode().set("document",document).toString())).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void replacingCoverRollsBackOldImageWhenStorageFails() throws Exception {
+        var old=projectMedia.upload(owner.getId(),projectId,png(),MediaRole.THUMBNAIL,null,0);
+        failPut=true;
+        assertThatThrownBy(()->projectMedia.replaceCover(owner.getId(),projectId,png())).isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForObject("select id from project_media where project_id=? and media_role='THUMBNAIL'",Long.class,projectId)).isEqualTo(Long.parseLong(old.id()));
+        failPut=false;
+        var next=projectMedia.replaceCover(owner.getId(),projectId,png());
+        assertThat(next.id()).isNotEqualTo(old.id());
+        assertThat(jdbc.queryForObject("select count(*) from project_media where project_id=? and media_role='THUMBNAIL'",Long.class,projectId)).isEqualTo(1);
+    }
+
+    @Test
     void bodyImagesCheckVisibilityOwnerAndDeletionQueue() throws Exception {
         var image=bodyImages.upload(owner.getId(),postId,png());
         assertThat(image.url()).startsWith("https://media.test/post/").endsWith("/body.webp");

@@ -16,13 +16,13 @@ import java.util.Locale;
 import java.util.Set;
 
 /** Validates the shared ERD/specification document, including stable references. */
-final class DatabaseSchemaInput {
+public final class DatabaseSchemaInput {
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(12).maxStringLength(50000).build())
             .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private DatabaseSchemaInput() {}
-    static void validate(String content, String field) {
+    public static void validate(String content, String field) {
         JsonNode schema;
         try { schema = JSON.readTree(content); }
         catch (JsonProcessingException exception) { fail(field, "올바른 DB 설계 JSON을 입력해 주세요."); return; }

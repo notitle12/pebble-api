@@ -27,6 +27,16 @@ import org.hibernate.annotations.Check;
 @Check(name = "ck_project_visibility", constraints = "visibility_status in ('PUBLIC', 'HIDDEN', 'DELETED')")
 @Check(name = "ck_project_blocked_metadata", constraints = "((is_blocked = true and blocked_at is not null and blocked_by_admin_id is not null) or (is_blocked = false and blocked_at is null and blocked_by_admin_id is null))")
 public class Project extends BaseTimeEntity {
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private com.fasterxml.jackson.databind.JsonNode document;
+
+    public com.fasterxml.jackson.databind.JsonNode getDocument() { return document; }
+    public void changeDocument(com.fasterxml.jackson.databind.JsonNode document) {
+        ensureNotDeleted();
+        this.document = document == null ? null : document.deepCopy();
+        updatedAt = Instant.now();
+    }
     @Id
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
