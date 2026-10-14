@@ -47,11 +47,12 @@ public final class ArchitectureSpecInput {
         int index = 0;
         for (JsonNode group : groups) {
             String prefix = field + ".groups[" + index++ + "]";
-            object(group, Set.of("id", "type", "label", "parentId", "bounds"), prefix);
+            object(group, Set.of("id", "type", "label", "typeLabel", "parentId", "bounds"), prefix);
             String id = uniqueId(group.get("id"), prefix + ".id", ids);
             String type = text(group.get("type"), prefix + ".type", 40, true);
             if (!GROUP_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 그룹입니다.");
             text(group.get("label"), prefix + ".label", 100, true);
+            customTypeLabel(group, type, prefix);
             JsonNode bounds = group.get("bounds");
             if (bounds != null && !bounds.isNull()) {
                 object(bounds, Set.of("x", "y", "width", "height"), prefix + ".bounds");
@@ -76,11 +77,12 @@ public final class ArchitectureSpecInput {
         index = 0;
         for (JsonNode node : nodes) {
             String prefix = field + ".nodes[" + index++ + "]";
-            object(node, Set.of("id", "type", "label", "groupId", "icon", "position"), prefix);
+            object(node, Set.of("id", "type", "label", "typeLabel", "groupId", "icon", "position"), prefix);
             nodeIds.add(uniqueId(node.get("id"), prefix + ".id", ids));
             String type = text(node.get("type"), prefix + ".type", 40, true);
             if (!NODE_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 요소입니다.");
             text(node.get("label"), prefix + ".label", 100, true);
+            customTypeLabel(node, type, prefix);
             JsonNode icon = node.get("icon");
             if (icon != null && !icon.isNull() && (!icon.isTextual() || !ICONS.contains(icon.textValue())))
                 fail(prefix + ".icon", "지원하는 기술 또는 기본 아이콘을 선택해 주세요.");
@@ -160,6 +162,13 @@ public final class ArchitectureSpecInput {
         value.fieldNames().forEachRemaining(key -> {
             if (!fields.contains(key)) fail(field + "." + key, "허용하지 않는 필드입니다.");
         });
+    }
+
+    private static void customTypeLabel(JsonNode value, String type, String prefix) {
+        JsonNode label = value.get("typeLabel");
+        if (label == null || label.isNull()) return;
+        if (!"CUSTOM".equals(type)) fail(prefix + ".typeLabel", "사용자 정의 요소에서만 표시 종류를 편집할 수 있습니다.");
+        text(label, prefix + ".typeLabel", 50, true);
     }
 
     private static void optionalText(JsonNode object, String key, String field, int max) {
