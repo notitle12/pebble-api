@@ -227,6 +227,7 @@ public class PostService {
         if (post.getVisibility() == PostVisibility.DELETED) return;
         post.delete();
         posts.flush();
+        applyOrder(posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(post.getAuthor().getId(), PostVisibility.DELETED));
         normalizeBoard(post.getAuthor().getId(),post.getBoardId());
     }
 

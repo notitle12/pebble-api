@@ -3,6 +3,9 @@ package com.pebble.api.project.infrastructure.persistence;
 import com.pebble.api.project.domain.Project;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -22,6 +25,10 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, JpaSpec
     @Override
     @EntityGraph(attributePaths = "owner")
     Optional<Project> findById(Long id);
+
+    @Override
+    @EntityGraph(attributePaths = "owner")
+    Page<Project> findAll(Specification<Project> specification, Pageable pageable);
 
     @Modifying
     @Query("delete from Project p where p.owner.id=:memberId")
