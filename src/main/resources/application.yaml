@@ -1,3 +1,29 @@
+# 미지정 시 로컬 프로필을 사용한다. 운영 배포는 prod를 명시한다.
 spring:
-  application:
-    name: pebble-api
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
+# 개발 문서는 api-docs 프로필에서만 켠다. 기본 실행/운영은 비활성이다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+pebble:
+  media:
+    cdn:
+      enabled: ${MEDIA_CDN_ENABLED:false}
+      base-url: ${MEDIA_CDN_BASE_URL:}
+      signing-key-base64: ${MEDIA_CDN_SIGNING_KEY_BASE64:}
+    r2:
+      enabled: ${R2_ENABLED:false}
+      endpoint: ${R2_ENDPOINT:}
+      bucket-name: ${R2_BUCKET_NAME:pebble-media}
+      region: ${R2_REGION:auto}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}

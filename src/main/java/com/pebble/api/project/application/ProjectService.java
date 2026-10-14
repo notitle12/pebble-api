@@ -1,0 +1,329 @@
+package com.pebble.api.project.application;
+
+import com.pebble.api.global.exception.ApplicationException;
+import com.pebble.api.global.exception.GlobalErrorCode;
+import com.pebble.api.member.application.MemberQueryService;
+import com.pebble.api.member.domain.Member;
+import com.pebble.api.member.domain.MemberStatus;
+import com.pebble.api.project.application.ProjectChanges.FeatureInput;
+import com.pebble.api.project.application.ProjectChanges.LinkInput;
+import com.pebble.api.project.domain.Project;
+import com.pebble.api.project.domain.ProjectError;
+import com.pebble.api.project.domain.ProjectFeature;
+import com.pebble.api.project.domain.ProjectLifecycleStatus;
+import com.pebble.api.project.domain.ProjectLink;
+import com.pebble.api.project.domain.ProjectTechStack;
+import com.pebble.api.project.domain.ProjectVisibility;
+import com.pebble.api.project.infrastructure.persistence.ProjectFeatureRepository;
+import com.pebble.api.project.infrastructure.persistence.ProjectLinkRepository;
+import com.pebble.api.project.infrastructure.persistence.ProjectRepository;
+import com.pebble.api.project.infrastructure.persistence.ProjectTechStackRepository;
+import com.pebble.api.techstack.application.TechStackQueryService;
+import com.pebble.api.techstack.domain.TechStack;
+import com.pebble.api.post.application.PostProjectService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.Predicate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class ProjectService {
+    private final ProjectRepository projects;
+    private final ProjectFeatureRepository features;
+    private final ProjectLinkRepository links;
+    private final ProjectTechStackRepository projectTechStacks;
+    private final MemberQueryService members;
+    private final TechStackQueryService techStacks;
+    private final EntityManager entityManager;
+    private final PostProjectService postProjects;
+    private final com.pebble.api.project.infrastructure.persistence.ProjectMediaRepository media;
+    private final org.springframework.beans.factory.ObjectProvider<com.pebble.api.global.media.R2ObjectStorage> mediaStorage;
+
+    @Transactional
+    public void purgeForMember(long memberId) {
+        // 같은 회원의 Post 연결을 먼저 파기한 뒤 Project와 하위 데이터를 제거한다.
+        projects.deleteForMember(memberId);
+    }
+
+    @Transactional
+    public ProjectView create(long memberId, ProjectChanges input) {
+        Member owner = members.findProfileCompletedForWrite(memberId);
+        List<TechStack> selected = techStacks.resolveForContent(input.techStackIds(), Set.of());
+        Project project = projects.saveAndFlush(new Project(owner, input.name(), input.summary(), input.description(),
+                input.architectureDescription(), input.executionInstructions(), input.lifecycleStatus(),
+                input.startedOn(), input.completedOn(), input.visibilityStatus()));
+        if(input.has("document")){validateDocumentImages(project,input.document());project.changeDocument(input.document());}
+        replaceFeatures(project, input.features());
+        replaceLinks(project, input.links());
+        replaceTechStacks(project, selected, List.of());
+        projects.flush();
+        return detailView(project, true);
+    }
+
+    public ProjectView detail(long projectId, Long requesterId) {
+        Project project = projects.findById(projectId).orElseThrow(ProjectService::notFound);
+        if (project.getVisibility() == ProjectVisibility.DELETED) throw notFound();
+        boolean owner = Objects.equals(project.getOwner().getId(), requesterId);
+        if (owner) members.findActiveById(requesterId);
+        if (!owner && !isPublic(project)) throw notFound();
+        return detailView(project, owner);
+    }
+
+    public Page<ProjectView> listPublic(Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, null), pageable), false);
+    }
+
+    public Page<ProjectView> listMember(long memberId, Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        members.findPublicById(memberId);
+        return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, memberId), pageable), false);
+    }
+
+    public Page<ProjectView> listMine(long memberId, ProjectVisibility visibility, Pageable pageable) {
+        members.findActiveById(memberId);
+        Specification<Project> filter = (root, query, cb) -> cb.and(
+                cb.equal(root.get("owner").get("id"), memberId),
+                cb.notEqual(root.get("visibility"), ProjectVisibility.DELETED),
+                visibility == null ? cb.conjunction() : cb.equal(root.get("visibility"), visibility));
+        return page(projects.findAll(filter, pageable), true);
+    }
+
+    public Page<ProjectView> search(String term, Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
+        return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, null).and(searchMatching(term)), pageable), false);
+    }
+
+    public Page<ProjectView> listForManagement(String q, ProjectVisibility visibility, Boolean blocked,
+                                               Long ownerId, Pageable pageable) {
+        Specification<Project> filter = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (visibility != null) predicates.add(cb.equal(root.get("visibility"), visibility));
+            if (blocked != null) predicates.add(cb.equal(root.get("blocked"), blocked));
+            if (ownerId != null) predicates.add(cb.equal(root.get("owner").get("id"), ownerId));
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        if (q != null && !q.isBlank()) filter = filter.and(searchMatching(q));
+        return page(projects.findAll(filter, pageable), true);
+    }
+
+    public ProjectView detailForManagement(long projectId) {
+        Project project = projects.findById(projectId).orElseThrow(ProjectService::notFound);
+        return detailView(project, true);
+    }
+
+    @Transactional
+    public ProjectView setBlockedForManagement(long projectId, long adminId, boolean blocked) {
+        Project project = managementForUpdate(projectId);
+        project.setBlocked(blocked, adminId);
+        projects.flush();
+        return detailView(project, true);
+    }
+
+    @Transactional
+    public void deleteForManagement(long projectId) {
+        Long ownerId = projects.findOwnerIdForManagement(projectId).orElseThrow(ProjectService::notFound);
+        members.findForManagementWrite(ownerId);
+        Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectService::notFound);
+        if (!project.getOwner().getId().equals(ownerId)) throw notFound();
+        if (project.getVisibility() == ProjectVisibility.DELETED) return;
+        postProjects.detachForManagement(ownerId, projectId);
+        media.deleteForProject(projectId);
+        project.delete();
+        projects.flush();
+    }
+
+    private Project managementForUpdate(long projectId) {
+        Long ownerId = projects.findOwnerIdForManagement(projectId).orElseThrow(ProjectService::notFound);
+        members.findForManagementWrite(ownerId);
+        Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectService::notFound);
+        if (!project.getOwner().getId().equals(ownerId)) throw notFound();
+        if (project.getVisibility() == ProjectVisibility.DELETED) {
+            throw new ApplicationException(ProjectError.CONTENT_DELETED);
+        }
+        return project;
+    }
+
+    private Specification<Project> searchMatching(String term) {
+        String pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        return (root, query, cb) -> {
+            var lowered = cb.lower(cb.literal(pattern));
+            var technology = query.subquery(Long.class);
+            var link = technology.from(ProjectTechStack.class);
+            technology.select(link.get("project").get("id")).where(cb.equal(link.get("project").get("id"), root.get("id")),
+                    cb.like(cb.lower(link.get("techStack").get("name")), lowered, '\\'));
+            // EXISTS로 여러 기술 스택가 일치해도 목록과 집계가 중복되지 않게 한다.
+            return cb.or(cb.like(cb.lower(root.get("name")), lowered, '\\'),
+                    cb.like(cb.lower(root.get("summary")), lowered, '\\'),
+                    cb.like(cb.lower(root.get("description")), lowered, '\\'), cb.exists(technology));
+        };
+    }
+
+    private Specification<Project> publicFilter(Long techStackId, ProjectLifecycleStatus lifecycleStatus, Long ownerId) {
+        Specification<Project> filter = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("visibility"), ProjectVisibility.PUBLIC));
+            predicates.add(cb.isFalse(root.get("blocked")));
+            predicates.add(cb.notEqual(root.get("owner").get("status"), MemberStatus.WITHDRAWAL_PENDING));
+            if (lifecycleStatus != null) predicates.add(cb.equal(root.get("lifecycleStatus"), lifecycleStatus));
+            if (ownerId != null) predicates.add(cb.equal(root.get("owner").get("id"), ownerId));
+            if (techStackId != null) {
+                var subquery = query.subquery(Long.class);
+                var link = subquery.from(ProjectTechStack.class);
+                subquery.select(link.get("project").get("id")).where(
+                        cb.equal(link.get("project").get("id"), root.get("id")),
+                        cb.equal(link.get("techStack").get("id"), techStackId));
+                predicates.add(cb.exists(subquery));
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        return filter;
+    }
+
+    @Transactional
+    public ProjectView update(long projectId, long memberId, ProjectChanges input) {
+        members.findProfileCompletedForWrite(memberId);
+        Project project = ownedForUpdate(projectId, memberId);
+        List<ProjectTechStack> currentTechStacks = projectTechStacks.findForProjects(List.of(projectId));
+        List<TechStack> selected = input.has("techStackIds") ? techStacks.resolveForContent(input.techStackIds(), currentTechStacks.stream()
+                .map(link -> link.getTechStack().getId()).collect(Collectors.toSet())) : null;
+        project.updateContent(input.has("name") ? input.name() : project.getName(),
+                input.has("summary") ? input.summary() : project.getSummary(),
+                input.has("description") ? input.description() : project.getDescription(),
+                input.has("architectureDescription") ? input.architectureDescription() : project.getArchitectureDescription(),
+                input.has("executionInstructions") ? input.executionInstructions() : project.getExecutionInstructions(),
+                input.has("lifecycleStatus") ? input.lifecycleStatus() : project.getLifecycleStatus(),
+                input.has("startedOn") ? input.startedOn() : project.getStartedOn(),
+                input.has("completedOn") ? input.completedOn() : project.getCompletedOn());
+        if (input.has("visibilityStatus")) project.changeVisibility(input.visibilityStatus());
+        if(input.has("document")){validateDocumentImages(project,input.document());project.changeDocument(input.document());}
+        if (input.has("features")) replaceFeatures(project, input.features());
+        if (input.has("links")) replaceLinks(project, input.links());
+        if (selected != null) replaceTechStacks(project, selected, currentTechStacks);
+        projects.flush();
+        return detailView(project, true);
+    }
+
+    @Transactional
+    public void delete(long projectId, long memberId) {
+        members.findProfileCompletedForWrite(memberId);
+        Project project = ownedForUpdate(projectId, memberId);
+        postProjects.detach(memberId, projectId);
+        media.deleteForProject(projectId);
+        project.delete();
+        projects.flush();
+    }
+
+    private Project ownedForUpdate(long projectId, long memberId) {
+        Project project = projects.findByIdForUpdate(projectId).orElseThrow(ProjectService::notFound);
+        if (!project.getOwner().getId().equals(memberId)) throw notFound();
+        if (project.getVisibility() == ProjectVisibility.DELETED) throw new ApplicationException(ProjectError.CONTENT_DELETED);
+        return project;
+    }
+
+    private void replaceFeatures(Project project, List<FeatureInput> input) {
+        features.deleteForProject(project.getId());
+        features.flush();
+        List<ProjectFeature> replacement = new ArrayList<>();
+        for (int order = 0; order < input.size(); order++) {
+            FeatureInput feature = input.get(order);
+            replacement.add(new ProjectFeature(project, feature.title(), feature.description(), order));
+        }
+        features.saveAll(replacement);
+    }
+
+    private void replaceLinks(Project project, List<LinkInput> input) {
+        links.deleteForProject(project.getId());
+        links.flush();
+        links.saveAll(input.stream().map(link -> new ProjectLink(project, link.type(), link.label(), link.url(),
+                link.displayOrder())).toList());
+    }
+
+    private void replaceTechStacks(Project project, List<TechStack> input, List<ProjectTechStack> current) {
+        projectTechStacks.deleteForProject(project.getId());
+        projectTechStacks.flush();
+        // 벌크 삭제는 영속성 컨텍스트를 갱신하지 않으므로 같은 복합 ID를 다시 저장하기 전에 분리한다.
+        current.forEach(entityManager::detach);
+        List<ProjectTechStack> replacement = new ArrayList<>();
+        for (int order = 0; order < input.size(); order++) replacement.add(new ProjectTechStack(project, input.get(order), order));
+        projectTechStacks.saveAll(replacement);
+    }
+
+    private ProjectView detailView(Project project, boolean owner) {
+        initializeOwner(project);
+        return new ProjectView(project, features.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
+                links.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
+                projectTechStacks.findForProjects(List.of(project.getId())).stream().map(ProjectTechStack::getTechStack).toList(), true, owner, 0, false, mediaViews(project,owner));
+    }
+
+    private Page<ProjectView> page(Page<Project> page, boolean owner) {
+        Map<Long, List<TechStack>> byProject = new HashMap<>();
+        if (!page.isEmpty()) {
+            for (ProjectTechStack link : projectTechStacks.findForProjects(page.getContent().stream().map(Project::getId).toList())) {
+                byProject.computeIfAbsent(link.getProject().getId(), id -> new ArrayList<>()).add(link.getTechStack());
+            }
+        }
+        return page.map(project -> {
+            initializeOwner(project);
+            return new ProjectView(project, null, null,
+                    List.copyOf(byProject.getOrDefault(project.getId(), List.of())), false, owner);
+        });
+    }
+
+    private List<ProjectMediaView> mediaViews(Project project,boolean owner) {
+        var client = mediaStorage.getIfAvailable();
+        boolean visible = client != null && isPublic(project);
+        return media.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()).stream()
+                .filter(item->owner||item.getMediaRole()!=com.pebble.api.project.domain.MediaRole.BODY||referencesImage(project,item.getId()))
+                .map(item -> ProjectMediaView.from(item, visible||owner&&client!=null&&item.getMediaRole()==com.pebble.api.project.domain.MediaRole.BODY ? client.signedUrl(item.getStorageKey()) : null,
+                        visible||owner&&client!=null&&item.getMediaRole()==com.pebble.api.project.domain.MediaRole.BODY ? client.signedUrl(item.getThumbnailStorageKey()) : null)).toList();
+    }
+
+    static boolean referencesImage(Project project,long imageId){
+        return project.getDocument()!=null&&project.getDocument().toString().contains("/projects/"+project.getId()+"/media/"+imageId+"/content");
+    }
+    private void validateDocumentImages(Project project,com.fasterxml.jackson.databind.JsonNode document){
+        if(document==null)return;
+        var pattern=java.util.regex.Pattern.compile("/projects/([1-9][0-9]{0,18})/media/([1-9][0-9]{0,18})/content");
+        var matcher=pattern.matcher(document.toString());
+        var ids=new java.util.HashSet<Long>();
+        while(matcher.find()){
+            try{
+                if(Long.parseLong(matcher.group(1))!=project.getId())throw notFound();
+                ids.add(Long.parseLong(matcher.group(2)));
+            }catch(NumberFormatException e){throw notFound();}
+        }
+        var owned=media.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()).stream()
+                .filter(item->item.getMediaRole()==com.pebble.api.project.domain.MediaRole.BODY).map(com.pebble.api.project.domain.ProjectMedia::getId).collect(Collectors.toSet());
+        if(!owned.containsAll(ids))throw notFound();
+    }
+
+    private void initializeOwner(Project project) { project.getOwner().getNickname(); }
+    private boolean isPublic(Project project) {
+        return project.getVisibility() == ProjectVisibility.PUBLIC && !project.isBlocked()
+                && project.getOwner().getStatus() != MemberStatus.WITHDRAWAL_PENDING;
+    }
+    private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }
+
+    public record ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
+                              boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media) {
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
+                           boolean detail, boolean owner, long likeCount, boolean likedByMe) {
+            this(project, features, links, techStacks, detail, owner, likeCount, likedByMe, detail ? List.of() : null);
+        }
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
+                           boolean detail, boolean owner) {
+            this(project, features, links, techStacks, detail, owner, 0, false);
+        }
+    }
+}

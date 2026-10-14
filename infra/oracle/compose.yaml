@@ -1,0 +1,68 @@
+name: pebble-prod
+services:
+  postgres:
+    image: postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
+    restart: unless-stopped
+    mem_limit: 2g
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/admin-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command: [postgres, -c, ssl=on, -c, ssl_cert_file=/run/tls/server.crt, -c, ssl_key_file=/run/tls/server.key, -c, hba_file=/etc/postgresql/pg_hba.conf, -c, password_encryption=scram-sha-256]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./private/postgres:/run/secrets:ro
+      - ./private/tls/postgres:/run/tls:ro
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-pebble.sh:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    networks: [datastore]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, gosu, postgres, pg_isready, -U, postgres, -d, postgres]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: &logging
+      driver: local
+      options: {max-size: 10m, max-file: '3'}
+  redis:
+    image: redis:7.4-bookworm@sha256:c6eabf748fc7a61dbb5a705c78bcf3d6377b1127a97d0ce965c11c44ba46896f
+    restart: unless-stopped
+    mem_limit: 768m
+    command: [redis-server, /run/config/redis.conf]
+    volumes:
+      - redis_data:/data
+      - ./private/redis:/run/config:ro
+      - ./private/tls/redis:/run/tls:ro
+    networks: [datastore]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+  api:
+    image: pebble-api:oracle-preflight
+    restart: unless-stopped
+    mem_limit: 3g
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    env_file: ./api.env
+    environment:
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      SPRING_DATA_REDIS_SSL_BUNDLE: redis
+      SPRING_SSL_BUNDLE_PEM_REDIS_TRUSTSTORE_CERTIFICATE: file:/run/tls/ca.crt
+    volumes:
+      - ./private/api:/run/secrets:ro
+      - ./private/tls/public:/run/tls:ro
+      - ./private/audit:/app/logs/admin-audit
+    tmpfs: ['/tmp:rw,exec,nosuid,size=256m']
+    ports: ['127.0.0.1:8080:8080']
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    networks: [datastore, egress]
+    logging: *logging
+networks:
+  datastore: {internal: true}
+  egress: {}
+volumes:
+  postgres_data: {}
+  redis_data: {}
