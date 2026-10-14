@@ -48,6 +48,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     @Autowired ObjectMapper mapper;
     @Autowired MemberRepository members;
     @Autowired com.pebble.api.post.infrastructure.persistence.PostRepository postRepository;
+    @Autowired com.pebble.api.post.application.PostService postService;
     @Autowired MemberProfileService profiles;
     @Autowired CategoryRepository categories;
     @Autowired TechStackRepository techStacks;
@@ -62,6 +63,36 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     void setup() {
         owner = initializedMember("owner");
         other = initializedMember("other");
+    }
+
+    @Test
+    void managementDeletionNormalizesGlobalAndBoardOrdersAndAllowsMovingLastPost() throws Exception {
+        long board = boardService.create(owner.getId(), new com.pebble.api.board.application.BoardChanges(
+                java.util.Set.of("name"), "관리자 삭제 순서", null, 0)).getId();
+        String first = create(owner, "PUBLIC", null, List.of());
+        String middle = create(owner, "HIDDEN", null, List.of());
+        String last = create(owner, "PUBLIC", null, List.of());
+        for (String id : List.of(first, middle, last)) {
+            change(id, "{\"boardId\":\"" + board + "\"}").andExpect(status().isOk());
+        }
+        String otherPost = create(other, "PUBLIC", null, List.of());
+
+        postService.deleteForManagement(Long.parseLong(middle));
+        postService.deleteForManagement(Long.parseLong(middle));
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/members/me/posts").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(last, first)))
+                .andExpect(jsonPath("$.data.content[*].displayOrder", org.hamcrest.Matchers.contains(0, 1)));
+        mvc.perform(get("/api/v1/members/me/posts").param("boardId", Long.toString(board))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[*].boardDisplayOrder", org.hamcrest.Matchers.contains(0, 1)));
+        change(last, "{\"displayOrder\":1}").andExpect(status().isOk());
+        mvc.perform(get("/api/v1/members/me/posts").header(HttpHeaders.AUTHORIZATION, bearer(other)))
+                .andExpect(jsonPath("$.data.content[0].id").value(otherPost))
+                .andExpect(jsonPath("$.data.content[0].displayOrder").value(0));
     }
 
     @Test
