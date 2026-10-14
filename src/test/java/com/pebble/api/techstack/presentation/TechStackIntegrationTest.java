@@ -1,5 +1,6 @@
 package com.pebble.api.techstack.presentation;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -35,12 +36,37 @@ class TechStackIntegrationTest extends AuthenticationTestSupport {
     @Autowired
     private TechStackRepository techStacks;
 
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     @MockitoBean(name = "naverOAuthClient")
     private OAuthProviderClient naverOAuthGateway;
 
     @BeforeEach
     void clearTechStacksWithinRollbackTransaction() {
         techStacks.deleteAllInBatch();
+    }
+
+    @Test
+    void catalogCurationPreservesIdsAndInactiveChoicesAndCanBeReplayed() {
+        TechStack temporary = techStacks.saveAndFlush(new TechStack("똥", "test-junk", 0, TechStackStatus.ACTIVE));
+        techStacks.saveAndFlush(new TechStack("React", "custom-react", 1, TechStackStatus.INACTIVE));
+        techStacks.saveAndFlush(new TechStack("Spring Boot", "spring-boot", 2, TechStackStatus.ACTIVE));
+        TechStack duplicate = techStacks.saveAndFlush(new TechStack("springboot", "test-duplicate", 3, TechStackStatus.ACTIVE));
+        Runnable apply = () -> jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,
+                    new org.springframework.core.io.ClassPathResource("db/migration/V31__curate_tech_stack_catalog.sql"));
+            return null;
+        });
+        apply.run();
+        Long count = jdbc.queryForObject("SELECT count(*) FROM tech_stack", Long.class);
+        assertThat(count).isGreaterThan(70);
+        assertThat(jdbc.queryForObject("SELECT status FROM tech_stack WHERE id=?", String.class, temporary.getId())).isEqualTo("INACTIVE");
+        assertThat(jdbc.queryForObject("SELECT status FROM tech_stack WHERE id=?", String.class, duplicate.getId())).isEqualTo("INACTIVE");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM tech_stack WHERE name='React'", Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT status FROM tech_stack WHERE name='React'", String.class)).isEqualTo("INACTIVE");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM tech_stack WHERE name IN ('TypeScript','FastAPI','PyTorch','Cloudflare') AND status='ACTIVE'", Long.class)).isEqualTo(4L);
+        apply.run();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM tech_stack", Long.class)).isEqualTo(count);
     }
 
     @Test
