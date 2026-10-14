@@ -278,6 +278,20 @@ public class PostService {
         return page(posts.findAll(filter, boardId==null?pageable:boardPageable(pageable)), true);
     }
 
+    public Page<PostView> listOwnBlog(long memberId, Long boardId, String term, String placement, Pageable pageable) {
+        members.findActiveById(memberId);
+        if (boardId != null) boards.resolveForPost(boardId, memberId);
+        // 블로그에는 발행한 글만 표시하고 초안·차단 글은 기존 관리 화면에 남긴다.
+        Specification<Post> filter = (root, query, cb) -> cb.and(
+                cb.equal(root.get("author").get("id"), memberId),
+                root.get("visibility").in(PostVisibility.PUBLIC, PostVisibility.HIDDEN),
+                cb.isFalse(root.get("draft")), cb.isFalse(root.get("blocked")),
+                boardId == null ? cb.conjunction() : cb.equal(root.get("boardId"), boardId),
+                placement == null ? cb.conjunction() : cb.isNotNull(root.get("boards".equals(placement) ? "boardId" : "projectId")));
+        if (term != null) filter = filter.and(searchMatching(term));
+        return page(posts.findAll(filter, boardId == null ? pageable : boardPageable(pageable)), true);
+    }
+
     public Page<PostView> listBlog(String handle, Long categoryId, Pageable pageable) {
         return listPublic(categoryId, members.findPublicBlog(handle).getId(), pageable);
     }

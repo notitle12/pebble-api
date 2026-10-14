@@ -66,6 +66,78 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void ownBlogListsPrivatePublishedPostsWithoutExposingThemToVisitors() throws Exception {
+        String visible = create(owner, "PUBLIC", null, List.of());
+        String hidden = create(owner, "HIDDEN", null, List.of());
+        String foreign = create(other, "HIDDEN", null, List.of());
+        String draft = create(owner, "HIDDEN", null, List.of());
+        String blocked = create(owner, "HIDDEN", null, List.of());
+        String deleted = create(owner, "HIDDEN", null, List.of());
+        mvc.perform(delete(PATH + "/" + deleted).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isNoContent());
+        em.flush();
+        jdbc.update("update post set is_draft=true where id=?", Long.parseLong(draft));
+        jdbc.update("update post set is_blocked=true,blocked_at=now(),blocked_by_admin_id=1 where id=?", Long.parseLong(blocked));
+        em.clear();
+
+        String mine = "/api/v1/members/me/blog/posts";
+        mvc.perform(get(mine).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.CACHE_CONTROL, org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(hidden, visible)))
+                .andExpect(jsonPath("$.data.content[0].visibilityStatus").value("HIDDEN"));
+        mvc.perform(get(mine).param("size", "1").param("page", "1").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[0].id").value(visible));
+        mvc.perform(get(mine).header(HttpHeaders.AUTHORIZATION, bearer(other)))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(foreign)));
+        mvc.perform(get(mine)).andExpect(status().isUnauthorized());
+        mvc.perform(get(mine).param("memberId", owner.getId().toString()).header(HttpHeaders.AUTHORIZATION, bearer(other)))
+                .andExpect(status().isBadRequest());
+        for (String endpoint : List.of("/api/v1/blogs/" + owner.getHandle() + "/posts",
+                "/api/v1/members/" + owner.getId() + "/posts")) {
+            mvc.perform(get(endpoint).header(HttpHeaders.AUTHORIZATION, bearer(other)))
+                    .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(visible)));
+            mvc.perform(get(endpoint)).andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(visible)));
+        }
+        mvc.perform(get(PATH + "/" + hidden).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isOk());
+        mvc.perform(get(PATH + "/" + hidden).header(HttpHeaders.AUTHORIZATION, bearer(other))).andExpect(status().isNotFound());
+        mvc.perform(get(PATH + "/" + hidden)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void ownBlogFiltersPrivatePostsByBoardPlacementAndSearch() throws Exception {
+        long board = boardService.create(owner.getId(), new com.pebble.api.board.application.BoardChanges(
+                java.util.Set.of("name"), "개인 기록", null, 0)).getId();
+        long foreignBoard = boardService.create(other.getId(), new com.pebble.api.board.application.BoardChanges(
+                java.util.Set.of("name"), "다른 회원", null, 0)).getId();
+        var project = new com.pebble.api.project.domain.Project(owner, "내 프로젝트", null, null, null, null,
+                com.pebble.api.project.domain.ProjectLifecycleStatus.IN_PROGRESS, null, null,
+                com.pebble.api.project.domain.ProjectVisibility.PUBLIC);
+        em.persist(project);
+        em.flush();
+        String first = create(owner, "HIDDEN", null, List.of()), second = create(owner, "PUBLIC", null, List.of());
+        change(first, "{\"boardId\":\"" + board + "\",\"projectId\":\"" + project.getId() + "\",\"title\":\"비밀 바늘 기록\"}").andExpect(status().isOk());
+        change(second, "{\"boardId\":\"" + board + "\"}").andExpect(status().isOk());
+        change(first, "{\"boardDisplayOrder\":0}").andExpect(status().isOk());
+        String mine = "/api/v1/members/me/blog/posts";
+        mvc.perform(get(mine).param("boardId", Long.toString(board)).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(first, second)));
+        mvc.perform(get(mine).param("placement", "boards").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.totalElements").value(2));
+        mvc.perform(get(mine).param("placement", "projects").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(first)));
+        mvc.perform(get(mine).param("q", "바늘").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.contains(first)));
+        mvc.perform(get("/api/v1/blogs/" + owner.getHandle() + "/posts").param("q", "바늘"))
+                .andExpect(jsonPath("$.data.totalElements").value(0));
+        mvc.perform(get(mine).param("boardId", Long.toString(foreignBoard)).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isNotFound());
+        for (String bad : List.of("placement=wrong", "placement=boards&q=x", "placement=projects&boardId=" + board, "q=x&boardId=" + board)) {
+            mvc.perform(get(mine + "?" + bad).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
     void managementDeletionNormalizesGlobalAndBoardOrdersAndAllowsMovingLastPost() throws Exception {
         long board = boardService.create(owner.getId(), new com.pebble.api.board.application.BoardChanges(
                 java.util.Set.of("name"), "관리자 삭제 순서", null, 0)).getId();
