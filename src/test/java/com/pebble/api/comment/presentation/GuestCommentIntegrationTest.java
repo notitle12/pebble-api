@@ -83,9 +83,11 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(post(path+"/guest").header("Origin","https://evil.example").contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isForbidden());
         mvc.perform(post(path+"/guest").header("Origin",ORIGIN,ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isForbidden());
         mvc.perform(post(path+"/guest?password=leak").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isBadRequest());
-        for(String replacement:new String[]{json.replace("\"privacyAccepted\":true","\"privacyAccepted\":false"),json.replace("\"ageConfirmed\":true","\"ageConfirmed\":false"),json.replace("\"body\":", "\"visibility\":\"SECRET\",\"body\":")})
+        for(String replacement:new String[]{json.replace("\"privacyAccepted\":true","\"privacyAccepted\":false"),json.replace("\"body\":", "\"visibility\":\"SECRET\",\"body\":")})
             mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(replacement)).andExpect(status().isBadRequest());
         assertThat(jdbc.queryForObject("select count(*) from guest_abuse_event",Long.class)).isZero();
+        mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json))
+                .andExpect(status().isCreated());
     }
     @ParameterizedTest @ValueSource(strings={"posts","projects"})
     void hiddenParentsAndWrongContentDoNotLeakAndOwnerCanModerate(String resource) throws Exception {
@@ -150,7 +152,7 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     }
     private String payload(String nickname,String password) throws Exception {
-        return mapper.writeValueAsString(Map.of("nickname",nickname,"password",password,"body","hello guest","privacyAccepted",true,"ageConfirmed",true));
+        return mapper.writeValueAsString(Map.of("nickname",nickname,"password",password,"body","hello guest","privacyAccepted",true));
     }
     private String collection(String resource,String visibility) throws Exception {
         String json=resource.equals("posts")?"{\"title\":\"guest parent\",\"visibilityStatus\":\""+visibility+"\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}]}"
