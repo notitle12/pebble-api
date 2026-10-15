@@ -7,7 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pebble.api.auth.application.AccessTokenService;
 import com.pebble.api.auth.application.oauth.OAuthProviderClient;
-import com.pebble.api.comment.infrastructure.GuestCommentAbuseRecords;
+import com.pebble.api.comment.application.CommentService;
+import com.pebble.api.comment.domain.CommentTarget;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.domain.Member;
 import com.pebble.api.member.domain.MemberStatus;
@@ -40,10 +41,10 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
     @Autowired AccessTokenService tokens;
     @Autowired JdbcTemplate jdbc;
     @Autowired StringRedisTemplate redis;
-    @Autowired GuestCommentAbuseRecords abuse;
+    @Autowired CommentService comments;
     @MockitoBean(name="naverOAuthClient") OAuthProviderClient naver;
     private Member owner;
-    private static final String PASSWORD="comment-password-123";
+    private static final String PASSWORD="pass1234";
     private static final String ORIGIN="http://localhost:3000";
     @BeforeEach void setup(){
         var keys=redis.keys("pebble:comment:rate:*"); if(keys!=null&&!keys.isEmpty())redis.delete(keys);
@@ -51,16 +52,16 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
         profiles.complete(owner.getId(),"blog","blog-"+owner.getId(),null);
     }
     @ParameterizedTest @ValueSource(strings={"posts","projects"})
-    void guestLifecycleNeverExposesPasswordHashOrIp(String resource) throws Exception {
+    void guestLifecycleNeverExposesPasswordHashAndStoresNoIp(String resource) throws Exception {
         String path=collection(resource,"PUBLIC");
         String result=create(path,"visitor",PASSWORD);
         String id=mapper.readTree(result).at("/data/id").asText();
-        assertThat(result).doesNotContain(PASSWORD,"password","ip_address","127.0.0.1","argon2");
+        assertThat(result).doesNotContain(PASSWORD,"password","ip_address","argon2");
         assertThat(mapper.readTree(result).at("/data/author/id").isNull()).isTrue();
         String table=resource.equals("posts")?"post_comment":"project_comment";
         assertThat(jdbc.queryForObject("select guest_password_hash from "+table+" where id=?",String.class,Long.parseLong(id)))
                 .startsWith("$argon2id$").doesNotContain(PASSWORD);
-        assertThat(jdbc.queryForObject("select ip_address from guest_abuse_event where comment_id=?",String.class,Long.parseLong(id))).isEqualTo("127.0.0.1");
+        assertThat(jdbc.queryForObject("select to_regclass('public.guest_abuse_event') is null",Boolean.class)).isTrue();
         mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.content[0].author.nickname").value("visitor"));
         mvc.perform(post(path+"/"+id+"/guest/update").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
@@ -76,6 +77,18 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select guest_password_hash from "+table+" where id=?",String.class,Long.parseLong(id))).isNull();
         assertThat(jdbc.queryForObject("select guest_nickname from "+table+" where id=?",String.class,Long.parseLong(id))).isEqualTo("삭제된 방문자");
     }
+    @Test void newPasswordBoundsAndBlankNicknameUsePebbleWithoutConsent() throws Exception {
+        String path=collection("posts","PUBLIC");
+        String fourCharacterPayload=mapper.writeValueAsString(Map.of("password","1234","body","hello"));
+        mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(fourCharacterPayload))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.author.nickname").value("조약돌"));
+        String tenCharacterPayload=mapper.writeValueAsString(Map.of("nickname","  ","password","1234567890","body","hello"));
+        mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(tenCharacterPayload))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.author.nickname").value("조약돌"));
+        String elevenCharacterPayload=mapper.writeValueAsString(Map.of("nickname","visitor","password","12345678901","body","hello"));
+        mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(elevenCharacterPayload))
+                .andExpect(status().isBadRequest());
+    }
     @Test void originBodyAndVisibilityCannotBeBypassed() throws Exception {
         String path=collection("posts","PUBLIC");
         String json=payload("visitor",PASSWORD);
@@ -83,10 +96,12 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(post(path+"/guest").header("Origin","https://evil.example").contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isForbidden());
         mvc.perform(post(path+"/guest").header("Origin",ORIGIN,ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isForbidden());
         mvc.perform(post(path+"/guest?password=leak").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isBadRequest());
-        for(String replacement:new String[]{json.replace("\"privacyAccepted\":true","\"privacyAccepted\":false"),json.replace("\"body\":", "\"visibility\":\"SECRET\",\"body\":")})
+        for(String replacement:new String[]{json.replace("\"body\":", "\"visibility\":\"SECRET\",\"body\":"),json.replace("\"body\":", "\"ageConfirmed\":\"true\",\"body\":")})
             mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(replacement)).andExpect(status().isBadRequest());
-        assertThat(jdbc.queryForObject("select count(*) from guest_abuse_event",Long.class)).isZero();
         mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json))
+                .andExpect(status().isCreated());
+        String oldFlags = mapper.writeValueAsString(Map.of("nickname", "visitor", "password", PASSWORD, "body", "hello", "privacyAccepted", false, "ageConfirmed", true));
+        mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(oldFlags))
                 .andExpect(status().isCreated());
     }
     @ParameterizedTest @ValueSource(strings={"posts","projects"})
@@ -130,13 +145,18 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isTooManyRequests());
     }
 
-    @Test void abuseRecordsExpireAfterSevenDaysWithoutDeletingComments() throws Exception {
+    @Test void legacyElevenCharacterPasswordStillUpdatesAndDeletesExistingComments() throws Exception {
         String path=collection("posts","PUBLIC");
-        String id=mapper.readTree(create(path,"visitor",PASSWORD)).at("/data/id").asText();
-        jdbc.update("update guest_abuse_event set created_at=now()-interval '8 days'");
-        assertThat(abuse.cleanup()).isEqualTo(1);
-        mvc.perform(get(path+"/"+id)).andExpect(status().isOk());
-        assertThat(jdbc.queryForObject("select count(*) from guest_abuse_event",Long.class)).isZero();
+        long contentId=Long.parseLong(path.split("/")[4]);
+        String legacyPassword="legacy-pass1";
+        var legacy=comments.createGuest(CommentTarget.POST,contentId,"legacy",legacyPassword,"before migration");
+        String commentPath=path+"/"+legacy.getId();
+        mvc.perform(post(commentPath+"/guest/update").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",legacyPassword,"body","updated"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.body").value("updated"));
+        mvc.perform(post(commentPath+"/guest/delete").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",legacyPassword))))
+                .andExpect(status().isNoContent());
     }
     @Test void testUsersCanAcceptEvenWhileNaverReviewIsNotPublished() throws Exception {
         Member pending=members.saveAndFlush(new Member("test-user",null,MemberStatus.ACTIVE,null,null));
@@ -152,7 +172,7 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     }
     private String payload(String nickname,String password) throws Exception {
-        return mapper.writeValueAsString(Map.of("nickname",nickname,"password",password,"body","hello guest","privacyAccepted",true));
+        return mapper.writeValueAsString(Map.of("nickname",nickname,"password",password,"body","hello guest"));
     }
     private String collection(String resource,String visibility) throws Exception {
         String json=resource.equals("posts")?"{\"title\":\"guest parent\",\"visibilityStatus\":\""+visibility+"\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}]}"
