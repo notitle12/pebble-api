@@ -20,7 +20,7 @@ class BlogVisitsIntegrationTest extends AuthenticationTestSupport {
  @Autowired MemberRepository members;
  @Autowired TransactionTemplate transactions;
  @Test void concurrentDuplicateVisitsCountOnceAndDistinctVisitsDoNotLoseUpdates()throws Exception{
-  String key=UUID.randomUUID().toString().substring(0,12);var member=new Member("visits-"+key,null,MemberStatus.ACTIVE,null,null);member.completeProfile("방문-"+key,"visits-"+key,member.getNickname(),Instant.now());members.saveAndFlush(member);
+  String key=UUID.randomUUID().toString().substring(0,12);var member=agreedMember(new Member("visits-"+key,null,MemberStatus.ACTIVE,null,null));member.completeProfile("방문-"+key,"visits-"+key,member.getNickname(),Instant.now());members.saveAndFlush(member);
   var pool=java.util.concurrent.Executors.newFixedThreadPool(4);
   try{
    var tasks=new java.util.ArrayList<java.util.concurrent.Callable<Void>>();

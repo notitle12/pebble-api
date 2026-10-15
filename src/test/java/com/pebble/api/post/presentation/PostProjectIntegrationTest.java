@@ -186,7 +186,7 @@ class PostProjectIntegrationTest extends AuthenticationTestSupport {
     }
 
     private Member member() {
-        Member value = members.saveAndFlush(new Member("project-link-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null));
+        Member value = members.saveAndFlush(agreedMember(new Member("project-link-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(value.getId(), "blog-" + value.getId(), "author-" + value.getId(), null);
     }
     private String bearer(Member member) { return "Bearer " + tokens.issueForMember(member.getId(), java.time.Instant.now()); }

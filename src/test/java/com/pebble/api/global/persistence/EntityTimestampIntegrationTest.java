@@ -24,7 +24,7 @@ class EntityTimestampIntegrationTest extends AuthenticationTestSupport {
     @Autowired EntityManager em;
 
     private Member member() {
-        var member = new Member("timestamp-test", null, MemberStatus.ACTIVE, null, null);
+        var member = agreedMember(new Member("timestamp-test", null, MemberStatus.ACTIVE, null, null));
         em.persist(member);
         em.flush();
         return member;

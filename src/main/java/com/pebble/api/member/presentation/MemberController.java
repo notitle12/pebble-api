@@ -25,6 +25,19 @@ public class MemberController {
     private static final String MEMBER_SUBJECT_PREFIX = "member:";
 
     private final MemberQueryService memberQueryService;
+    private final com.pebble.api.member.application.MemberAgreementService agreements;
+
+    @GetMapping("/me/agreements")
+    public ApiResponse<com.pebble.api.member.application.MemberAgreementService.State> agreements(@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.of(agreements.state(memberId(jwt)));
+    }
+
+    @PostMapping(value = "/me/agreements", consumes = "application/json")
+    public ApiResponse<com.pebble.api.member.application.MemberAgreementService.State> acceptAgreements(@AuthenticationPrincipal Jwt jwt, @RequestBody JsonNode json) {
+        var input = com.pebble.api.member.presentation.dto.MemberAgreementRequest.parse(json);
+        return ApiResponse.of(agreements.accept(memberId(jwt), input.termsVersion(), input.privacyVersion()));
+    }
+
     private final MemberProfileService profiles;
     private final com.pebble.api.member.application.MemberProfileImages images;
     private final com.fasterxml.jackson.databind.ObjectMapper mapper;
@@ -34,7 +47,7 @@ public class MemberController {
         // JWT 검증기를 통과한 회원 주체에서만 본인 ID를 읽는다.
         long memberId = Long.parseLong(jwt.getSubject().substring(MEMBER_SUBJECT_PREFIX.length()));
         Member member = memberQueryService.findActiveById(memberId);
-        return ApiResponse.of(MemberResponse.from(member, images.url(member)));
+        return ApiResponse.of(MemberResponse.from(member, images.url(member), agreements.state(member.getId()).accepted()));
     }
 
     @PostMapping(value = "/me/profile", consumes = "application/json")
@@ -84,7 +97,7 @@ public class MemberController {
         }
     }
 
-    private MemberResponse response(Member member) { return MemberResponse.from(member, images.url(member)); }
+    private MemberResponse response(Member member) { return MemberResponse.from(member, images.url(member), agreements.state(member.getId()).accepted()); }
 
     private long memberId(Jwt jwt) {
         return Long.parseLong(jwt.getSubject().substring(MEMBER_SUBJECT_PREFIX.length()));

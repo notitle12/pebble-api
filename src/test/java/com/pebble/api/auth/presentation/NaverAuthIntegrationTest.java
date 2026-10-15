@@ -136,7 +136,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void existingMemberLogsInWithoutCreatingAnotherAccount() throws Exception {
-        Member member = memberRepository.saveAndFlush(new Member("saved-name", null, MemberStatus.ACTIVE, null, null));
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member("saved-name", null, MemberStatus.ACTIVE, null, null)));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "existing-subject"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
@@ -240,9 +240,9 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
     @Test
     void restoresWithdrawalPendingMemberOnLogin() throws Exception {
         Instant requestedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
-        Member member = memberRepository.saveAndFlush(new Member(
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member(
                 "pending", null, MemberStatus.WITHDRAWAL_PENDING,
-                requestedAt, requestedAt.plusSeconds(60)));
+                requestedAt, requestedAt.plusSeconds(60))));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "pending-naver-id"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
@@ -279,7 +279,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void refusesSuspendedMemberWithoutIssuingTokens() throws Exception {
-        Member member = memberRepository.saveAndFlush(new Member("suspended", null, MemberStatus.SUSPENDED, null, null));
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member("suspended", null, MemberStatus.SUSPENDED, null, null)));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "suspended-subject"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));

@@ -161,8 +161,8 @@ class AdminMemberManagementIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("SUSPENDED"));
         mvc.perform(statusChange(member.getId(), "{\"status\":\"ACTIVE\"}", masterAccess))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("ACTIVE"));
-        Member pending = members.saveAndFlush(new Member("Pending-" + suffix(), null, MemberStatus.WITHDRAWAL_PENDING,
-                Instant.now(), Instant.now().plusSeconds(86400)));
+        Member pending = members.saveAndFlush(agreedMember(new Member("Pending-" + suffix(), null, MemberStatus.WITHDRAWAL_PENDING,
+                Instant.now(), Instant.now().plusSeconds(86400))));
         mvc.perform(statusChange(pending.getId(), "{\"status\":\"ACTIVE\"}", masterAccess))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("WITHDRAWAL_PENDING"));
         mvc.perform(statusChange(pending.getId(), "{\"status\":\"SUSPENDED\"}", managerAccess))
@@ -301,7 +301,7 @@ class AdminMemberManagementIntegrationTest extends AuthenticationTestSupport {
     }
 
     private Member createMember(String nickname) {
-        Member member = members.saveAndFlush(new Member(nickname, null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member(nickname, null, MemberStatus.ACTIVE, null, null)));
         memberSessionsToRevoke.add(member.getId());
         return member;
     }

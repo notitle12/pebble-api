@@ -81,7 +81,7 @@ class AdminCommentIntegrationTest extends AuthenticationTestSupport {
         master = accounts.saveAndFlush(new AdminAccount("master-" + UUID.randomUUID(), hash, AdminRole.MASTER));
         managerAccess = sessions.login(manager.getLoginId(), PASSWORD).tokens().accessToken();
         masterAccess = sessions.login(master.getLoginId(), PASSWORD).tokens().accessToken();
-        author = members.saveAndFlush(new Member("comment-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null));
+        author = members.saveAndFlush(agreedMember(new Member("comment-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null)));
         author.completeProfile("Comment blog", "comment-author", author.getNickname(), Instant.now());
         members.flush();
         userAccess = accessTokens.issueForMember(author.getId(), Instant.now());

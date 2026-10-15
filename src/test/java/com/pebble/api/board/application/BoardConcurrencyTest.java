@@ -189,8 +189,8 @@ class BoardConcurrencyTest extends AuthenticationTestSupport {
         return boards.create(owner, new BoardChanges(Set.of("name"), name, null, 0)).getId();
     }
     private long member() {
-        long id = transactions.execute(status -> members.saveAndFlush(new Member("board-" + java.util.UUID.randomUUID().toString().substring(0, 8), null,
-                MemberStatus.ACTIVE, null, null)).getId());
+        long id = transactions.execute(status -> members.saveAndFlush(agreedMember(new Member("board-" + java.util.UUID.randomUUID().toString().substring(0, 8), null,
+                MemberStatus.ACTIVE, null, null))).getId());
         owners.add(id);
         profiles.complete(id, "blog-" + id, "board-" + id, null);
         return id;
