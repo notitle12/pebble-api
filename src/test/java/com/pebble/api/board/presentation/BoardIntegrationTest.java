@@ -162,8 +162,8 @@ class BoardIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void boardWritesDoNotRequireCompletedProfileButPostWritesStillDo() throws Exception {
-        Member incomplete = members.saveAndFlush(new Member("incomplete-" + UUID.randomUUID().toString().substring(0, 8),
-                null, MemberStatus.ACTIVE, null, null));
+        Member incomplete = members.saveAndFlush(agreedMember(new Member("incomplete-" + UUID.randomUUID().toString().substring(0, 8),
+                null, MemberStatus.ACTIVE, null, null)));
         String id = create(incomplete, "draft tree", null, 0);
         mvc.perform(post(POSTS_PATH).header(HttpHeaders.AUTHORIZATION, bearer(incomplete)).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"title\",\"visibilityStatus\":\"PUBLIC\",\"boardId\":\"" + id
@@ -347,8 +347,8 @@ class BoardIntegrationTest extends AuthenticationTestSupport {
     }
 
     private Member initializedMember(String label) {
-        Member created = members.saveAndFlush(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
-                null, MemberStatus.ACTIVE, null, null));
+        Member created = members.saveAndFlush(agreedMember(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
+                null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(created.getId(), "blog-" + created.getId(), "author-" + created.getId(), null);
     }
 

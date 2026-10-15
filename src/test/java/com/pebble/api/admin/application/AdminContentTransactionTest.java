@@ -63,7 +63,7 @@ class AdminContentTransactionTest extends AuthenticationTestSupport {
     void setup() {
         actor = accounts.saveAndFlush(new AdminAccount("moderator-" + UUID.randomUUID(), "unused-test-hash", AdminRole.MANAGER));
         transactions.executeWithoutResult(status -> {
-            owner = members.saveAndFlush(new Member("tx-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null));
+            owner = members.saveAndFlush(agreedMember(new Member("tx-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null)));
             owner.completeProfile("Tx Blog " + owner.getId(), "owner-" + owner.getId(), owner.getNickname(), Instant.now());
             members.flush();
             projectId = projects.saveAndFlush(new Project(owner, "original", null, "body", null, null,

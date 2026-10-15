@@ -6,6 +6,9 @@ import org.springframework.http.HttpStatus;
 
 @RequiredArgsConstructor
 public enum MemberError implements ErrorCode {
+    AGREEMENTS_REQUIRED(HttpStatus.FORBIDDEN, "서비스 이용약관과 개인정보 수집·이용에 동의해 주세요."),
+    AGREEMENT_VERSION_CHANGED(HttpStatus.CONFLICT, "약관이 변경되었습니다. 내용을 다시 확인해 주세요."),
+    LEGAL_DOCUMENTS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "가입 안내를 준비하고 있어요. 잠시 후 다시 시도해 주세요."),
     VISIT_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "방문 집계 요청이 많습니다. 잠시 후 다시 시도해 주세요."),
     ACCOUNT_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 계정은 이용할 수 없습니다."),
     ACCOUNT_WITHDRAWAL_PENDING(HttpStatus.FORBIDDEN, "탈퇴 대기 중인 계정은 이용할 수 없습니다."),

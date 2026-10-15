@@ -105,7 +105,7 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
     private final java.util.Map<Long, Long> lastBoardIds = new java.util.HashMap<>();
 
     private Member member(MemberStatus status) {
-        Member value = members.saveAndFlush(new Member("cleanup-" + UUID.randomUUID().toString().substring(0, 12), null, status, null, null));
+        Member value = members.saveAndFlush(agreedMember(new Member("cleanup-" + UUID.randomUUID().toString().substring(0, 12), null, status, null, null)));
         fixtureMembers.add(value.getId());
         return value;
     }
