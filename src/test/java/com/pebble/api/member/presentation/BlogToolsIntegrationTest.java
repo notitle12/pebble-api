@@ -38,16 +38,15 @@ class BlogToolsIntegrationTest extends AuthenticationTestSupport {
  @MockitoBean R2ObjectStorage storage;
  Member owner,other;
  @BeforeEach void setup(){owner=blog();other=blog();when(storage.signedUrl(anyString())).thenAnswer(c->"https://images.example.test/"+c.getArgument(0));}
- @Test void retiredVisitEndpointsOnlyExpireLegacyCookieAndNeverCollect()throws Exception{
-  for(var request:java.util.List.of(get(path()+"/visits"),post(path()+"/visits").header("Origin","http://localhost:3000"))){
-   mvc.perform(request.cookie(new Cookie(BlogToolsController.VISITOR_COOKIE,UUID.randomUUID().toString())))
-    .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(0))
-    .andExpect(header().string("Set-Cookie",org.hamcrest.Matchers.containsString("pebble_blog_visitor=;")))
-    .andExpect(header().string("Set-Cookie",org.hamcrest.Matchers.containsString("Max-Age=0")))
-    .andExpect(header().string("Cache-Control","no-store"));
-  }
-  assertThat(jdbc.queryForObject("select count(*) from blog_visit_daily where member_id=?",Long.class,owner.getId())).isZero();
-  assertThat(jdbc.queryForObject("select count(*) from blog_visit_stats where member_id=?",Long.class,owner.getId())).isZero();
+ @Test void visitCookieDeduplicatesAndReadDoesNotWrite()throws Exception{
+  mvc.perform(get(path()+"/visits")).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(0));
+  var first=mvc.perform(post(path()+"/visits").header("Origin","http://localhost:3000")).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(1)).andExpect(jsonPath("$.data.todayVisitors").value(1)).andExpect(jsonPath("$.data.timeZone").value("Asia/Seoul")).andReturn();
+  String cookie=first.getResponse().getHeader("Set-Cookie");assertThat(cookie).contains("HttpOnly","SameSite=Lax","Path=/api/v1/blogs").doesNotContain("Max-Age=15552000");
+  String visitor=cookie.substring(cookie.indexOf('=')+1,cookie.indexOf(';'));
+  mvc.perform(post(path()+"/visits").header("Origin","http://localhost:3000").cookie(new Cookie(BlogToolsController.VISITOR_COOKIE,visitor))).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(1));
+  mvc.perform(get(path()+"/visits")).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(1));
+  mvc.perform(post(path()+"/visits").header("Origin","http://localhost:3000").cookie(new Cookie(BlogToolsController.VISITOR_COOKIE,UUID.randomUUID().toString()))).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(2));
+  assertThat(jdbc.queryForList("select visitor_hash from blog_visit_daily where member_id=?",String.class,owner.getId())).allMatch(v->v.matches("[a-f0-9]{64}"));
  }
  @Test void visitRequiresSingleAllowedOriginAndStrictRequest()throws Exception{
   mvc.perform(post(path()+"/visits")).andExpect(status().isForbidden());
