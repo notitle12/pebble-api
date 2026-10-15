@@ -208,7 +208,7 @@ class AdminSessionIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get("/api/v1/members/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + adminAccess))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("INSUFFICIENT_ROLE"));
 
-        Member member = members.saveAndFlush(new Member("csrf-test", null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("csrf-test", null, MemberStatus.ACTIVE, null, null)));
         String userAccess = accessTokens.issueForMember(member.getId(), Instant.now());
         mvc.perform(post("/api/v1/members/me/profile").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"blogName\":\"csrf test\",\"handle\":\"csrf-test\"}").header(HttpHeaders.AUTHORIZATION, "Bearer " + userAccess))

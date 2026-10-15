@@ -12,9 +12,12 @@ public record CommentResponse(String id, Author author, String body, CommentVisi
 
     public static CommentResponse from(Comment comment, java.util.function.Function<com.pebble.api.member.domain.Member, String> imageUrl) {
         var member = comment.getAuthor();
+        var author = member == null
+                ? new Author(null, null, null, comment.getGuestNickname(), null)
+                : new Author(member.getId().toString(), member.getHandle(), member.getBlogName(),
+                        member.getNickname(), imageUrl.apply(member));
         return new CommentResponse(comment.getId().toString(),
-                new Author(member.getId().toString(), member.getHandle(), member.getBlogName(),
-                        member.getNickname(), imageUrl.apply(member)),
+                author,
                 comment.getBody(), comment.getVisibility(), comment.getCreatedAt(), comment.getUpdatedAt());
     }
     public record Author(String id, String handle, String blogName, String nickname, String profileImageUrl) { }

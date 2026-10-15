@@ -125,7 +125,7 @@ class ProjectManagementIntegrationTest extends AuthenticationTestSupport {
     private static String nullable(String value) { return value == null ? "null" : "\"" + value + "\""; }
 
     private long owner() {
-        Member member = members.saveAndFlush(new Member("management-test", null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("management-test", null, MemberStatus.ACTIVE, null, null)));
         owners.add(member.getId());
         profiles.complete(member.getId(), "management-blog-" + member.getId(), "management-" + member.getId(), null);
         return member.getId();

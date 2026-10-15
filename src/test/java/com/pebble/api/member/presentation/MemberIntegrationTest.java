@@ -69,7 +69,7 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
     @Test
     void returnsOnlyJwtMembersAccountEvenWhenAnotherIdIsRequested() throws Exception {
         Member mine = member(MemberStatus.ACTIVE);
-        Member other = members.saveAndFlush(new Member("other", null, MemberStatus.ACTIVE, null, null));
+        Member other = members.saveAndFlush(agreedMember(new Member("other", null, MemberStatus.ACTIVE, null, null)));
 
         mockMvc.perform(get(PATH).param("memberId", other.getId().toString())
                         .header(HttpHeaders.AUTHORIZATION, bearer(mine)))
@@ -81,7 +81,7 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(jsonPath("$.data.createdAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.profileCompleted").value(false))
                 .andExpect(jsonPath("$.data.handle").isEmpty())
-                .andExpect(jsonPath("$.data.length()").value(10));
+                .andExpect(jsonPath("$.data.length()").value(11));
     }
 
     @Test
@@ -216,7 +216,7 @@ class MemberIntegrationTest extends AuthenticationTestSupport {
     private Member member(MemberStatus status) {
         Instant requested = status == MemberStatus.WITHDRAWAL_PENDING ? Instant.now() : null;
         Instant scheduled = requested == null ? null : requested.plus(7, ChronoUnit.DAYS);
-        return members.saveAndFlush(new Member("pebble", null, status, requested, scheduled));
+        return members.saveAndFlush(agreedMember(new Member("pebble", null, status, requested, scheduled)));
     }
 
     private String bearer(Member member) {

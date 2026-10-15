@@ -180,7 +180,7 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
     private String mine() { return "/api/v1/members/me/blog-home"; }
     private String path() { return "/api/v1/blogs/"+owner.getHandle()+"/home"; }
     private String bearer(Member member) { return "Bearer "+tokens.issueForMember(member.getId(),Instant.now()); }
-    private Member blog() { String key=UUID.randomUUID().toString().substring(0,12);var m=new Member("writer-"+key,null,MemberStatus.ACTIVE,null,null);m.completeProfile("blog-"+key,"blog-"+key,m.getNickname(),Instant.now());return members.saveAndFlush(m); }
+    private Member blog() { String key=UUID.randomUUID().toString().substring(0,12);var m=agreedMember(new Member("writer-"+key,null,MemberStatus.ACTIVE,null,null));m.completeProfile("blog-"+key,"blog-"+key,m.getNickname(),Instant.now());return members.saveAndFlush(m); }
     private long project(Member member,String visibility) { long id=TsidGenerator.generate();jdbc.update("insert into project(id,owner_member_id,name,lifecycle_status,visibility_status,created_at,updated_at) values(?,?,?,'IN_PROGRESS',?,now(),now())",id,member.getId(),"대표 프로젝트",visibility);return id; }
     private long post(Member member,Instant published,String visibility,boolean blocked,boolean draft) { long id=TsidGenerator.generate();jdbc.update("insert into post(id,post_number,author_member_id,title,visibility_status,is_blocked,is_draft,published_at,created_at,updated_at,blocked_at,blocked_by_admin_id) values(?,?,?,?,?,?,?,?,now(),now(),?,?)",id,id,member.getId(),"활동 검증",visibility,blocked,draft,java.sql.Timestamp.from(published),blocked?java.sql.Timestamp.from(Instant.now()):null,blocked?1L:null); return id; }
 }

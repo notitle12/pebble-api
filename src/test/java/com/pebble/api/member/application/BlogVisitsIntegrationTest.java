@@ -19,8 +19,10 @@ class BlogVisitsIntegrationTest extends AuthenticationTestSupport {
  @Autowired BlogVisitsService visits;
  @Autowired MemberRepository members;
  @Autowired TransactionTemplate transactions;
+ @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+ @Autowired com.pebble.api.member.infrastructure.BlogVisitsCleanupJob cleanup;
  @Test void concurrentDuplicateVisitsCountOnceAndDistinctVisitsDoNotLoseUpdates()throws Exception{
-  String key=UUID.randomUUID().toString().substring(0,12);var member=new Member("visits-"+key,null,MemberStatus.ACTIVE,null,null);member.completeProfile("방문-"+key,"visits-"+key,member.getNickname(),Instant.now());members.saveAndFlush(member);
+  String key=UUID.randomUUID().toString().substring(0,12);var member=agreedMember(new Member("visits-"+key,null,MemberStatus.ACTIVE,null,null));member.completeProfile("방문-"+key,"visits-"+key,member.getNickname(),Instant.now());members.saveAndFlush(member);
   var pool=java.util.concurrent.Executors.newFixedThreadPool(4);
   try{
    var tasks=new java.util.ArrayList<java.util.concurrent.Callable<Void>>();
@@ -36,4 +38,16 @@ class BlogVisitsIntegrationTest extends AuthenticationTestSupport {
   }finally{pool.shutdownNow();members.deleteById(member.getId());}
  }
  @Test void visitRateLimitsExpireAndDoNotTrustForwardedHeaders(){var limiter=new BlogVisitLimiter();for(int i=0;i<120;i++)limiter.check("127.0.0.1",0);assertThatThrownBy(()->limiter.check("127.0.0.1",1)).isInstanceOf(com.pebble.api.global.exception.ApplicationException.class);limiter.check("127.0.0.1",60001);}
+ @Test void backgroundCleanupRemovesPreviousDayEvenWithoutAnotherVisit(){
+  String key=UUID.randomUUID().toString().substring(0,12);var member=agreedMember(new Member("cleanup-"+key,null,MemberStatus.ACTIVE,null,null));
+  member.completeProfile("정리-"+key,"cleanup-"+key,member.getNickname(),Instant.now());members.saveAndFlush(member);
+  try{
+   visits.record(member.getHandle(),"today-cookie");
+   jdbc.update("insert into blog_visit_daily(member_id,visit_date,visitor_hash) values (?,?,?)",member.getId(),LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).minusDays(1),"a".repeat(64));
+   cleanup.cleanup();
+   assertThat(jdbc.queryForObject("select count(*) from blog_visit_daily where member_id=?",Long.class,member.getId())).isEqualTo(1);
+   assertThat(visits.read(member.getHandle()).totalVisitors()).isEqualTo(1);
+  }finally{members.deleteById(member.getId());}
+ }
+ @Test void expiredAbuseBucketsAreRemovedWithoutNewTraffic(){var limiter=new BlogVisitLimiter();limiter.check("127.0.0.1",0);assertThat(limiter.bucketCount()).isEqualTo(1);limiter.cleanup(60000);assertThat(limiter.bucketCount()).isZero();}
 }

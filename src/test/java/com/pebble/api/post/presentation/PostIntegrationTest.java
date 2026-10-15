@@ -722,7 +722,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     }
     private String blogPath(Member member, String key) { return "/api/v1/blogs/" + member.getHandle() + "/posts/" + key; }
     private Member initializedMember(String label) {
-        Member created = members.saveAndFlush(new Member(label + "-" + java.util.UUID.randomUUID().toString().substring(0,8), null, MemberStatus.ACTIVE, null, null));
+        Member created = members.saveAndFlush(agreedMember(new Member(label + "-" + java.util.UUID.randomUUID().toString().substring(0,8), null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(created.getId(), "blog-" + created.getId(), "author-" + created.getId(), null);
     }
 
@@ -761,7 +761,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void publicBlogHandleProvidesManualOrderingAndPendingAccountsCannotCreatePosts() throws Exception {
-        Member pending = members.saveAndFlush(new Member("pending-" + java.util.UUID.randomUUID().toString().substring(0,8), null, MemberStatus.ACTIVE, null, null));
+        Member pending = members.saveAndFlush(agreedMember(new Member("pending-" + java.util.UUID.randomUUID().toString().substring(0,8), null, MemberStatus.ACTIVE, null, null)));
         mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(pending)).contentType(MediaType.APPLICATION_JSON).content(basic("PUBLIC")))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("PROFILE_REQUIRED"));
         var pendingPost = postRepository.saveAndFlush(new com.pebble.api.post.domain.Post(pending, null, "pending", null,

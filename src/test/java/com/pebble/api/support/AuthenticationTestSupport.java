@@ -50,6 +50,11 @@ public abstract class AuthenticationTestSupport {
         registry.add("pebble.auth.naver.client-secret", () -> "test-client-secret");
     }
 
+    public static com.pebble.api.member.domain.Member agreedMember(com.pebble.api.member.domain.Member member) {
+        member.acceptCurrentAgreements(java.time.Instant.parse("2026-10-15T00:00:00Z"));
+        return member;
+    }
+
     @BeforeEach
     void seedBlockingAdmin() {
         jdbc.update("""
