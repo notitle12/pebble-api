@@ -31,12 +31,11 @@ public class GuestCommentController {
             @RequestBody JsonNode body,HttpServletRequest request,HttpServletResponse response) {
         prepare(request,response);
         GuestCommentRequest.validateCreate(body);
-        GuestCommentRequest.confirmations(body);
-        String nickname=GuestCommentRequest.nickname(body),password=GuestCommentRequest.password(body),text=GuestCommentRequest.body(body);
+        String nickname=GuestCommentRequest.nickname(body),password=GuestCommentRequest.newPassword(body),text=GuestCommentRequest.body(body);
         long parent=CommentWriteRequest.id(contentId);
         String ip=addresses.resolve(request);
         security.check(ip,resource+":"+parent+":create",true);
-        var comment=comments.createGuest(target(resource),parent,nickname,password,text,ip);
+        var comment=comments.createGuest(target(resource),parent,nickname,password,text);
         return ResponseEntity.created(URI.create("/api/v1/"+resource+"/"+contentId+"/comments/"+comment.getId()))
                 .body(ApiResponse.of(CommentResponse.from(comment)));
     }
@@ -49,7 +48,7 @@ public class GuestCommentController {
         long parent=CommentWriteRequest.id(contentId),id=CommentWriteRequest.id(commentId);
         String ip=addresses.resolve(request);
         security.check(ip,resource+":"+id+":password",false);
-        return ApiResponse.of(CommentResponse.from(comments.updateGuest(target(resource),parent,id,password,text,ip)));
+        return ApiResponse.of(CommentResponse.from(comments.updateGuest(target(resource),parent,id,password,text)));
     }
     @PostMapping(value="/{commentId:[0-9]+}/guest/delete",consumes="application/json")
     public ResponseEntity<Void> delete(@PathVariable String resource,@PathVariable String contentId,@PathVariable String commentId,
@@ -60,7 +59,7 @@ public class GuestCommentController {
         long parent=CommentWriteRequest.id(contentId),id=CommentWriteRequest.id(commentId);
         String ip=addresses.resolve(request);
         security.check(ip,resource+":"+id+":password",false);
-        comments.deleteGuest(target(resource),parent,id,password,ip);
+        comments.deleteGuest(target(resource),parent,id,password);
         return ResponseEntity.noContent().build();
     }
     private void prepare(HttpServletRequest request,HttpServletResponse response) {
