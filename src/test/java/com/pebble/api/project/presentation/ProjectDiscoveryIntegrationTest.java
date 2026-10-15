@@ -290,8 +290,8 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
     }
 
     private Member initializedMember(String label) {
-        Member created = members.saveAndFlush(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
-                null, MemberStatus.ACTIVE, null, null));
+        Member created = members.saveAndFlush(agreedMember(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
+                null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(created.getId(), "blog-" + created.getId(), "author-" + created.getId(), null);
     }
 

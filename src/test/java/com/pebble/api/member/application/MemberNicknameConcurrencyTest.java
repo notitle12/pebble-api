@@ -41,6 +41,8 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     private final List<String> createdSubjects = new ArrayList<>();
 
     @AfterEach
@@ -143,6 +145,7 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
         String identitySubject = subject();
         createdSubjects.add(identitySubject);
         Member member = memberService.resolve(OAuthProvider.NAVER, identitySubject, "Before change", null);
+        acceptFixture(member.getId());
         profileService.complete(member.getId(), "blog-" + UUID.randomUUID(), "handle-" + UUID.randomUUID()
                 .toString().substring(0, 8), null);
         jdbc.update("update member set nickname_changed_at = now() - interval '8 days' where id = ?", member.getId());
@@ -166,6 +169,8 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
         createdSubjects.addAll(List.of(firstSubject, secondSubject));
         Member first = memberService.resolve(OAuthProvider.NAVER, firstSubject, "First", null);
         Member second = memberService.resolve(OAuthProvider.NAVER, secondSubject, "Second", null);
+        acceptFixture(first.getId());
+        acceptFixture(second.getId());
         String handle = "shared-" + UUID.randomUUID().toString().substring(0, 8);
 
         List<ProfileCompletionResult> results = concurrently(first.getId(),
@@ -178,6 +183,13 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
                 .containsExactly(MemberError.DUPLICATE_HANDLE.code());
         Long losingMemberId = results.stream().filter(result -> !result.succeeded()).findFirst().orElseThrow().memberId();
         assertThat(memberRepository.findById(losingMemberId).orElseThrow().isProfileCompleted()).isFalse();
+    }
+
+    private void acceptFixture(long memberId) {
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            memberRepository.findByIdForWrite(memberId).orElseThrow().acceptCurrentAgreements(java.time.Instant.now());
+            memberRepository.flush();
+        });
     }
 
     private List<NicknameUpdateResult> concurrently(UpdateAction first, UpdateAction second) throws Exception {

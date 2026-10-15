@@ -367,8 +367,8 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void incompleteAndSuspendedProfilesCannotWriteMediaBeforeStorageAccess() throws Exception {
-        Member incomplete = members.saveAndFlush(new Member("media-incomplete-" + UUID.randomUUID().toString().substring(0, 6),
-                null, MemberStatus.ACTIVE, null, null));
+        Member incomplete = members.saveAndFlush(agreedMember(new Member("media-incomplete-" + UUID.randomUUID().toString().substring(0, 6),
+                null, MemberStatus.ACTIVE, null, null)));
         fixtureMembers.add(incomplete.getId());
         org.mockito.Mockito.clearInvocations(storage);
         assertThatThrownBy(() -> postMedia.upload(incomplete.getId(), postId, png())).isInstanceOf(ApplicationException.class);
@@ -609,8 +609,8 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     }
 
     private Member member(String suffix) {
-        Member value = members.saveAndFlush(new Member("media-" + suffix + "-" + UUID.randomUUID().toString().substring(0, 8), null,
-                MemberStatus.ACTIVE, null, null));
+        Member value = members.saveAndFlush(agreedMember(new Member("media-" + suffix + "-" + UUID.randomUUID().toString().substring(0, 8), null,
+                MemberStatus.ACTIVE, null, null)));
         fixtureMembers.add(value.getId());
         profiles.complete(value.getId(), "media-blog-" + value.getId(), "media-" + value.getId(), null);
         return value;

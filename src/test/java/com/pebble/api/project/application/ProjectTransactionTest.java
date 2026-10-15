@@ -184,7 +184,7 @@ class ProjectTransactionTest extends AuthenticationTestSupport {
 
     private ProjectChanges input(String json) throws Exception { return ProjectWriteRequest.parse(mapper.readTree(json), false); }
     private long owner() {
-        Member member = members.saveAndFlush(new Member("transaction-test", null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("transaction-test", null, MemberStatus.ACTIVE, null, null)));
         owners.add(member.getId());
         profiles.complete(member.getId(), "project-blog-" + member.getId(), "project-" + member.getId(), null);
         return member.getId();

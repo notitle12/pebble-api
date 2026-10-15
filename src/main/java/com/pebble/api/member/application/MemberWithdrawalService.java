@@ -33,7 +33,7 @@ public class MemberWithdrawalService {
     private final Clock clock;
 
     public Instant request(long memberId) {
-        Member member = queries.findActiveForWrite(memberId);
+        Member member = queries.findActiveForAccountWrite(memberId);
         sessions.revokeAll(memberId);
         member.requestWithdrawal(clock.instant());
         members.flush();

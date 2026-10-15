@@ -42,6 +42,14 @@ public class MemberQueryService {
 
     @Transactional
     public Member findActiveForWrite(long id) {
+        Member member = findActiveForAccountWrite(id);
+        if (!member.hasAcceptedAgreements()) throw new ApplicationException(MemberError.AGREEMENTS_REQUIRED);
+        return member;
+    }
+
+    @Transactional
+    public Member findActiveForAccountWrite(long id) {
+        // 동의 등록과 탈퇴는 동의 전에도 가능해야 한다.
         return requireActive(memberRepository.findByIdForWrite(id)
                 .orElseThrow(() -> new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND)));
     }

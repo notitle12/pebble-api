@@ -71,8 +71,8 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
 
     @BeforeEach
     void setUp() {
-        member = members.saveAndFlush(new Member("member-" + UUID.randomUUID().toString().substring(0, 12),
-                null, MemberStatus.ACTIVE, null, null));
+        member = members.saveAndFlush(agreedMember(new Member("member-" + UUID.randomUUID().toString().substring(0, 12),
+                null, MemberStatus.ACTIVE, null, null)));
         login = sessions.login(member.getId());
     }
 

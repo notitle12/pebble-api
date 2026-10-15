@@ -125,7 +125,7 @@ class LikeConcurrencyTest extends AuthenticationTestSupport {
         if (type.equals("post")) postLikes.cancel(content, member); else projectLikes.cancel(content, member);
     }
     private long member(boolean profile) {
-        Member member = members.saveAndFlush(new Member("like-" + java.util.UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("like-" + java.util.UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null)));
         fixtureMembers.add(member.getId());
         if (profile) profiles.complete(member.getId(), "like-blog-" + member.getId(), "like-" + member.getId(), null);
         return member.getId();

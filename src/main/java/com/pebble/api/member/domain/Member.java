@@ -23,6 +23,20 @@ public class Member extends BaseTimeEntity {
     @Id
     private Long id;
 
+    @jakarta.persistence.OneToMany(mappedBy = "member", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<MemberAgreement> agreements = new java.util.ArrayList<>();
+
+    public java.util.Optional<Instant> currentAgreementAcceptedAt() {
+        return agreements.stream().filter(MemberAgreement::isCurrent).map(MemberAgreement::getAcceptedAt).findFirst();
+    }
+
+    public boolean hasAcceptedAgreements() { return currentAgreementAcceptedAt().isPresent(); }
+
+    public void acceptCurrentAgreements(Instant now) {
+        if (!hasAcceptedAgreements()) agreements.add(new MemberAgreement(this, now));
+    }
+
+
     @Column(nullable = false, length = 30)
     private String nickname;
 
