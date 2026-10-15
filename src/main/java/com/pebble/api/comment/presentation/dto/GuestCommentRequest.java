@@ -13,6 +13,13 @@ public final class GuestCommentRequest {
         if(json==null || !json.isObject() || json.size()!=fields.size()) throw invalid();
         json.fieldNames().forEachRemaining(key->{if(!fields.contains(key))throw invalid();});
     }
+    public static void validateCreate(JsonNode json) {
+        boolean legacyAge = json != null && json.has("ageConfirmed");
+        validate(json, legacyAge ? Set.of("nickname","password","body","privacyAccepted","ageConfirmed")
+                : Set.of("nickname","password","body","privacyAccepted"));
+        // 이미 열린 구버전 화면의 요청만 호환한다. 연령 자기확인을 요구하거나 저장하지 않는다.
+        if (legacyAge && !json.path("ageConfirmed").isBoolean()) throw invalid();
+    }
     public static String nickname(JsonNode json) {
         String value=text(json,"nickname").strip();
         if(value.isEmpty() || value.codePointCount(0,value.length())>30 || value.codePoints().anyMatch(Character::isISOControl))throw invalid();
@@ -21,7 +28,7 @@ public final class GuestCommentRequest {
     public static String password(JsonNode json) {
         String value=text(json,"password");
         int count=value.codePointCount(0,value.length());
-        if(count<8 || count>64 || value.isBlank() || value.getBytes(StandardCharsets.UTF_8).length>256 || value.codePoints().anyMatch(Character::isISOControl))throw invalid();
+        if(count<4 || count>64 || value.isBlank() || value.getBytes(StandardCharsets.UTF_8).length>256 || value.codePoints().anyMatch(Character::isISOControl))throw invalid();
         return value;
     }
     public static String body(JsonNode json) {
@@ -29,7 +36,7 @@ public final class GuestCommentRequest {
                 .put("body",text(json,"body")).put("visibility","PUBLIC"),true).body();
     }
     public static void confirmations(JsonNode json) {
-        for(String key: new String[]{"privacyAccepted","ageConfirmed"})
+        for(String key: new String[]{"privacyAccepted"})
             if(!json.path(key).isBoolean() || !json.path(key).booleanValue())throw invalid();
     }
     private static String text(JsonNode json,String key) {

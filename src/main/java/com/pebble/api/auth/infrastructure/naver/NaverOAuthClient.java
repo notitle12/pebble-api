@@ -2,6 +2,7 @@ package com.pebble.api.auth.infrastructure.naver;
 
 import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.pebble.api.auth.domain.AuthError;
 import com.pebble.api.auth.domain.AuthException;
@@ -86,8 +87,7 @@ public class NaverOAuthClient implements OAuthProviderClient {
             }
             NaverProfileFields profile = profileResponse.response();
             if (characterCount(profile.id()) > 255
-                    || (profile.nickname() != null && characterCount(profile.nickname()) > 30)
-                    || (profile.profileImage() != null && characterCount(profile.profileImage()) > 2048)) {
+                    || (profile.nickname() != null && characterCount(profile.nickname()) > 30)) {
                 throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
             }
             if (expectedSubject != null) {
@@ -108,7 +108,7 @@ public class NaverOAuthClient implements OAuthProviderClient {
             }
             // 탈퇴는 나이 정보가 없거나 연령 미달이어도 본인 확인 후 가능해야 한다.
             if (expectedSubject == null) requireMinimumAge(profile.birthyear(), profile.birthday());
-            return new OAuthProfile(profile.id(), profile.nickname(), profile.profileImage());
+            return new OAuthProfile(profile.id(), profile.nickname(), null);
         } catch (HttpClientErrorException exception) {
             throw new AuthException(AuthError.INVALID_CREDENTIALS);
         } catch (RestClientException exception) {
@@ -172,10 +172,10 @@ public class NaverOAuthClient implements OAuthProviderClient {
     private record NaverProfileResponse(@JsonProperty("resultcode") String resultCode, NaverProfileFields response) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record NaverProfileFields(
             String id,
             String nickname,
-            @JsonProperty("profile_image") String profileImage,
             String birthyear,
             String birthday) {
         @Override public String toString() { return "NaverProfileFields[personalData=redacted]"; }
