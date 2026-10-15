@@ -71,6 +71,21 @@ class MemberAgreementIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isCreated());
     }
 
+    @Test void reconnectedPendingMemberCannotBypassAgreementWithANewToken() throws Exception {
+        Member member = pending();
+        // 화면을 닫거나 재로그인해서 토큰을 다시 받아도 동의 상태는 서버 DB에서 조회한다.
+        String reconnected = "Bearer " + tokens.issueForMember(member.getId(), Instant.now().plusSeconds(1));
+        mvc.perform(get("/api/v1/members/me").header("Authorization", reconnected))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.agreementsAccepted").value(false));
+        for (String target : new String[]{"posts", "projects"}) {
+            mvc.perform(post("/api/v1/"+target).header("Authorization", reconnected).contentType(MediaType.APPLICATION_JSON)
+                            .content(target.equals("posts")
+                                    ? "{\"title\":\"미동의 글\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"본문\"}],\"visibilityStatus\":\"PUBLIC\"}"
+                                    : "{\"name\":\"미동의 프로젝트\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\"}"))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("AGREEMENTS_REQUIRED"));
+        }
+    }
+
     @Test void missingUncheckedForgedAndStaleConsentCannotCreateAReceipt() throws Exception {
         Member member = pending(); String token = bearer(member);
         for (String body : new String[]{"{}", payload().replace("true", "false"), payload().replace("true", "\"true\""),
