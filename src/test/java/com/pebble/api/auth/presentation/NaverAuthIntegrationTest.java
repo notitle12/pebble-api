@@ -82,7 +82,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         Cookie stateCookie = beginAuthorizationAndGetCookie();
         String state = stateCookie.getValue();
         when(naverOAuthGateway.authenticate("one-time-code", state))
-                .thenReturn(new OAuthProfile("naver-id-1", "pebble", "https://example.com/profile.webp"));
+                .thenReturn(new OAuthProfile("naver-id-1", "pebble", null));
         MvcResult result = login("one-time-code", state, stateCookie);
 
         Map<String, Object> data = dataFrom(result);
@@ -91,7 +91,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         @SuppressWarnings("unchecked")
         Map<String, Object> memberData = (Map<String, Object>) data.get("member");
         assertThat(memberData.get("nickname")).isEqualTo("pebble");
-        assertThat(memberData.get("profileImageUrl")).isEqualTo("https://example.com/profile.webp");
+        assertThat(memberData.get("profileImageUrl")).isNull();
         assertThat(memberData.get("role")).isEqualTo("USER");
         assertThat(memberRepository.count()).isEqualTo(1);
         assertThat(identityRepository.findByProviderAndProviderSubject(OAuthProvider.NAVER, "naver-id-1"))
@@ -158,17 +158,20 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void existingMemberLogsInWithoutCreatingAnotherAccount() throws Exception {
-        Member member = memberRepository.saveAndFlush(agreedMember(new Member("saved-name", null, MemberStatus.ACTIVE, null, null)));
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member("saved-name", "https://images.example/manual-profile.webp", MemberStatus.ACTIVE, null, null)));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "existing-subject"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
         Cookie cookie = beginAuthorizationAndGetCookie();
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
-                .thenReturn(new OAuthProfile("existing-subject", "changed-naver-name", null));
+                .thenReturn(new OAuthProfile("existing-subject", "changed-naver-name", "https://nid.naver.com/profile_image?new-photo=true"));
         Map<String, Object> data = dataFrom(login("code", cookie.getValue(), cookie));
         assertThat(data.get("member")).isInstanceOf(Map.class);
         assertThat(((Map<?, ?>) data.get("member")).get("id")).isEqualTo(member.getId().toString());
         assertThat(((Map<?, ?>) data.get("member")).get("nickname")).isEqualTo("saved-name");
+        assertThat(((Map<?, ?>) data.get("member")).get("profileImageUrl")).isEqualTo("https://images.example/manual-profile.webp");
+        assertThat(memberRepository.findById(member.getId()).orElseThrow().getProfileImageUrl())
+                .isEqualTo("https://images.example/manual-profile.webp");
         assertThat(memberRepository.count()).isEqualTo(1);
         assertThat(identityRepository.count()).isEqualTo(1);
     }
