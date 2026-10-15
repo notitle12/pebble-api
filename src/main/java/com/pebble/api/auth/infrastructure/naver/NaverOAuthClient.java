@@ -20,10 +20,12 @@ public class NaverOAuthClient implements OAuthProviderClient {
 
     private final RestClient restClient;
     private final NaverOAuthProperties properties;
+    private final java.time.Clock clock;
 
-    public NaverOAuthClient(@Qualifier("naverRestClient") RestClient restClient, NaverOAuthProperties properties) {
+    public NaverOAuthClient(@Qualifier("naverRestClient") RestClient restClient, NaverOAuthProperties properties, java.time.Clock clock) {
         this.restClient = restClient;
         this.properties = properties;
+        this.clock = clock;
     }
 
     @Override
@@ -104,11 +106,35 @@ public class NaverOAuthClient implements OAuthProviderClient {
                     throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
                 }
             }
+            // 탈퇴는 나이 정보가 없거나 연령 미달이어도 본인 확인 후 가능해야 한다.
+            if (expectedSubject == null) requireMinimumAge(profile.birthyear(), profile.birthday());
             return new OAuthProfile(profile.id(), profile.nickname(), profile.profileImage());
         } catch (HttpClientErrorException exception) {
             throw new AuthException(AuthError.INVALID_CREDENTIALS);
         } catch (RestClientException exception) {
             throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
+        }
+    }
+
+    private void requireMinimumAge(String birthyear, String birthday) {
+        // 공급자 생년 정보는 이 요청의 메모리에서만 확인한다. 회원 DTO·DB·로그로 전달하지 않는다.
+        if (birthyear == null || !birthyear.matches("[0-9]{4}")
+                || birthday == null || !birthday.matches("[0-9]{2}-[0-9]{2}")) {
+            throw new AuthException(AuthError.AGE_VERIFICATION_REQUIRED);
+        }
+        java.time.LocalDate birthDate;
+        try {
+            birthDate = java.time.LocalDate.parse(birthyear + "-" + birthday,
+                    java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (java.time.DateTimeException exception) {
+            throw new AuthException(AuthError.AGE_VERIFICATION_REQUIRED);
+        }
+        var today = java.time.LocalDate.now(clock.withZone(java.time.ZoneId.of("Asia/Seoul")));
+        if (birthDate.getYear() < 1 || birthDate.isAfter(today)) {
+            throw new AuthException(AuthError.AGE_VERIFICATION_REQUIRED);
+        }
+        if (java.time.Period.between(birthDate, today).getYears() < 14) {
+            throw new AuthException(AuthError.AGE_RESTRICTED);
         }
     }
 
@@ -149,6 +175,9 @@ public class NaverOAuthClient implements OAuthProviderClient {
     private record NaverProfileFields(
             String id,
             String nickname,
-            @JsonProperty("profile_image") String profileImage) {
+            @JsonProperty("profile_image") String profileImage,
+            String birthyear,
+            String birthday) {
+        @Override public String toString() { return "NaverProfileFields[personalData=redacted]"; }
     }
 }
