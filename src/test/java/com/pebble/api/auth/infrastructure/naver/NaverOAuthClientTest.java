@@ -53,10 +53,10 @@ class NaverOAuthClientTest {
         OAuthProviderClient gateway = new NaverOAuthClient(builder.build(), properties, CLOCK);
         OAuthProviderClient.OAuthProfile profile = gateway.authenticate("authorization-code", "verified-state");
 
-        assertThat(profile.toString()).doesNotContain("unused@example.test", "unused-name", "2000", "01-01");
+        assertThat(profile.toString()).doesNotContain("unused@example.test", "unused-name", "2000", "01-01", "https://example.com/avatar.webp");
         assertThat(profile.subject()).isEqualTo("naver-subject");
         assertThat(profile.nickname()).isEqualTo("pebble");
-        assertThat(profile.profileImageUrl()).isEqualTo("https://example.com/avatar.webp");
+        assertThat(profile.profileImageUrl()).isNull();
         server.verify();
     }
 

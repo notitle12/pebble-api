@@ -30,7 +30,7 @@ public class GuestCommentController {
     public ResponseEntity<ApiResponse<CommentResponse>> create(@PathVariable String resource,@PathVariable String contentId,
             @RequestBody JsonNode body,HttpServletRequest request,HttpServletResponse response) {
         prepare(request,response);
-        GuestCommentRequest.validate(body,Set.of("nickname","password","body","privacyAccepted","ageConfirmed"));
+        GuestCommentRequest.validateCreate(body);
         GuestCommentRequest.confirmations(body);
         String nickname=GuestCommentRequest.nickname(body),password=GuestCommentRequest.password(body),text=GuestCommentRequest.body(body);
         long parent=CommentWriteRequest.id(contentId);
