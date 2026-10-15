@@ -49,13 +49,34 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void immediateWithdrawalRemovesOwnedAndForeignInteractionsAndQueuesFiles() {
+        Member owner = member(MemberStatus.ACTIVE);
+        Member retained = member(MemberStatus.ACTIVE);
+        long[] shared = ensureSharedClassifications();
+        ContentFixture content = insertOwnedContent(owner.getId(), retained.getId(), shared[0], shared[1]);
+        String bodyKey = "post/" + UUID.randomUUID() + "/body.webp";
+        String profileKey = "member/" + UUID.randomUUID() + "/profile.webp";
+        jdbc.update("insert into post_body_image(id,post_id,storage_key,created_at) values(?,?,?,now())", TsidGenerator.generate(), content.ownPostId(), bodyKey);
+        jdbc.update("update member set profile_image_storage_key=? where id=?", profileKey, owner.getId());
+        identities.saveAndFlush(new MemberOAuthIdentity(owner, OAuthProvider.NAVER, "immediate-" + UUID.randomUUID()));
+        withdrawals.request(owner.getId());
+        assertThat(members.existsById(owner.getId())).isFalse();
+        assertContentRemoved(content, owner.getId());
+        assertThat(jdbc.queryForObject("select count(*) from member_agreement where member_id=?", Long.class, owner.getId())).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from member_oauth_identity where member_id=?", Long.class, owner.getId())).isZero();
+        assertThat(jdbc.queryForList("select storage_key from media_deletion_job where storage_key in (?,?)", String.class, bodyKey, profileKey))
+                .containsExactlyInAnyOrder(bodyKey, profileKey);
+        jdbc.update("delete from media_deletion_job where storage_key in (?,?)", bodyKey, profileKey);
+    }
+
+    @Test
     void dueIdsOnlyIncludesPendingAccountsWhoseGracePeriodHasEnded() {
         Member due = member(MemberStatus.ACTIVE);
         Member future = member(MemberStatus.ACTIVE);
         Member active = member(MemberStatus.ACTIVE);
         Member suspended = member(MemberStatus.ACTIVE);
-        withdrawals.request(due.getId());
-        withdrawals.request(future.getId());
+        legacyReservation(due.getId());
+        legacyReservation(future.getId());
         jdbc.update("update member set withdrawal_scheduled_at=current_timestamp - interval '1 hour' where id=?", due.getId());
         jdbc.update("update member set withdrawal_scheduled_at=current_timestamp + interval '1 hour' where id=?", future.getId());
         jdbc.update("update member set status='SUSPENDED' where id=?", suspended.getId());
@@ -110,9 +131,13 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
         return value;
     }
 
+    private void legacyReservation(long id) {
+        jdbc.update("update member set status='WITHDRAWAL_PENDING', withdrawal_requested_at=now(), withdrawal_scheduled_at=now()+interval '7 days' where id=?", id);
+    }
+
     private Member dueMember() {
         Member value = member(MemberStatus.ACTIVE);
-        withdrawals.request(value.getId());
+        legacyReservation(value.getId());
         jdbc.update("update member set withdrawal_scheduled_at=current_timestamp - interval '1 hour' where id=?", value.getId());
         return value;
     }
