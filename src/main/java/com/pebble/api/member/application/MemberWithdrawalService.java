@@ -34,10 +34,10 @@ public class MemberWithdrawalService {
 
     public Instant request(long memberId) {
         Member member = queries.findActiveForAccountWrite(memberId);
-        sessions.revokeAll(memberId);
-        member.requestWithdrawal(clock.instant());
-        members.flush();
-        return member.getWithdrawalScheduledAt();
+        Instant deletedAt = clock.instant();
+        // 재인증 완료 후 회원 잠금 안에서 콘텐츠·계정을 함께 파기한다. 실패 시 DB 전체를 롤백한다.
+        purge(member);
+        return deletedAt;
     }
 
     public String subjectForWithdrawal(long memberId, OAuthProvider provider) {
@@ -74,15 +74,20 @@ public class MemberWithdrawalService {
         if (locked.isEmpty()) return false;
         Member member = locked.get();
         if (member.getStatus() != MemberStatus.WITHDRAWAL_PENDING || clock.instant().isBefore(member.getWithdrawalScheduledAt())) return false;
+        purge(member);
+        return true;
+    }
+
+    private void purge(Member member) {
+        long memberId = member.getId();
         sessions.revokeAll(memberId);
         posts.purgeForMember(memberId);
         projects.purgeForMember(memberId);
         boards.purgeForMember(memberId);
         identities.deleteForMember(memberId);
         // 작성자가 다른 대상에 남긴 댓글·좋아요도 회원 FK CASCADE가 제거한다.
-        members.delete(member);
-        members.flush();
-        return true;
+        // DB의 CASCADE·파일 회수 트리거를 실행하고, 벌크 파기 후 남은 관리 객체를 비운다.
+        members.deleteForWithdrawal(memberId);
     }
 
     private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }

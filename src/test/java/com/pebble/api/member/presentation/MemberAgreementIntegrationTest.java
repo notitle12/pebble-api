@@ -96,8 +96,8 @@ class MemberAgreementIntegrationTest extends AuthenticationTestSupport {
 
     @Test void pendingMemberCanWithdrawWithoutAccepting() {
         Member member = pending();
-        assertThat(withdrawals.request(member.getId())).isAfter(Instant.now());
-        assertThat(member.getStatus()).isEqualTo(MemberStatus.WITHDRAWAL_PENDING);
+        withdrawals.request(member.getId());
+        assertThat(members.existsById(member.getId())).isFalse();
         assertThat(jdbc.queryForObject("select count(*) from member_agreement where member_id=?", Long.class, member.getId())).isZero();
     }
 

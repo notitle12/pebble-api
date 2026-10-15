@@ -79,3 +79,4 @@ jobs:
         run: |
           bash -n infra/oracle/backup-postgres.sh infra/oracle/verify-restore.sh infra/oracle/postgres-init.sh
           python3 infra/oracle/test_backup_restore.py
+          python3 infra/oracle/test_backup_retention.py
