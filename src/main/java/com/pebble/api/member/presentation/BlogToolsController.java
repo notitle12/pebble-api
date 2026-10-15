@@ -8,6 +8,7 @@ import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
 import com.pebble.api.member.application.BlogLinksService;
 import com.pebble.api.member.application.BlogVisitsService;
+import com.pebble.api.member.application.BlogVisitLimiter;
 import com.pebble.api.member.presentation.dto.BlogLinksRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -28,6 +29,8 @@ public class BlogToolsController {
     public static final String VISITOR_COOKIE="pebble_blog_visitor";
     private final BlogLinksService links;
     private final BlogVisitsService visits;
+    private final BlogVisitLimiter limiter;
+    private final java.time.Clock clock;
     private final ObjectMapper mapper;
     private final Environment environment;
 
@@ -55,15 +58,25 @@ public class BlogToolsController {
         }catch(java.io.IOException exception){throw MediaRequest.invalid();}
     }
     @GetMapping("/api/v1/blogs/{handle}/visits")
-    public ApiResponse<BlogVisitsService.Stats> stats(@PathVariable String handle,HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body){noBody(request,body);checkHandle(handle);expireVisitorCookie(request,response);return ApiResponse.of(visits.read(handle));}
+    public ApiResponse<BlogVisitsService.Stats> stats(@PathVariable String handle,HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body){noBody(request,body);checkHandle(handle);response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");return ApiResponse.of(visits.read(handle));}
     @PostMapping("/api/v1/blogs/{handle}/visits")
     public ApiResponse<BlogVisitsService.Stats> record(@PathVariable String handle,HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body){
-        // 구버전 클라이언트도 식별값을 수집하지 않고 기존 쿠키만 만료시킨다.
-        return stats(handle,request,response,body);
-    }
-    private void expireVisitorCookie(HttpServletRequest request,HttpServletResponse response){
-        response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from(VISITOR_COOKIE,"").httpOnly(true).secure(request.isSecure()||environment.matchesProfiles("prod")).sameSite("Lax").path("/api/v1/blogs").maxAge(java.time.Duration.ZERO).build().toString());
+        noBody(request,body);checkHandle(handle);limiter.check(request.getRemoteAddr());
+        String visitor=null;int count=0;
+        if(request.getCookies()!=null)for(var cookie:request.getCookies())if(VISITOR_COOKIE.equals(cookie.getName())){visitor=cookie.getValue();count++;}
+        if(count>1)throw MediaRequest.invalid();
+        if(visitor==null||!visitor.matches("[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}"))visitor=java.util.UUID.randomUUID().toString();
+        var now=clock.instant();
+        var result=visits.record(handle,visitor,now);
+        response.addHeader(HttpHeaders.SET_COOKIE,dailyVisitorCookie(visitor,now,request.isSecure()||environment.matchesProfiles("prod")).toString());
         response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");
+        return ApiResponse.of(result);
+    }
+    static ResponseCookie dailyVisitorCookie(String value,java.time.Instant now,boolean secure){
+        var zone=java.time.ZoneId.of("Asia/Seoul");
+        var midnight=now.atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant();
+        long seconds=Math.max(1,java.time.Duration.between(now,midnight).getSeconds());
+        return ResponseCookie.from(VISITOR_COOKIE,value).httpOnly(true).secure(secure).sameSite("Lax").path("/api/v1/blogs").maxAge(seconds).build();
     }
     private static long memberId(Jwt jwt){return Long.parseLong(jwt.getSubject().substring("member:".length()));}
     private static void noBody(HttpServletRequest request,String body){MediaRequest.noQuery(request);if(body!=null)throw MediaRequest.invalid();}
