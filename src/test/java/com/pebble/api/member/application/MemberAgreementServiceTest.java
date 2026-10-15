@@ -17,7 +17,7 @@ class MemberAgreementServiceTest {
         var repository = mock(MemberRepository.class);
         var pending = new Member("회원", null, MemberStatus.ACTIVE, null, null);
         when(queries.findActiveForAccountWrite(1)).thenReturn(pending);
-        var service = new MemberAgreementService(queries, repository, Clock.systemUTC(), false);
+        var service = new MemberAgreementService(queries, repository, Clock.systemUTC(), false, false);
         assertThatThrownBy(() -> service.accept(1, MemberAgreement.TERMS_VERSION, MemberAgreement.PRIVACY_VERSION))
                 .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.error()).isEqualTo(MemberError.LEGAL_DOCUMENTS_UNAVAILABLE));
         assertThat(pending.hasAcceptedAgreements()).isFalse();
@@ -29,7 +29,7 @@ class MemberAgreementServiceTest {
         var pending = new Member("회원", null, MemberStatus.ACTIVE, null, null);
         when(queries.findActiveForAccountWrite(1)).thenReturn(pending);
         Instant now = Instant.parse("2026-10-15T03:00:00.123456789Z");
-        var service = new MemberAgreementService(queries, repository, Clock.fixed(now, ZoneOffset.UTC), true);
+        var service = new MemberAgreementService(queries, repository, Clock.fixed(now, ZoneOffset.UTC), true, false);
         assertThatThrownBy(() -> service.accept(1, "old", MemberAgreement.PRIVACY_VERSION))
                 .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.error()).isEqualTo(MemberError.AGREEMENT_VERSION_CHANGED));
         var result = service.accept(1, MemberAgreement.TERMS_VERSION, MemberAgreement.PRIVACY_VERSION);
@@ -43,7 +43,7 @@ class MemberAgreementServiceTest {
         Instant now = Instant.parse("2026-10-15T03:00:00Z");
         member.acceptCurrentAgreements(now);
         when(queries.findActiveForAccountWrite(1)).thenReturn(member);
-        var result = new MemberAgreementService(queries, repository, Clock.systemUTC(), false)
+        var result = new MemberAgreementService(queries, repository, Clock.systemUTC(), false, false)
                 .accept(1, MemberAgreement.TERMS_VERSION, MemberAgreement.PRIVACY_VERSION);
         assertThat(result.acceptedAt()).isEqualTo(now);
         assertThat(result.available()).isFalse();

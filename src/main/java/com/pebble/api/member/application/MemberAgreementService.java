@@ -18,8 +18,9 @@ public class MemberAgreementService {
     private final Clock clock;
     private final boolean published;
     public MemberAgreementService(MemberQueryService queries, MemberRepository members, Clock clock,
-            @Value("${pebble.legal.published:false}") boolean published) {
-        this.queries = queries; this.members = members; this.clock = clock; this.published = published;
+            @Value("${pebble.legal.published:false}") boolean published,
+            @Value("${pebble.legal.test-mode:false}") boolean testMode) {
+        this.queries = queries; this.members = members; this.clock = clock; this.published = published || testMode;
     }
     public State state(long memberId) {
         return state(queries.findActiveById(memberId).currentAgreementAcceptedAt().orElse(null));

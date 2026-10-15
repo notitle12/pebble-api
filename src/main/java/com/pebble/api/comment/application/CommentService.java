@@ -27,6 +27,8 @@ public class CommentService {
     private final PostQueryService posts;
     private final ProjectQueryService projects;
     private final MemberQueryService members;
+    private final GuestCommentSecurity guestSecurity;
+    private final com.pebble.api.comment.infrastructure.GuestCommentAbuseRecords abuseRecords;
 
     public Page<Comment> listForManagement(CommentTarget type, Long contentId, Long authorId,
             CommentVisibility visibility, Boolean deleted, Pageable pageable) {
@@ -75,7 +77,7 @@ public class CommentService {
         Comment comment = find(type, contentId, commentId, false);
         boolean owner = Objects.equals(content.ownerId(), requesterId);
         if (comment.getVisibility() == CommentVisibility.SECRET) {
-            if (!owner && !Objects.equals(comment.getAuthor().getId(), requesterId)) throw notFound();
+            if (!owner && (comment.isGuest() || !Objects.equals(comment.getAuthor().getId(), requesterId))) throw notFound();
             members.findActiveById(requesterId);
         } else if (!content.publicVisible()) {
             if (!owner) throw notFound();
@@ -89,7 +91,7 @@ public class CommentService {
         members.findActiveForWrite(memberId);
         content(type, contentId, true);
         Comment comment = find(type, contentId, commentId, true);
-        if (!comment.getAuthor().getId().equals(memberId)) throw notFound();
+        if (comment.isGuest() || !comment.getAuthor().getId().equals(memberId)) throw notFound();
         comment.update(input.hasBody() ? input.body() : comment.getBody(),
                 input.hasVisibility() ? input.visibility() : comment.getVisibility());
         flush(type);
@@ -99,11 +101,48 @@ public class CommentService {
     @Transactional
     public void delete(CommentTarget type, long contentId, long commentId, long memberId) {
         members.findActiveForWrite(memberId);
-        content(type, contentId, true);
+        Content content = content(type, contentId, true);
         Comment comment = find(type, contentId, commentId, true);
-        if (!comment.getAuthor().getId().equals(memberId)) throw notFound();
+        if (comment.isGuest() ? !content.ownerId().equals(memberId) : !comment.getAuthor().getId().equals(memberId)) throw notFound();
         comment.delete();
         flush(type);
+    }
+
+    @Transactional
+    public Comment createGuest(CommentTarget type,long contentId,String nickname,String password,String body,String ip) {
+        Content content=content(type,contentId,true);
+        if(!content.publicVisible())throw notFound();
+        String hash=guestSecurity.encode(password);
+        Comment comment=type==CommentTarget.POST
+                ?postComments.saveAndFlush(new PostComment(contentId,nickname,hash,body))
+                :projectComments.saveAndFlush(new ProjectComment(contentId,nickname,hash,body));
+        abuseRecords.record(type,comment.getId(),ip);
+        return comment;
+    }
+    @Transactional
+    public Comment updateGuest(CommentTarget type,long contentId,long commentId,String password,String body,String ip) {
+        // 숨김 전 작성한 댓글도 올바른 비밀번호로 수정·삭제할 수 있으나 본문은 인증 전 반환하지 않는다.
+        content(type,contentId,true);
+        Comment comment=find(type,contentId,commentId,true);
+        requireGuestPassword(comment,password);
+        comment.update(body,CommentVisibility.PUBLIC);
+        flush(type);
+        abuseRecords.record(type,commentId,ip);
+        return comment;
+    }
+    @Transactional
+    public void deleteGuest(CommentTarget type,long contentId,long commentId,String password,String ip) {
+        content(type,contentId,true);
+        Comment comment=find(type,contentId,commentId,true);
+        requireGuestPassword(comment,password);
+        comment.delete();
+        flush(type);
+        abuseRecords.record(type,commentId,ip);
+    }
+    private void requireGuestPassword(Comment comment,String password) {
+        if(!comment.isGuest())throw notFound();
+        if(!guestSecurity.matches(password,comment.getGuestPasswordHash()))
+            throw new ApplicationException(CommentError.INVALID_COMMENT_PASSWORD);
     }
 
     private Comment find(CommentTarget type, long contentId, long commentId, boolean forWrite) {
@@ -111,7 +150,7 @@ public class CommentService {
                 ? (forWrite ? postComments.findForUpdate(commentId) : postComments.findById(commentId)).orElseThrow(CommentService::notFound)
                 : (forWrite ? projectComments.findForUpdate(commentId) : projectComments.findById(commentId)).orElseThrow(CommentService::notFound);
         if (comment.getContentId() != contentId || comment.getDeletedAt() != null
-                || comment.getAuthor().getStatus() == MemberStatus.WITHDRAWAL_PENDING) throw notFound();
+                || (!comment.isGuest() && comment.getAuthor().getStatus() == MemberStatus.WITHDRAWAL_PENDING)) throw notFound();
         return comment;
     }
 
