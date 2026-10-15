@@ -33,7 +33,8 @@ public class MemberAgreementService {
         // 이미 처리한 동일 요청은 원래 서버 동의 시각을 반환한다.
         if (member.hasAcceptedAgreements()) return state(member.currentAgreementAcceptedAt().orElseThrow());
         if (!published) throw new ApplicationException(MemberError.LEGAL_DOCUMENTS_UNAVAILABLE);
-        member.acceptCurrentAgreements(clock.instant());
+        // PostgreSQL timestamptz 정밀도에 맞춰 최초 응답과 재조회 응답을 동일하게 유지한다.
+        member.acceptCurrentAgreements(clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
         members.flush();
         return state(member.currentAgreementAcceptedAt().orElseThrow());
     }
