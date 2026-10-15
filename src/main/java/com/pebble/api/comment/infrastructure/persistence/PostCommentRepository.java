@@ -18,7 +18,7 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
     Optional<PostComment> findById(Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select c from PostComment c join fetch c.author where c.id=:id")
+    @Query("select c from PostComment c where c.id=:id")
     Optional<PostComment> findForUpdate(@Param("id") long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -28,8 +28,9 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
     @EntityGraph(attributePaths = "author")
     @Query("""
             select c from PostComment c
+            left join c.author a
             where (:contentId is null or c.contentId=:contentId)
-              and (:authorId is null or c.author.id=:authorId)
+              and (:authorId is null or a.id=:authorId)
               and (:visibility is null or c.visibility=:visibility)
               and (:deleted is null or (:deleted=true and c.deletedAt is not null)
                    or (:deleted=false and c.deletedAt is null))
@@ -40,10 +41,11 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
     @EntityGraph(attributePaths = "author")
     @Query("""
             select c from PostComment c
+            left join c.author a
             where c.contentId=:contentId and c.deletedAt is null
-              and c.author.status <> com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING
+              and (a is null or a.status <> com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING)
               and (c.visibility = com.pebble.api.comment.domain.CommentVisibility.PUBLIC
-                   or c.author.id=:requesterId or :owner=true)
+                   or a.id=:requesterId or :owner=true)
             """)
     Page<PostComment> findVisible(@Param("contentId") long contentId, @Param("requesterId") Long requesterId,
                                   @Param("owner") boolean owner, Pageable pageable);

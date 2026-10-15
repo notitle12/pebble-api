@@ -111,6 +111,12 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.GET, "/api/v1/posts/{postId:[0-9]+}/comments/{commentId:[0-9]+}", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/projects/{projectId:[0-9]+}/comments", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/projects/{projectId:[0-9]+}/comments/{commentId:[0-9]+}", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/comments/guest", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/comments/{commentId:[0-9]+}/guest/update", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/comments/{commentId:[0-9]+}/guest/delete", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/comments/guest", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/comments/{commentId:[0-9]+}/guest/update", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/comments/{commentId:[0-9]+}/guest/delete", Access.PUBLIC),
             new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/comments", Access.USER),
             new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/comments", Access.USER),
             new Endpoint(HttpMethod.PATCH, "/api/v1/posts/{postId:[0-9]+}/comments/{commentId:[0-9]+}", Access.USER),
@@ -131,6 +137,12 @@ public final class SecurityEndpoints {
     static RequestMatcher[] csrfExemptions() {
         // OAuth state 또는 CookieOriginFilter로 보호하는 POST에 한정한다.
         return new RequestMatcher[] {
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/posts/{contentId:[0-9]+}/comments/guest"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/posts/{contentId:[0-9]+}/comments/{commentId:[0-9]+}/guest/update"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/posts/{contentId:[0-9]+}/comments/{commentId:[0-9]+}/guest/delete"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/projects/{contentId:[0-9]+}/comments/guest"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/projects/{contentId:[0-9]+}/comments/{commentId:[0-9]+}/guest/update"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/projects/{contentId:[0-9]+}/comments/{commentId:[0-9]+}/guest/delete"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/blogs/{handle}/visits"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/authorization"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/login"),
