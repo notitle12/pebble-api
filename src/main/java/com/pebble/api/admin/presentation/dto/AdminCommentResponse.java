@@ -10,9 +10,8 @@ public record AdminCommentResponse(String id, String contentId, CommentResponse.
         @JsonInclude(JsonInclude.Include.NON_NULL) String body, CommentVisibility visibility,
         Instant createdAt, Instant updatedAt, Instant deletedAt) {
     public static AdminCommentResponse from(Comment comment) {
-        var member = comment.getAuthor();
         return new AdminCommentResponse(comment.getId().toString(), Long.toString(comment.getContentId()),
-                new CommentResponse.Author(member.getId().toString(), member.getHandle(), member.getBlogName(), member.getNickname(), member.getProfileImageUrl()),
+                CommentResponse.from(comment).author(),
                 comment.getDeletedAt() == null ? comment.getBody() : null, comment.getVisibility(),
                 comment.getCreatedAt(), comment.getUpdatedAt(), comment.getDeletedAt());
     }

@@ -16,6 +16,10 @@ public class ProjectComment extends Comment {
         super(author, body, visibility);
         this.contentId = contentId;
     }
+    public ProjectComment(long contentId, String guestNickname, String guestPasswordHash, String body) {
+        super(guestNickname, guestPasswordHash, body, CommentVisibility.PUBLIC);
+        this.contentId = contentId;
+    }
     @Override
     public long getContentId() { return contentId; }
 }
