@@ -1,6 +1,7 @@
 package com.pebble.api.comment.presentation.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,18 +11,21 @@ import org.junit.jupiter.api.Test;
 
 class GuestCommentRequestTest {
     private static final Set<String> CREATE_FIELDS = Set.of(
-            "nickname", "password", "body", "privacyAccepted", "ageConfirmed");
+            "nickname", "password", "body", "privacyAccepted");
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
     void requiresExactlyTheExpectedFields() {
         var missing = validCreate();
-        missing.remove("ageConfirmed");
-        assertInvalid(() -> GuestCommentRequest.validate(missing, CREATE_FIELDS));
+        assertThatCode(() -> GuestCommentRequest.validate(missing, CREATE_FIELDS)).doesNotThrowAnyException();
 
         var extra = validCreate();
         extra.put("remoteAddress", "192.0.2.1");
         assertInvalid(() -> GuestCommentRequest.validate(extra, CREATE_FIELDS));
+
+        var ageField = validCreate();
+        ageField.put("ageConfirmed", true);
+        assertInvalid(() -> GuestCommentRequest.validate(ageField, CREATE_FIELDS));
 
         assertInvalid(() -> GuestCommentRequest.validate(null, CREATE_FIELDS));
         assertInvalid(() -> GuestCommentRequest.validate(mapper.createArrayNode(), CREATE_FIELDS));
@@ -48,10 +52,10 @@ class GuestCommentRequestTest {
     }
 
     @Test
-    void acceptsPasswordsFromEightThroughSixtyFourUnicodeCodePoints() {
+    void acceptsPasswordsFromFourThroughSixtyFourUnicodeCodePoints() {
         var json = validCreate();
-        json.put("password", "🔒".repeat(8));
-        assertThat(GuestCommentRequest.password(json)).isEqualTo("🔒".repeat(8));
+        json.put("password", "🔒".repeat(4));
+        assertThat(GuestCommentRequest.password(json)).isEqualTo("🔒".repeat(4));
 
         String fourByteCharacters = "😀".repeat(64);
         json.put("password", fourByteCharacters);
@@ -61,7 +65,7 @@ class GuestCommentRequestTest {
 
     @Test
     void rejectsPasswordsOutsideUnicodeAndUtf8ByteLimits() {
-        for (String password : new String[]{"short7", "😀".repeat(7), "😀".repeat(65), "\t".repeat(8)}) {
+        for (String password : new String[]{"abc", "😀".repeat(3), "😀".repeat(65), "\t".repeat(8)}) {
             var json = validCreate();
             json.put("password", password);
             assertInvalid(() -> GuestCommentRequest.password(json));
@@ -94,10 +98,10 @@ class GuestCommentRequestTest {
     }
 
     @Test
-    void requiresExplicitTrueForPrivacyAndAgeConfirmations() {
+    void requiresExplicitTrueForPrivacyButDoesNotRequireAgeConfirmation() {
         GuestCommentRequest.confirmations(validCreate());
 
-        for (String key : new String[]{"privacyAccepted", "ageConfirmed"}) {
+        for (String key : new String[]{"privacyAccepted"}) {
             var falseValue = validCreate();
             falseValue.put(key, false);
             assertInvalid(() -> GuestCommentRequest.confirmations(falseValue));
@@ -110,15 +114,25 @@ class GuestCommentRequestTest {
             nonBoolean.put(key, "true");
             assertInvalid(() -> GuestCommentRequest.confirmations(nonBoolean));
         }
+        var noAge = validCreate();
+        GuestCommentRequest.confirmations(noAge);
+    }
+
+    @Test
+    void acceptsNewAndAlreadyOpenLegacyFormsWithoutRequiringAge() {
+        GuestCommentRequest.validateCreate(validCreate());
+        GuestCommentRequest.validateCreate(validCreate().put("ageConfirmed", true));
+        GuestCommentRequest.validateCreate(validCreate().put("ageConfirmed", false));
+        assertInvalid(() -> GuestCommentRequest.validateCreate(validCreate().put("ageConfirmed", "true")));
+        assertInvalid(() -> GuestCommentRequest.validateCreate(validCreate().put("visibility", "SECRET")));
     }
 
     private com.fasterxml.jackson.databind.node.ObjectNode validCreate() {
         return mapper.createObjectNode()
                 .put("nickname", "visitor")
-                .put("password", "password8")
+                .put("password", "pass")
                 .put("body", "hello")
-                .put("privacyAccepted", true)
-                .put("ageConfirmed", true);
+                .put("privacyAccepted", true);
     }
 
     private void assertInvalid(Runnable action) {
