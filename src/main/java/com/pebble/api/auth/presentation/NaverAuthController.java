@@ -93,13 +93,13 @@ public class NaverAuthController {
             @CookieValue(name = STATE_COOKIE, required = false) String cookieState,
             HttpServletRequest request) {
         NaverWithdrawalRequest body = parseWithdrawal(json, request);
-        var scheduledAt = oauthLoginService.completeWithdrawal(body.authorizationCode(), body.state(), cookieState);
+        oauthLoginService.completeWithdrawal(body.authorizationCode(), body.state(), cookieState);
         ResponseCookie stateCookie = ResponseCookie.from(STATE_COOKIE, "").httpOnly(true).secure(true)
                 .sameSite("Lax").path(COOKIE_PATH + "/naver").maxAge(Duration.ZERO).build();
         ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_COOKIE, "").httpOnly(true).secure(true)
                 .sameSite("Lax").path(COOKIE_PATH).maxAge(Duration.ZERO).build();
-        return ResponseEntity.accepted().header(HttpHeaders.SET_COOKIE, stateCookie.toString(), refreshCookie.toString())
-                .body(ApiResponse.of(new WithdrawalResponse(scheduledAt)));
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, stateCookie.toString(), refreshCookie.toString())
+                .body(ApiResponse.of(new WithdrawalResponse(true)));
     }
 
     private NaverWithdrawalRequest parseWithdrawal(String json, HttpServletRequest request) {
@@ -113,7 +113,7 @@ public class NaverAuthController {
         }
     }
 
-    public record WithdrawalResponse(java.time.Instant withdrawalScheduledAt) {}
+    public record WithdrawalResponse(boolean deleted) {}
 
     @PostMapping(value = "/withdrawal/cancel", consumes = "application/json")
     public ResponseEntity<ApiResponse<WithdrawalCancellationResponse>> cancelWithdrawal(

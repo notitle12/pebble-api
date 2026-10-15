@@ -32,4 +32,8 @@ public interface MemberRepository extends JpaRepository<Member, Long>, JpaSpecif
 
     @Query(value = "select * from member where id=:id for update skip locked", nativeQuery = true)
     Optional<Member> findForWithdrawalCleanup(@Param("id") long id);
+
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from Member m where m.id=:id")
+    int deleteForWithdrawal(@Param("id") long id);
 }

@@ -8,13 +8,11 @@ import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
 import com.pebble.api.member.application.BlogLinksService;
 import com.pebble.api.member.application.BlogVisitsService;
-import com.pebble.api.member.application.BlogVisitLimiter;
 import com.pebble.api.member.presentation.dto.BlogLinksRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
@@ -30,7 +28,6 @@ public class BlogToolsController {
     public static final String VISITOR_COOKIE="pebble_blog_visitor";
     private final BlogLinksService links;
     private final BlogVisitsService visits;
-    private final BlogVisitLimiter limiter;
     private final ObjectMapper mapper;
     private final Environment environment;
 
@@ -58,18 +55,15 @@ public class BlogToolsController {
         }catch(java.io.IOException exception){throw MediaRequest.invalid();}
     }
     @GetMapping("/api/v1/blogs/{handle}/visits")
-    public ApiResponse<BlogVisitsService.Stats> stats(@PathVariable String handle,HttpServletRequest request,@RequestBody(required=false) String body){noBody(request,body);checkHandle(handle);return ApiResponse.of(visits.read(handle));}
+    public ApiResponse<BlogVisitsService.Stats> stats(@PathVariable String handle,HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body){noBody(request,body);checkHandle(handle);expireVisitorCookie(request,response);return ApiResponse.of(visits.read(handle));}
     @PostMapping("/api/v1/blogs/{handle}/visits")
     public ApiResponse<BlogVisitsService.Stats> record(@PathVariable String handle,HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body){
-        noBody(request,body);checkHandle(handle);limiter.check(request.getRemoteAddr());
-        String visitor=null;int found=0;
-        if(request.getCookies()!=null)for(var cookie:request.getCookies())if(VISITOR_COOKIE.equals(cookie.getName())){visitor=cookie.getValue();found++;}
-        if(found>1)throw MediaRequest.invalid();
-        boolean fresh=visitor==null||!visitor.matches("[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}");
-        if(fresh)visitor=UUID.randomUUID().toString();
-        var result=visits.record(handle,visitor);
-        if(fresh)response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from(VISITOR_COOKIE,visitor).httpOnly(true).secure(request.isSecure()||environment.matchesProfiles("prod")).sameSite("Lax").path("/api/v1/blogs").maxAge(java.time.Duration.ofDays(180)).build().toString());
-        return ApiResponse.of(result);
+        // 구버전 클라이언트도 식별값을 수집하지 않고 기존 쿠키만 만료시킨다.
+        return stats(handle,request,response,body);
+    }
+    private void expireVisitorCookie(HttpServletRequest request,HttpServletResponse response){
+        response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from(VISITOR_COOKIE,"").httpOnly(true).secure(request.isSecure()||environment.matchesProfiles("prod")).sameSite("Lax").path("/api/v1/blogs").maxAge(java.time.Duration.ZERO).build().toString());
+        response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");
     }
     private static long memberId(Jwt jwt){return Long.parseLong(jwt.getSubject().substring("member:".length()));}
     private static void noBody(HttpServletRequest request,String body){MediaRequest.noQuery(request);if(body!=null)throw MediaRequest.invalid();}

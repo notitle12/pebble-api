@@ -7,4 +7,5 @@ After=docker.service
 Type=oneshot
 User=root
 UMask=0077
+Environment=PEBBLE_BACKUP_RETENTION_DAYS=7
 ExecStart=/opt/pebble/runtime/backup-postgres.sh
