@@ -52,8 +52,8 @@ class PostBoardSearchIntegrationTest extends AuthenticationTestSupport {
 
     @BeforeEach
     void setup() {
-        Member created = members.saveAndFlush(new Member("board-search-" + UUID.randomUUID().toString().substring(0, 8),
-                null, MemberStatus.ACTIVE, null, null));
+        Member created = members.saveAndFlush(agreedMember(new Member("board-search-" + UUID.randomUUID().toString().substring(0, 8),
+                null, MemberStatus.ACTIVE, null, null)));
         author = profiles.complete(created.getId(), "blog-" + created.getId(), "author-" + created.getId(), null);
     }
 

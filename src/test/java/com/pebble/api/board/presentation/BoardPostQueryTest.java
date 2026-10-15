@@ -129,7 +129,7 @@ class BoardPostQueryTest extends AuthenticationTestSupport {
     }
 
     private long member() {
-        Member member = members.saveAndFlush(new Member("board-query-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("board-query-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null)));
         profiles.complete(member.getId(), "blog-" + member.getId(), "query-" + member.getId(), null);
         return member.getId();
     }

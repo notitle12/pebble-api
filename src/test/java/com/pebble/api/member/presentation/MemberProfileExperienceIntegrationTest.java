@@ -126,8 +126,8 @@ class MemberProfileExperienceIntegrationTest extends AuthenticationTestSupport {
     }
 
     private Member member() {
-        Member saved = members.saveAndFlush(new Member("name-" + UUID.randomUUID().toString().substring(0,12),
-                "https://example.com/sns.png", MemberStatus.ACTIVE, null, null));
+        Member saved = members.saveAndFlush(agreedMember(new Member("name-" + UUID.randomUUID().toString().substring(0,12),
+                "https://example.com/sns.png", MemberStatus.ACTIVE, null, null)));
         ids.add(saved.getId()); return saved;
     }
     private String initial() { return "{\"blogName\":\"blog-" + member.getId() + "\",\"handle\":\"" + handle + "\"}"; }

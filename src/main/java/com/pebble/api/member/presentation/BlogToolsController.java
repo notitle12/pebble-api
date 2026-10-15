@@ -14,7 +14,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
@@ -31,6 +30,7 @@ public class BlogToolsController {
     private final BlogLinksService links;
     private final BlogVisitsService visits;
     private final BlogVisitLimiter limiter;
+    private final java.time.Clock clock;
     private final ObjectMapper mapper;
     private final Environment environment;
 
@@ -58,18 +58,25 @@ public class BlogToolsController {
         }catch(java.io.IOException exception){throw MediaRequest.invalid();}
     }
     @GetMapping("/api/v1/blogs/{handle}/visits")
-    public ApiResponse<BlogVisitsService.Stats> stats(@PathVariable String handle,HttpServletRequest request,@RequestBody(required=false) String body){noBody(request,body);checkHandle(handle);return ApiResponse.of(visits.read(handle));}
+    public ApiResponse<BlogVisitsService.Stats> stats(@PathVariable String handle,HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body){noBody(request,body);checkHandle(handle);response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");return ApiResponse.of(visits.read(handle));}
     @PostMapping("/api/v1/blogs/{handle}/visits")
     public ApiResponse<BlogVisitsService.Stats> record(@PathVariable String handle,HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body){
         noBody(request,body);checkHandle(handle);limiter.check(request.getRemoteAddr());
-        String visitor=null;int found=0;
-        if(request.getCookies()!=null)for(var cookie:request.getCookies())if(VISITOR_COOKIE.equals(cookie.getName())){visitor=cookie.getValue();found++;}
-        if(found>1)throw MediaRequest.invalid();
-        boolean fresh=visitor==null||!visitor.matches("[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}");
-        if(fresh)visitor=UUID.randomUUID().toString();
-        var result=visits.record(handle,visitor);
-        if(fresh)response.addHeader(HttpHeaders.SET_COOKIE,ResponseCookie.from(VISITOR_COOKIE,visitor).httpOnly(true).secure(request.isSecure()||environment.matchesProfiles("prod")).sameSite("Lax").path("/api/v1/blogs").maxAge(java.time.Duration.ofDays(180)).build().toString());
+        String visitor=null;int count=0;
+        if(request.getCookies()!=null)for(var cookie:request.getCookies())if(VISITOR_COOKIE.equals(cookie.getName())){visitor=cookie.getValue();count++;}
+        if(count>1)throw MediaRequest.invalid();
+        if(visitor==null||!visitor.matches("[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}"))visitor=java.util.UUID.randomUUID().toString();
+        var now=clock.instant();
+        var result=visits.record(handle,visitor,now);
+        response.addHeader(HttpHeaders.SET_COOKIE,dailyVisitorCookie(visitor,now,request.isSecure()||environment.matchesProfiles("prod")).toString());
+        response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");
         return ApiResponse.of(result);
+    }
+    static ResponseCookie dailyVisitorCookie(String value,java.time.Instant now,boolean secure){
+        var zone=java.time.ZoneId.of("Asia/Seoul");
+        var midnight=now.atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant();
+        long seconds=Math.max(1,java.time.Duration.between(now,midnight).getSeconds());
+        return ResponseCookie.from(VISITOR_COOKIE,value).httpOnly(true).secure(secure).sameSite("Lax").path("/api/v1/blogs").maxAge(seconds).build();
     }
     private static long memberId(Jwt jwt){return Long.parseLong(jwt.getSubject().substring("member:".length()));}
     private static void noBody(HttpServletRequest request,String body){MediaRequest.noQuery(request);if(body!=null)throw MediaRequest.invalid();}

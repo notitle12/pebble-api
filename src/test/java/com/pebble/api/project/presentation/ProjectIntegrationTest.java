@@ -297,7 +297,7 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     @Test
     void requiresCompletedActiveUserForEveryWrite() throws Exception {
         String id = projectId(createRaw(owner, "{\"name\":\"owned\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\"}"));
-        Member unfinished = members.saveAndFlush(new Member("unfinished", null, MemberStatus.ACTIVE, null, null));
+        Member unfinished = members.saveAndFlush(agreedMember(new Member("unfinished", null, MemberStatus.ACTIVE, null, null)));
         createRaw(unfinished, "{\"name\":\"new\",\"lifecycleStatus\":\"IN_PROGRESS\",\"visibilityStatus\":\"PUBLIC\"}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("PROFILE_REQUIRED"));
         for (String state : List.of("SUSPENDED", "WITHDRAWAL_PENDING")) {
@@ -410,8 +410,8 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     }
 
     private Member initializedMember(String label) {
-        Member created = members.saveAndFlush(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
-                null, MemberStatus.ACTIVE, null, null));
+        Member created = members.saveAndFlush(agreedMember(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
+                null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(created.getId(), "blog-" + created.getId(), "author-" + created.getId(), null);
     }
 

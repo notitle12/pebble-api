@@ -201,5 +201,5 @@ class MemberProfileIntegrationTest extends AuthenticationTestSupport {
     private String blog(Member member) { return "개발 기록-" + member.getId(); }
     private String handle(Member member) { return "author-" + member.getId(); }
     private String bearer(Member member) { return "Bearer " + tokens.issueForMember(member.getId(), Instant.now()); }
-    private Member newMember() { return members.saveAndFlush(new Member("member-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null)); }
+    private Member newMember() { return members.saveAndFlush(agreedMember(new Member("member-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null))); }
 }

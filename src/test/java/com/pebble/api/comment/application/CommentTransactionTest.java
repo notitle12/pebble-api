@@ -222,7 +222,7 @@ class CommentTransactionTest extends AuthenticationTestSupport {
 
     private CommentChanges input(String json, boolean create) throws Exception { return CommentWriteRequest.parse(mapper.readTree(json), create); }
     private long member(boolean profile) {
-        Member member = members.saveAndFlush(new Member("comment-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("comment-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null)));
         fixtures.add(member.getId());
         if (profile) profiles.complete(member.getId(), "comment-blog-" + member.getId(), "comment-" + member.getId(), null);
         return member.getId();

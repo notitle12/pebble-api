@@ -51,7 +51,7 @@ class AdminMemberTransactionTest extends AuthenticationTestSupport {
     @BeforeEach
     void setup() {
         manager = accounts.saveAndFlush(new AdminAccount("operator-" + UUID.randomUUID(), "unused-test-hash", AdminRole.MANAGER));
-        member = members.saveAndFlush(new Member("tx-" + UUID.randomUUID().toString().substring(0, 20), null, MemberStatus.ACTIVE, null, null));
+        member = members.saveAndFlush(agreedMember(new Member("tx-" + UUID.randomUUID().toString().substring(0, 20), null, MemberStatus.ACTIVE, null, null)));
     }
 
     @AfterEach
