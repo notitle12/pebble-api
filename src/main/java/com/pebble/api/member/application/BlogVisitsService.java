@@ -16,16 +16,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly=true)
 public class BlogVisitsService {
     private static final ZoneId SEOUL=ZoneId.of("Asia/Seoul");
+    private final java.time.Clock clock;
     private final JdbcTemplate jdbc;
     private final MemberQueryService members;
     public record Stats(long totalVisitors,long todayVisitors,String date,String timeZone) { }
-    public Stats read(String handle){return stats(members.findPublicBlog(handle).getId(),LocalDate.now(SEOUL));}
+    public Stats read(String handle){return stats(members.findPublicBlog(handle).getId(),LocalDate.now(clock.withZone(SEOUL)));}
     private Stats stats(long memberId,LocalDate day){
         var results=jdbc.query("select total_visitors,case when visit_date=? then today_visitors else 0 end from blog_visit_stats where member_id=?",(r,n)->new Stats(r.getLong(1),r.getLong(2),day.toString(),SEOUL.getId()),day,memberId);
         return results.isEmpty()?new Stats(0,0,day.toString(),SEOUL.getId()):results.getFirst();
     }
     @Transactional
-    public Stats record(String handle,String visitor){return recordDay(members.findPublicBlog(handle).getId(),visitor,LocalDate.now(SEOUL));}
+    public Stats record(String handle,String visitor){return record(handle,visitor,clock.instant());}
+    @Transactional
+    public Stats record(String handle,String visitor,java.time.Instant visitedAt){return recordDay(members.findPublicBlog(handle).getId(),visitor,visitedAt.atZone(SEOUL).toLocalDate());}
+    @Transactional
+    public int cleanupExpired(){return jdbc.update("delete from blog_visit_daily where visit_date<?",LocalDate.now(clock.withZone(SEOUL)));}
     Stats recordDay(long memberId,String visitor,LocalDate day){
         String hash=hash(memberId+":"+day+":"+visitor);
         int added=jdbc.update("insert into blog_visit_daily(member_id,visit_date,visitor_hash) values(?,?,?) on conflict do nothing",memberId,day,hash);
@@ -37,7 +42,7 @@ public class BlogVisitsService {
                 visit_date=greatest(blog_visit_stats.visit_date,excluded.visit_date)
                 """,memberId,day);
         // 총계는 보존하고 지난 중복 식별자만 삭제한다. 원시 쿠키·IP·회원 인증 정보는 저장하지 않는다.
-        jdbc.update("delete from blog_visit_daily where member_id=? and visit_date<?",memberId,day.minusDays(1));
+        jdbc.update("delete from blog_visit_daily where member_id=? and visit_date<?",memberId,day);
         return stats(memberId,day);
     }
     public static String hash(String value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}}

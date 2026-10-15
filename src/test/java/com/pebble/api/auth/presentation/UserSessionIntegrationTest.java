@@ -167,9 +167,9 @@ class UserSessionIntegrationTest extends AuthenticationTestSupport {
 
     private Cookie issueRefreshCookie(MemberStatus memberStatus) {
         Instant now = Instant.now();
-        Member member = memberRepository.saveAndFlush(new Member("session-" + java.util.UUID.randomUUID().toString().substring(0, 12), null, memberStatus,
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member("session-" + java.util.UUID.randomUUID().toString().substring(0, 12), null, memberStatus,
                 memberStatus == MemberStatus.WITHDRAWAL_PENDING ? now : null,
-                memberStatus == MemberStatus.WITHDRAWAL_PENDING ? now.plusSeconds(60) : null));
+                memberStatus == MemberStatus.WITHDRAWAL_PENDING ? now.plusSeconds(60) : null)));
         IssuedRefreshToken issued = refreshTokens.issue(member.getId(), now);
         return new Cookie("refresh_token", issued.value());
     }

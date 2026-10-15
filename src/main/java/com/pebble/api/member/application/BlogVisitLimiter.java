@@ -11,6 +11,10 @@ import org.springframework.stereotype.Component;
 public class BlogVisitLimiter {
     private record Bucket(long expires,int count) { }
     private final Map<String,Bucket> buckets=new HashMap<>();
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000, initialDelay = 60000)
+    public synchronized void cleanup(){cleanup(System.currentTimeMillis());}
+    synchronized void cleanup(long now){buckets.entrySet().removeIf(entry->entry.getValue().expires<=now);}
+    int bucketCount(){return buckets.size();}
     public void check(String remoteAddress){check(remoteAddress,System.currentTimeMillis());}
     synchronized void check(String remoteAddress,long now){
         String key=BlogVisitsService.hash(remoteAddress);

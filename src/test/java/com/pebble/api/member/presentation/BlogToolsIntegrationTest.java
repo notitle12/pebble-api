@@ -41,7 +41,7 @@ class BlogToolsIntegrationTest extends AuthenticationTestSupport {
  @Test void visitCookieDeduplicatesAndReadDoesNotWrite()throws Exception{
   mvc.perform(get(path()+"/visits")).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(0));
   var first=mvc.perform(post(path()+"/visits").header("Origin","http://localhost:3000")).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(1)).andExpect(jsonPath("$.data.todayVisitors").value(1)).andExpect(jsonPath("$.data.timeZone").value("Asia/Seoul")).andReturn();
-  String cookie=first.getResponse().getHeader("Set-Cookie");assertThat(cookie).contains("HttpOnly","SameSite=Lax","Path=/api/v1/blogs");
+  String cookie=first.getResponse().getHeader("Set-Cookie");assertThat(cookie).contains("HttpOnly","SameSite=Lax","Path=/api/v1/blogs").doesNotContain("Max-Age=15552000");
   String visitor=cookie.substring(cookie.indexOf('=')+1,cookie.indexOf(';'));
   mvc.perform(post(path()+"/visits").header("Origin","http://localhost:3000").cookie(new Cookie(BlogToolsController.VISITOR_COOKIE,visitor))).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(1));
   mvc.perform(get(path()+"/visits")).andExpect(status().isOk()).andExpect(jsonPath("$.data.totalVisitors").value(1));
@@ -92,5 +92,5 @@ class BlogToolsIntegrationTest extends AuthenticationTestSupport {
  private void createPost(Member member,String title,String visibility)throws Exception{mvc.perform(post("/api/v1/posts").header("Authorization",bearer(member)).contentType("application/json").content(mapper.writeValueAsString(java.util.Map.of("title",title,"visibilityStatus",visibility,"tags",java.util.List.of(),"blocks",java.util.List.of(java.util.Map.of("type","TEXT","content","검색88 본문")))))).andExpect(status().isCreated());}
  private String bearer(Member member){return "Bearer "+tokens.issueForMember(member.getId(),Instant.now());}
  private String path(){return "/api/v1/blogs/"+owner.getHandle();}
- private Member blog(){String key=UUID.randomUUID().toString().substring(0,12);var member=new Member("writer-"+key,null,MemberStatus.ACTIVE,null,null);member.completeProfile("블로그-"+key,"blog-"+key,member.getNickname(),Instant.now());return members.saveAndFlush(member);}
+ private Member blog(){String key=UUID.randomUUID().toString().substring(0,12);var member=agreedMember(new Member("writer-"+key,null,MemberStatus.ACTIVE,null,null));member.completeProfile("블로그-"+key,"blog-"+key,member.getNickname(),Instant.now());return members.saveAndFlush(member);}
 }

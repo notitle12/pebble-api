@@ -134,9 +134,31 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         assertThat(redisTemplate.getExpire(key)).isBetween(1209500L, 1209600L);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = AuthError.class, names = {"AGE_RESTRICTED", "AGE_VERIFICATION_REQUIRED"})
+    void rejectedAgeDoesNotCreateMemberIdentityOrSession(AuthError error) throws Exception {
+        when(naverOAuthGateway.authorizationUrl(anyString()))
+                .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
+        Cookie cookie = beginAuthorizationAndGetCookie();
+        when(naverOAuthGateway.authenticate("age-code", cookie.getValue())).thenThrow(new AuthException(error));
+        var before = redisTemplate.keys("pebble:auth:user:*");
+        mockMvc.perform(post("/api/v1/auth/naver/login").cookie(cookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(loginBody("age-code", cookie.getValue())))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value(error.code()))
+                .andExpect(jsonPath("$.data").doesNotExist())
+                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
+        assertThat(memberRepository.count()).isZero();
+        assertThat(identityRepository.count()).isZero();
+        assertThat(redisTemplate.keys("pebble:auth:user:*")).isEqualTo(before);
+        // 거절된 요청도 일회용 state가 소비되어 재사용으로 우회할 수 없다.
+        mockMvc.perform(post("/api/v1/auth/naver/login").cookie(cookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(loginBody("age-code", cookie.getValue())))
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.error.code").value("INVALID_OAUTH_STATE"));
+    }
+
     @Test
     void existingMemberLogsInWithoutCreatingAnotherAccount() throws Exception {
-        Member member = memberRepository.saveAndFlush(new Member("saved-name", null, MemberStatus.ACTIVE, null, null));
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member("saved-name", null, MemberStatus.ACTIVE, null, null)));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "existing-subject"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
@@ -240,9 +262,9 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
     @Test
     void restoresWithdrawalPendingMemberOnLogin() throws Exception {
         Instant requestedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
-        Member member = memberRepository.saveAndFlush(new Member(
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member(
                 "pending", null, MemberStatus.WITHDRAWAL_PENDING,
-                requestedAt, requestedAt.plusSeconds(60)));
+                requestedAt, requestedAt.plusSeconds(60))));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "pending-naver-id"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
@@ -279,7 +301,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void refusesSuspendedMemberWithoutIssuingTokens() throws Exception {
-        Member member = memberRepository.saveAndFlush(new Member("suspended", null, MemberStatus.SUSPENDED, null, null));
+        Member member = memberRepository.saveAndFlush(agreedMember(new Member("suspended", null, MemberStatus.SUSPENDED, null, null)));
         identityRepository.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, "suspended-subject"));
         when(naverOAuthGateway.authorizationUrl(anyString()))
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));

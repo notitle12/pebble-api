@@ -59,7 +59,7 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
 
     @BeforeEach
     void setup() {
-        member = members.saveAndFlush(new Member("tx-" + UUID.randomUUID().toString().substring(0, 20), null, MemberStatus.ACTIVE, null, null));
+        member = members.saveAndFlush(agreedMember(new Member("tx-" + UUID.randomUUID().toString().substring(0, 20), null, MemberStatus.ACTIVE, null, null)));
         subject = "withdrawal-tx-" + UUID.randomUUID();
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
     }
@@ -98,9 +98,10 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
                 assertThatThrownBy(() -> authentication.get(10, TimeUnit.SECONDS)).hasCauseInstanceOf(AuthException.class);
             } finally { release.countDown(); }
         }
-        withdrawals.cancel(OAuthProvider.NAVER, subject);
+        assertThat(members.existsById(member.getId())).isFalse();
         assertThatThrownBy(() -> sessions.refresh(original.refreshToken())).isInstanceOf(AuthException.class);
-        assertThat(sessions.login(member.getId()).accessToken()).isNotBlank();
+        assertThatThrownBy(() -> sessions.login(member.getId())).isInstanceOf(AuthException.class);
+        assertThatThrownBy(() -> withdrawals.cancel(OAuthProvider.NAVER, subject)).isInstanceOf(ApplicationException.class);
     }
 
     @ParameterizedTest
@@ -131,7 +132,7 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
             } finally { release.countDown(); }
         }
         reset(tokens);
-        withdrawals.cancel(OAuthProvider.NAVER, subject);
+        assertThat(members.existsById(member.getId())).isFalse();
         assertThatThrownBy(() -> sessions.refresh(issuedToken.get())).isInstanceOf(AuthException.class);
     }
 
@@ -143,7 +144,7 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
         reset(tokens);
         assertThat(members.findById(member.getId()).orElseThrow().getStatus()).isEqualTo(MemberStatus.ACTIVE);
         assertThat(sessions.refresh(original.refreshToken()).accessToken()).isNotBlank();
-        withdrawals.request(member.getId());
+        legacyReservation();
         Instant scheduled = members.findById(member.getId()).orElseThrow().getWithdrawalScheduledAt();
         doThrow(new RedisConnectionFailureException("test Redis offline")).when(tokens).revokeAll(member.getId());
         assertThatThrownBy(() -> withdrawals.cancel(OAuthProvider.NAVER, subject)).isInstanceOf(RedisConnectionFailureException.class);
@@ -164,7 +165,7 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
 
     @Test
     void cleanupSkipsLockedMemberAndCancellationWaitingOnPurgeCannotResurrectIt() throws Exception {
-        withdrawals.request(member.getId());
+        legacyReservation();
         jdbc.update("update member set withdrawal_scheduled_at=now() - interval '1 second' where id=?", member.getId());
         CountDownLatch locked = new CountDownLatch(1), release = new CountDownLatch(1), attempted = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
@@ -192,7 +193,7 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
     @Test
     void cancellationCommitLetsWaitingLoginCreateFreshSession() throws Exception {
         var original = sessions.login(member.getId());
-        withdrawals.request(member.getId());
+        legacyReservation();
         CountDownLatch locked = new CountDownLatch(1), release = new CountDownLatch(1), attempted = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
             var cancellation = executor.submit(() -> transactions.executeWithoutResult(status -> {
@@ -230,6 +231,13 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
             } finally { release.countDown(); }
             owner.get(10, TimeUnit.SECONDS);
         }
+    }
+
+    private void legacyReservation() {
+        transactions.executeWithoutResult(status -> {
+            var current = members.findByIdForWrite(member.getId()).orElseThrow();
+            current.requestWithdrawal(Instant.now()); members.flush();
+        });
     }
 
     private static void await(CountDownLatch latch) {

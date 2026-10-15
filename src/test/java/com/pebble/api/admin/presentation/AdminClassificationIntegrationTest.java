@@ -184,7 +184,7 @@ class AdminClassificationIntegrationTest extends AuthenticationTestSupport {
         String used = create(CATEGORIES, managerToken, "{\"name\":\"Used inactive\",\"slug\":\"used-" + suffix() + "\"}", 201);
         patchRequest(CATEGORIES, hidden, managerToken, "{\"status\":\"INACTIVE\"}").andExpect(status().isOk());
         patchRequest(CATEGORIES, used, managerToken, "{\"status\":\"INACTIVE\"}").andExpect(status().isOk());
-        Member member = members.saveAndFlush(new Member("classification-" + suffix(), null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("classification-" + suffix(), null, MemberStatus.ACTIVE, null, null)));
         Category usedCategory = categories.findById(Long.parseLong(used)).orElseThrow();
         long postNumber = System.nanoTime();
         posts.saveAndFlush(new Post(member, usedCategory, "used classification", null, PostVisibility.PUBLIC,
@@ -197,7 +197,7 @@ class AdminClassificationIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void addingChildConflictsWhenParentHasPostsInAnyVisibilityState() throws Exception {
-        Member member = members.saveAndFlush(new Member("class-posts-" + suffix(), null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("class-posts-" + suffix(), null, MemberStatus.ACTIVE, null, null)));
         for (PostVisibility visibility : new PostVisibility[]{PostVisibility.PUBLIC, PostVisibility.HIDDEN}) {
             String parent = create(CATEGORIES, managerToken, "{\"name\":\"Parent\",\"slug\":\"used-" + suffix() + "\"}", 201);
             Category category = categories.findById(Long.parseLong(parent)).orElseThrow();
@@ -226,7 +226,7 @@ class AdminClassificationIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void userAndCookieCannotOperateClassificationsAndRevokedAdminSessionIsRejected() throws Exception {
-        Member member = members.saveAndFlush(new Member("class-user-" + suffix(), null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("class-user-" + suffix(), null, MemberStatus.ACTIVE, null, null)));
         String user = accessTokens.issueForMember(member.getId(), java.time.Instant.now());
         for (String path : new String[]{CATEGORIES, TAGS}) {
             mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(user))).andExpect(status().isForbidden());

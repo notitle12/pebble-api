@@ -78,7 +78,7 @@ class AdminContentIntegrationTest extends AuthenticationTestSupport {
         master = accounts.saveAndFlush(new AdminAccount("master-" + UUID.randomUUID(), hash, AdminRole.MASTER));
         managerAccess = sessions.login(manager.getLoginId(), PASSWORD).tokens().accessToken();
         masterAccess = sessions.login(master.getLoginId(), PASSWORD).tokens().accessToken();
-        owner = members.saveAndFlush(new Member("content-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null));
+        owner = members.saveAndFlush(agreedMember(new Member("content-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null)));
         owner.completeProfile("Blog " + owner.getId(), "owner-" + owner.getId(), owner.getNickname(), Instant.now());
         members.flush();
         userAccess = accessTokens.issueForMember(owner.getId(), Instant.now());

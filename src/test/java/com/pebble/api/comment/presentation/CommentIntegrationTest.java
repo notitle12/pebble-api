@@ -158,7 +158,7 @@ class CommentIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void foreignWritersCannotChangeCommentsAndIncompleteActiveUsersCanCreate() throws Exception {
-        Member incomplete = members.saveAndFlush(new Member("incomplete-" + suffix(), null, MemberStatus.ACTIVE, null, null));
+        Member incomplete = members.saveAndFlush(agreedMember(new Member("incomplete-" + suffix(), null, MemberStatus.ACTIVE, null, null)));
         for (String parent : new String[]{createPost(owner, "PUBLIC"), project(owner, "PUBLIC")}) {
             String collection = comments(parent);
             String comment = createComment(collection, incomplete, "profile not required", "PUBLIC");
@@ -328,7 +328,7 @@ class CommentIntegrationTest extends AuthenticationTestSupport {
     private String table(String collectionParentId) { return comments(collectionParentId).startsWith(POSTS) ? "post_comment" : "project_comment"; }
     private String contentTable(String parentId) { return comments(parentId).startsWith(POSTS) ? "post" : "project"; }
     private Member initializedMember(String label) {
-        Member created = members.saveAndFlush(new Member(label + "-" + suffix(), null, MemberStatus.ACTIVE, null, null));
+        Member created = members.saveAndFlush(agreedMember(new Member(label + "-" + suffix(), null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(created.getId(), "blog-" + created.getId(), "author-" + created.getId(), null);
     }
     private String suffix() { return UUID.randomUUID().toString().substring(0, 8); }

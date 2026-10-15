@@ -26,6 +26,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 class NaverOAuthClientTest {
+    private static final java.time.Clock CLOCK = java.time.Clock.fixed(java.time.Instant.parse("2026-10-15T00:00:00Z"), java.time.ZoneOffset.UTC);
 
     @Test
     void exchangesAuthorizationCodeAndLoadsNaverProfile() {
@@ -46,12 +47,13 @@ class NaverOAuthClientTest {
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer provider-token"))
                 .andRespond(withSuccess(
-                        "{\"resultcode\":\"00\",\"response\":{\"id\":\"naver-subject\",\"nickname\":\"pebble\",\"profile_image\":\"https://example.com/avatar.webp\"}}",
+                        "{\"resultcode\":\"00\",\"response\":{\"id\":\"naver-subject\",\"birthyear\":\"2000\",\"birthday\":\"01-01\",\"email\":\"unused@example.test\",\"name\":\"unused-name\",\"nickname\":\"pebble\",\"profile_image\":\"https://example.com/avatar.webp\"}}",
                         MediaType.APPLICATION_JSON));
 
-        OAuthProviderClient gateway = new NaverOAuthClient(builder.build(), properties);
+        OAuthProviderClient gateway = new NaverOAuthClient(builder.build(), properties, CLOCK);
         OAuthProviderClient.OAuthProfile profile = gateway.authenticate("authorization-code", "verified-state");
 
+        assertThat(profile.toString()).doesNotContain("unused@example.test", "unused-name", "2000", "01-01");
         assertThat(profile.subject()).isEqualTo("naver-subject");
         assertThat(profile.nickname()).isEqualTo("pebble");
         assertThat(profile.profileImageUrl()).isEqualTo("https://example.com/avatar.webp");
@@ -68,9 +70,9 @@ class NaverOAuthClientTest {
                 "{\"access_token\":\"provider-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
         String nicknameJson = nickname == null ? "null" : "\"" + nickname + "\"";
         server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(
-                "{\"resultcode\":\"00\",\"response\":{\"id\":\"subject\",\"nickname\":" + nicknameJson + "}}",
+                "{\"resultcode\":\"00\",\"response\":{\"id\":\"subject\",\"birthyear\":\"2000\",\"birthday\":\"01-01\",\"nickname\":" + nicknameJson + "}}",
                 MediaType.APPLICATION_JSON));
-        var profile = new NaverOAuthClient(builder.build(), properties).authenticate("code", "state");
+        var profile = new NaverOAuthClient(builder.build(), properties, CLOCK).authenticate("code", "state");
         assertThat(profile.nickname()).isEqualTo(nickname);
         assertThat(profile.profileImageUrl()).isNull();
         server.verify();
@@ -84,7 +86,7 @@ class NaverOAuthClientTest {
         NaverOAuthProperties properties = properties();
         server.expect(requestTo(properties.tokenUri())).andRespond(withStatus(status));
         AuthException exception = catchThrowableOfType(AuthException.class,
-                () -> new NaverOAuthClient(builder.build(), properties).authenticate("code", "state"));
+                () -> new NaverOAuthClient(builder.build(), properties, CLOCK).authenticate("code", "state"));
         assertThat(exception.error()).isEqualTo(status.is4xxClientError()
                 ? AuthError.INVALID_CREDENTIALS : AuthError.OAUTH_PROVIDER_UNAVAILABLE);
         server.verify();
@@ -104,7 +106,7 @@ class NaverOAuthClientTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("token=provider-token")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("token_type_hint=access_token")))
                 .andRespond(withSuccess());
-        var client = new NaverOAuthClient(builder.build(), properties);
+        var client = new NaverOAuthClient(builder.build(), properties, CLOCK);
         assertThat(client.withdrawalAuthorizationUrl("state")).contains("auth_type=reauthenticate");
         client.authenticateAndRevoke("code", "state", "subject");
         server.verify();
@@ -119,7 +121,7 @@ class NaverOAuthClientTest {
                 "{\"access_token\":\"provider-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(
                 "{\"resultcode\":\"00\",\"response\":{\"id\":\"other-subject\"}}", MediaType.APPLICATION_JSON));
-        var client = new NaverOAuthClient(builder.build(), properties);
+        var client = new NaverOAuthClient(builder.build(), properties, CLOCK);
         assertThat(catchThrowableOfType(AuthException.class,
                 () -> client.authenticateAndRevoke("code", "state", "expected-subject")).error())
                 .isEqualTo(AuthError.INVALID_CREDENTIALS);
@@ -138,8 +140,50 @@ class NaverOAuthClientTest {
         server.expect(requestTo("https://nid.naver.com/oauth2.0/revoke"))
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
         assertThat(catchThrowableOfType(AuthException.class,
-                () -> new NaverOAuthClient(builder.build(), properties).authenticateAndRevoke("code", "state", "subject")).error())
+                () -> new NaverOAuthClient(builder.build(), properties, CLOCK).authenticateAndRevoke("code", "state", "subject")).error())
                 .isEqualTo(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
+        server.verify();
+    }
+
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        "2012,10-15,ALLOWED", "2012,10-16,AGE_RESTRICTED", "2012,10-14,ALLOWED",
+        "2013,01-01,AGE_RESTRICTED", "2000,02-29,ALLOWED", "2012,02-30,AGE_VERIFICATION_REQUIRED",
+        "2027,01-01,AGE_VERIFICATION_REQUIRED", "0000,01-01,AGE_VERIFICATION_REQUIRED",
+        "2012,13-01,AGE_VERIFICATION_REQUIRED", "2012,1-01,AGE_VERIFICATION_REQUIRED",
+        ",10-15,AGE_VERIFICATION_REQUIRED", "2012,,AGE_VERIFICATION_REQUIRED"
+    })
+    void checksProviderBirthDateBeforeReturningProfile(String year, String birthday, String expected) {
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var properties = properties();
+        server.expect(requestTo(properties.tokenUri())).andRespond(withSuccess(
+                "{\"access_token\":\"provider-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
+        String json = "{\"resultcode\":\"00\",\"response\":{\"id\":\"subject\",\"birthyear\":%s,\"birthday\":%s}}"
+                .formatted(year == null ? "null" : "\""+year+"\"", birthday == null ? "null" : "\""+birthday+"\"");
+        server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
+        var client = new NaverOAuthClient(builder.build(), properties, CLOCK);
+        if (expected.equals("ALLOWED")) assertThat(client.authenticate("code", "state").subject()).isEqualTo("subject");
+        else {
+            var error = catchThrowableOfType(AuthException.class, () -> client.authenticate("code", "state"));
+            assertThat(error.error()).isEqualTo(AuthError.valueOf(expected));
+            assertThat(error.getMessage()).doesNotContain("birthyear", "birthday");
+        }
+        server.verify();
+    }
+
+    @Test
+    void minimumAgeUsesKoreanDateAtUtcDayBoundary() {
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var properties = properties();
+        server.expect(requestTo(properties.tokenUri())).andRespond(withSuccess(
+                "{\"access_token\":\"provider-token\",\"token_type\":\"bearer\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(properties.profileUri())).andRespond(withSuccess(
+                "{\"resultcode\":\"00\",\"response\":{\"id\":\"subject\",\"birthyear\":\"2012\",\"birthday\":\"10-15\"}}", MediaType.APPLICATION_JSON));
+        var clock = java.time.Clock.fixed(java.time.Instant.parse("2026-10-14T15:00:00Z"), java.time.ZoneOffset.UTC);
+        assertThat(new NaverOAuthClient(builder.build(), properties, clock).authenticate("code", "state").subject()).isEqualTo("subject");
         server.verify();
     }
 

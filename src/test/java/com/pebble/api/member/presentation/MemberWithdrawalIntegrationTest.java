@@ -71,8 +71,8 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
 
     @BeforeEach
     void setUp() {
-        member = members.saveAndFlush(new Member("member-" + UUID.randomUUID().toString().substring(0, 12),
-                null, MemberStatus.ACTIVE, null, null));
+        member = members.saveAndFlush(agreedMember(new Member("member-" + UUID.randomUUID().toString().substring(0, 12),
+                null, MemberStatus.ACTIVE, null, null)));
         login = sessions.login(member.getId());
     }
 
@@ -86,32 +86,22 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void requestSchedulesWithdrawalAndExpiresRefreshCookie() throws Exception {
-        Instant before = Instant.now();
+    void reauthenticationImmediatelyDeletesAccountAndExpiresRefreshCookie() throws Exception {
         var result = completeWithdrawal();
-        assertThat(result.getResponse().getStatus()).isEqualTo(202);
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(mapper.readTree(result.getResponse().getContentAsString()).at("/data/deleted").asBoolean()).isTrue();
         assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).anySatisfy(cookie ->
                 assertThat(cookie).contains("refresh_token=", "Max-Age=0", "HttpOnly", "Secure", "SameSite=Lax"));
-        Member pending = members.findById(member.getId()).orElseThrow();
-        assertThat(pending.getWithdrawalScheduledAt()).isBetween(before.plus(Duration.ofDays(6)), before.plus(Duration.ofDays(8)));
+        assertThat(members.existsById(member.getId())).isFalse();
+        assertThat(identities.findMemberId(OAuthProvider.NAVER, "unused")).isEmpty();
         mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
         mvc.perform(post("/api/v1/auth/token/refresh").header(HttpHeaders.ORIGIN, "http://localhost:3000").cookie(new Cookie("refresh_token", login.refreshToken())))
                 .andExpect(status().isUnauthorized());
-
-        mvc.perform(delete(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken()))
-                .andExpect(status().isForbidden());
-        mvc.perform(delete(PATH)).andExpect(status().isForbidden());
-        mvc.perform(delete(PATH).cookie(new Cookie("refresh_token", login.refreshToken())))
-                .andExpect(status().isForbidden());
-        mvc.perform(post(PATH + "/profile").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"blogName\":\"blocked\",\"handle\":\"blocked-user\"}"))
-                .andExpect(status().isForbidden());
         mvc.perform(patch(PATH + "/profile").header(HttpHeaders.AUTHORIZATION, "Bearer " + login.accessToken())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"blocked\"}"))
-                .andExpect(status().isForbidden());
-        assertThat(members.findById(member.getId()).orElseThrow().getWithdrawalScheduledAt())
-                .isEqualTo(pending.getWithdrawalScheduledAt());
+                .andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("select count(*) from member_agreement where member_id=?", Long.class, member.getId())).isZero();
     }
 
     @Test
@@ -435,7 +425,8 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
                 .cookie(new Cookie("naver_oauth_state", state))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(mapper.writeValueAsString(java.util.Map.of("authorizationCode", "unlink-code", "state", state))))
-                .andExpect(status().isAccepted()).andReturn();
+                .andExpect(r -> { if(r.getResolvedException()!=null) throw new AssertionError("Immediate withdrawal failed",r.getResolvedException()); })
+                .andExpect(status().isOk()).andReturn();
         org.mockito.Mockito.verify(naver).authenticateAndRevoke("unlink-code", state, subject);
         mvc.perform(post("/api/v1/auth/naver/withdrawal")
                 .header(HttpHeaders.ORIGIN, "http://localhost:3000")
@@ -450,7 +441,8 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     }
 
     private void withdrawalsRequest() {
-        withdrawals.request(member.getId());
+        // 이전 버전에서 생성된 탈퇴 예약에 대한 호환·보안 검증용 사전 조건.
+        jdbc.update("update member set status='WITHDRAWAL_PENDING', withdrawal_requested_at=now(), withdrawal_scheduled_at=now()+interval '7 days' where id=?",member.getId());
         em.clear();
     }
 
