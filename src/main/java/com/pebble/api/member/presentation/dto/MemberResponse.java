@@ -14,14 +14,13 @@ public record MemberResponse(
         String blogName,
         String handle,
         boolean profileCompleted,
+        boolean agreementsAccepted,
         Instant nicknameChangeAvailableAt,
         Instant blogNameChangeAvailableAt) {
 
-    public static MemberResponse from(Member member) { return from(member, member.getProfileImageUrl()); }
-
-    public static MemberResponse from(Member member, String imageUrl) {
+    public static MemberResponse from(Member member, String imageUrl, boolean agreementsAccepted) {
         return new MemberResponse(member.getId().toString(), member.getNickname(), imageUrl, member.getStatus(),
-                member.getCreatedAt(), member.getBlogName(), member.getHandle(), member.isProfileCompleted(),
+                member.getCreatedAt(), member.getBlogName(), member.getHandle(), member.isProfileCompleted(), agreementsAccepted,
                 member.isProfileCompleted() ? member.getNicknameChangedAt().plus(MemberProfileService.CHANGE_COOLDOWN) : null,
                 member.isProfileCompleted() ? member.getBlogNameChangedAt().plus(MemberProfileService.CHANGE_COOLDOWN) : null);
     }

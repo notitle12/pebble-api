@@ -138,7 +138,7 @@ class PostConcurrencyTest extends AuthenticationTestSupport {
     }
 
     private long member() {
-        long id = transactions.execute(status -> members.saveAndFlush(new Member("writer-" + java.util.UUID.randomUUID().toString().substring(0,8), null, MemberStatus.ACTIVE, null, null)).getId());
+        long id = transactions.execute(status -> members.saveAndFlush(agreedMember(new Member("writer-" + java.util.UUID.randomUUID().toString().substring(0,8), null, MemberStatus.ACTIVE, null, null))).getId());
         authorIds.add(id);
         profiles.complete(id, "blog-" + id, "author-" + id, null);
         return id;

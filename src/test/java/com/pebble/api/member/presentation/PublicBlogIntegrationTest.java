@@ -94,7 +94,7 @@ class PublicBlogIntegrationTest extends AuthenticationTestSupport {
 
     private Member blog(boolean completed) {
         String unique = UUID.randomUUID().toString().substring(0, 12);
-        Member member = new Member("writer-" + unique, "https://example.test/avatar.png", MemberStatus.ACTIVE, null, null);
+        Member member = agreedMember(new Member("writer-" + unique, "https://example.test/avatar.png", MemberStatus.ACTIVE, null, null));
         if (completed) member.completeProfile("빈 블로그", "blog-" + unique, member.getNickname(), Instant.now());
         return members.saveAndFlush(member);
     }

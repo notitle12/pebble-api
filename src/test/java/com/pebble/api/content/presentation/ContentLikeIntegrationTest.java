@@ -166,8 +166,8 @@ class ContentLikeIntegrationTest extends AuthenticationTestSupport {
 
     @Test
     void inactiveActorsCannotWriteAndProfileCompletionIsNotRequired() throws Exception {
-        Member unconfigured = members.saveAndFlush(new Member("unconfigured-" + UUID.randomUUID().toString().substring(0, 8),
-                null, MemberStatus.ACTIVE, null, null));
+        Member unconfigured = members.saveAndFlush(agreedMember(new Member("unconfigured-" + UUID.randomUUID().toString().substring(0, 8),
+                null, MemberStatus.ACTIVE, null, null)));
         String post = createPost("PUBLIC");
         String project = createProject("PUBLIC");
         for (String path : new String[]{POSTS + "/" + post + "/like", PROJECTS + "/" + project + "/like"}) {
@@ -253,8 +253,8 @@ class ContentLikeIntegrationTest extends AuthenticationTestSupport {
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper() { return mapper; }
 
     private Member member(String label) {
-        Member created = members.saveAndFlush(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
-                null, MemberStatus.ACTIVE, null, null));
+        Member created = members.saveAndFlush(agreedMember(new Member(label + "-" + UUID.randomUUID().toString().substring(0, 8),
+                null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(created.getId(), "blog-" + created.getId(), "author-" + created.getId(), null);
     }
 

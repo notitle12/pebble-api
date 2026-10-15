@@ -194,7 +194,7 @@ class AdminClassificationTransactionTest extends AuthenticationTestSupport {
         management.updateTechStack(1, id, new TechStackChanges(Set.of("status"), null, null, null, TechStackStatus.INACTIVE));
     }
     private long owner() {
-        Member member = members.saveAndFlush(new Member("classification-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null));
+        Member member = members.saveAndFlush(agreedMember(new Member("classification-" + UUID.randomUUID().toString().substring(0, 12), null, MemberStatus.ACTIVE, null, null)));
         memberIds.add(member.getId());
         profiles.complete(member.getId(), "Class blog " + member.getId(), "class-" + member.getId(), null);
         return member.getId();

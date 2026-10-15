@@ -27,3 +27,9 @@ pebble:
       region: ${R2_REGION:auto}
       access-key-id: ${R2_ACCESS_KEY_ID:}
       secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+
+# 운영자·문의창구·보관/이전 정보가 실제 공개 문서와 일치할 때만 활성화한다.
+---
+pebble:
+  legal:
+    published: ${PEBBLE_LEGAL_PUBLISHED:false}

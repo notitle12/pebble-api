@@ -59,7 +59,7 @@ class MemberWithdrawalTransactionTest extends AuthenticationTestSupport {
 
     @BeforeEach
     void setup() {
-        member = members.saveAndFlush(new Member("tx-" + UUID.randomUUID().toString().substring(0, 20), null, MemberStatus.ACTIVE, null, null));
+        member = members.saveAndFlush(agreedMember(new Member("tx-" + UUID.randomUUID().toString().substring(0, 20), null, MemberStatus.ACTIVE, null, null)));
         subject = "withdrawal-tx-" + UUID.randomUUID();
         identities.saveAndFlush(new MemberOAuthIdentity(member, OAuthProvider.NAVER, subject));
     }

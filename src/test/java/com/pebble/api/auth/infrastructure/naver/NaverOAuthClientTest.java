@@ -46,12 +46,13 @@ class NaverOAuthClientTest {
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer provider-token"))
                 .andRespond(withSuccess(
-                        "{\"resultcode\":\"00\",\"response\":{\"id\":\"naver-subject\",\"nickname\":\"pebble\",\"profile_image\":\"https://example.com/avatar.webp\"}}",
+                        "{\"resultcode\":\"00\",\"response\":{\"id\":\"naver-subject\",\"email\":\"unused@example.test\",\"name\":\"unused-name\",\"nickname\":\"pebble\",\"profile_image\":\"https://example.com/avatar.webp\"}}",
                         MediaType.APPLICATION_JSON));
 
         OAuthProviderClient gateway = new NaverOAuthClient(builder.build(), properties);
         OAuthProviderClient.OAuthProfile profile = gateway.authenticate("authorization-code", "verified-state");
 
+        assertThat(profile.toString()).doesNotContain("unused@example.test", "unused-name");
         assertThat(profile.subject()).isEqualTo("naver-subject");
         assertThat(profile.nickname()).isEqualTo("pebble");
         assertThat(profile.profileImageUrl()).isEqualTo("https://example.com/avatar.webp");
