@@ -86,6 +86,78 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void typedConfirmationDeletesCurrentAccountAndContentWithoutProviderRequest() throws Exception {
+        profiles.complete(member.getId(),"문구 확인 블로그","typed-"+member.getId(),null);
+        identities.saveAndFlush(new MemberOAuthIdentity(member,OAuthProvider.NAVER,"typed-"+member.getId()));
+        var created=mvc.perform(post("/api/v1/posts").header(HttpHeaders.AUTHORIZATION,bearer())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"delete me\",\"visibilityStatus\":\"PUBLIC\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}],\"tags\":[]}"))
+                .andExpect(status().isCreated()).andReturn();
+        String postId=mapper.readTree(created.getResponse().getContentAsString()).at("/data/id").asText();
+        String payload=mapper.writeValueAsString(java.util.Map.of("confirmation","문구 확인 블로그를 삭제하는데 동의합니다."));
+        var response=mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.deleted").value(true))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL,"no-store")).andReturn();
+        assertThat(response.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).anySatisfy(cookie->assertThat(cookie).contains("refresh_token=","Max-Age=0"));
+        assertThat(jdbc.queryForObject("select count(*) from member where id=?",Long.class,member.getId())).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from post where id=?",Long.class,Long.parseLong(postId))).isZero();
+        assertThat(identities.findMemberId(OAuthProvider.NAVER,"typed-"+member.getId())).isEmpty();
+        mvc.perform(post("/api/v1/auth/token/refresh").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .cookie(new Cookie("refresh_token",login.refreshToken()))).andExpect(status().isUnauthorized());
+        mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isNotFound());
+        org.mockito.Mockito.verifyNoInteractions(naver);
+    }
+
+    @Test
+    void typedConfirmationRequiresCurrentBlogNameAndExactPayload() throws Exception {
+        profiles.complete(member.getId(),"현재 블로그","typed-"+member.getId(),null);
+        for(String payload:List.of("{}","{\"confirmation\":42}","{\"confirmation\":\"다른 블로그를 삭제하는데 동의합니다.\"}",
+                "{\"confirmation\":\"현재 블로그를 삭제하는데 동의합니다.\",\"memberId\":\"1\"}",
+                "{\"confirmation\":\"x\",\"confirmation\":\"현재 블로그를 삭제하는데 동의합니다.\"}",
+                "{\"confirmation\":\"현재 블로그를 삭제하는데 동의합니다.\"} {}")) {
+            mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                    .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload))
+                    .andExpect(status().isBadRequest());
+            assertThat(members.existsById(member.getId())).isTrue();
+        }
+        jdbc.update("update member set blog_name='새 블로그' where id=?",member.getId());em.clear();
+        mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"confirmation\":\"현재 블로그를 삭제하는데 동의합니다.\"}")).andExpect(status().isBadRequest());
+        assertThat(members.existsById(member.getId())).isTrue();
+    }
+
+    @Test
+    void typedConfirmationRequiresBearerAndSingleTrustedOriginAndNoQuery() throws Exception {
+        String payload="{\"confirmation\":\"내 계정을 삭제하는데 동의합니다.\"}";
+        mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isUnauthorized());
+        for(String origin:List.of("null","https://evil.example"))
+            mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,origin).header(HttpHeaders.AUTHORIZATION,bearer())
+                    .contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isForbidden());
+        mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.AUTHORIZATION,bearer())
+                .contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isForbidden());
+        mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000","http://localhost:3000")
+                .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isForbidden());
+        mvc.perform(post(PATH+"/withdrawal?confirm=true").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isBadRequest());
+        assertThat(members.existsById(member.getId())).isTrue();
+    }
+
+    @Test
+    void typedConfirmationAlsoAllowsUnagreedAccountWithoutBlog() throws Exception {
+        jdbc.update("delete from member_agreement where member_id=?",member.getId());em.clear();
+        mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"confirmation\":\"내 계정을 삭제하는데 동의합니다.\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.deleted").value(true));
+        assertThat(members.existsById(member.getId())).isFalse();
+    }
+
+    @Test
     void reauthenticationImmediatelyDeletesAccountAndExpiresRefreshCookie() throws Exception {
         var result = completeWithdrawal();
         assertThat(result.getResponse().getStatus()).isEqualTo(200);
