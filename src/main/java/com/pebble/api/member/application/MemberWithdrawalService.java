@@ -43,7 +43,7 @@ public class MemberWithdrawalService {
     public void confirmWithdrawal(long memberId, String confirmation) {
         Member member = queries.findActiveForAccountWrite(memberId);
         String expected = member.getBlogName() == null || member.getBlogName().isBlank()
-                ? "내 계정을 삭제하는데 동의합니다." : member.getBlogName() + "를 삭제하는데 동의합니다.";
+                ? "내 계정을 삭제하는데 동의합니다." : "블로그를 삭제하는데 동의합니다.";
         if (!expected.equals(confirmation)) {
             throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, "confirmation", "안내된 탈퇴 확인 문구를 정확히 입력해 주세요.");
         }
