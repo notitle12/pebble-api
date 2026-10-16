@@ -12,6 +12,7 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 
 public record ProjectResponse(String id, Owner owner, String name, String summary,
+                              @JsonInclude(JsonInclude.Include.NON_NULL) Integer displayOrder,
                               @JsonInclude(JsonInclude.Include.NON_NULL) String description,
                               @JsonInclude(JsonInclude.Include.NON_NULL) String architectureDescription,
                               @JsonInclude(JsonInclude.Include.NON_NULL) String executionInstructions,
@@ -30,7 +31,7 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
         var project = view.project();
         var owner = project.getOwner();
         return new ProjectResponse(project.getId().toString(), new Owner(owner.getId().toString(), owner.getHandle(),
-                owner.getBlogName(), owner.getNickname(), imageUrl.apply(owner)), project.getName(), project.getSummary(),
+                owner.getBlogName(), owner.getNickname(), imageUrl.apply(owner)), project.getName(), project.getSummary(), view.owner() ? project.getDisplayOrder() : null,
                 view.detail() ? project.getDescription() : null,
                 view.detail() ? project.getArchitectureDescription() : null,
                 view.detail() ? project.getExecutionInstructions() : null,
