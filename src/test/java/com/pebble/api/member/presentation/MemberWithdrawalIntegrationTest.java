@@ -94,7 +94,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
                 .content("{\"title\":\"delete me\",\"visibilityStatus\":\"PUBLIC\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"body\"}],\"tags\":[]}"))
                 .andExpect(status().isCreated()).andReturn();
         String postId=mapper.readTree(created.getResponse().getContentAsString()).at("/data/id").asText();
-        String payload=mapper.writeValueAsString(java.util.Map.of("confirmation","문구 확인 블로그를 삭제하는데 동의합니다."));
+        String payload=mapper.writeValueAsString(java.util.Map.of("confirmation","블로그를 삭제하는데 동의합니다."));
         var response=mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
                 .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.deleted").value(true))
@@ -112,12 +112,13 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
-    void typedConfirmationRequiresCurrentBlogNameAndExactPayload() throws Exception {
+    void typedConfirmationRequiresExpectedAccountKindAndExactPayload() throws Exception {
         profiles.complete(member.getId(),"현재 블로그","typed-"+member.getId(),null);
         for(String payload:List.of("{}","{\"confirmation\":42}","{\"confirmation\":\"다른 블로그를 삭제하는데 동의합니다.\"}",
-                "{\"confirmation\":\"현재 블로그를 삭제하는데 동의합니다.\",\"memberId\":\"1\"}",
-                "{\"confirmation\":\"x\",\"confirmation\":\"현재 블로그를 삭제하는데 동의합니다.\"}",
-                "{\"confirmation\":\"현재 블로그를 삭제하는데 동의합니다.\"} {}")) {
+                "{\"confirmation\":\"내 계정을 삭제하는데 동의합니다.\"}",
+                "{\"confirmation\":\"블로그를 삭제하는데 동의합니다.\",\"memberId\":\"1\"}",
+                "{\"confirmation\":\"x\",\"confirmation\":\"블로그를 삭제하는데 동의합니다.\"}",
+                "{\"confirmation\":\"블로그를 삭제하는데 동의합니다.\"} {}")) {
             mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
                     .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload))
                     .andExpect(status().isBadRequest());
@@ -150,6 +151,13 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     @Test
     void typedConfirmationAlsoAllowsUnagreedAccountWithoutBlog() throws Exception {
         jdbc.update("delete from member_agreement where member_id=?",member.getId());em.clear();
+        for(String confirmation:List.of("", "블로그를 삭제하는데 동의합니다.")) {
+            mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
+                    .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON)
+                    .content(mapper.writeValueAsString(java.util.Map.of("confirmation",confirmation))))
+                    .andExpect(status().isBadRequest());
+            assertThat(members.existsById(member.getId())).isTrue();
+        }
         mvc.perform(post(PATH+"/withdrawal").header(HttpHeaders.ORIGIN,"http://localhost:3000")
                 .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"confirmation\":\"내 계정을 삭제하는데 동의합니다.\"}"))
