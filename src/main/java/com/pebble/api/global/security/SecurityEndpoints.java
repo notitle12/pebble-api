@@ -60,6 +60,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/projects", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/profile/availability", Access.USER),
             new Endpoint(HttpMethod.DELETE, "/api/v1/members/me", Access.USER),
+            new Endpoint(HttpMethod.POST, "/api/v1/members/me/withdrawal", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/categories", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/tech-stacks", Access.PUBLIC),
             new Endpoint(HttpMethod.POST, "/api/v1/members/me/profile", Access.USER),
@@ -139,6 +140,7 @@ public final class SecurityEndpoints {
     static RequestMatcher[] csrfExemptions() {
         // OAuth state 또는 CookieOriginFilter로 보호하는 POST에 한정한다.
         return new RequestMatcher[] {
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/members/me/withdrawal"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/posts/{contentId:[0-9]+}/comments/guest"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/posts/{contentId:[0-9]+}/comments/{commentId:[0-9]+}/guest/update"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/posts/{contentId:[0-9]+}/comments/{commentId:[0-9]+}/guest/delete"),
