@@ -31,11 +31,12 @@ public class GuestCommentController {
             @RequestBody JsonNode body,HttpServletRequest request,HttpServletResponse response) {
         prepare(request,response);
         GuestCommentRequest.validateCreate(body);
-        String nickname=GuestCommentRequest.nickname(body),password=GuestCommentRequest.newPassword(body),text=GuestCommentRequest.body(body);
+        String nickname=GuestCommentRequest.nickname(body),password=GuestCommentRequest.newPassword(body);
+        var changes=GuestCommentRequest.commentChanges(body);
         long parent=CommentWriteRequest.id(contentId);
         String ip=addresses.resolve(request);
         security.check(ip,resource+":"+parent+":create",true);
-        var comment=comments.createGuest(target(resource),parent,nickname,password,text);
+        var comment=comments.createGuest(target(resource),parent,nickname,password,changes);
         return ResponseEntity.created(URI.create("/api/v1/"+resource+"/"+contentId+"/comments/"+comment.getId()))
                 .body(ApiResponse.of(CommentResponse.from(comment)));
     }
@@ -43,12 +44,24 @@ public class GuestCommentController {
     public ApiResponse<CommentResponse> update(@PathVariable String resource,@PathVariable String contentId,@PathVariable String commentId,
             @RequestBody JsonNode body,HttpServletRequest request,HttpServletResponse response) {
         prepare(request,response);
-        GuestCommentRequest.validate(body,Set.of("password","body"));
-        String password=GuestCommentRequest.password(body),text=GuestCommentRequest.body(body);
+        GuestCommentRequest.validateUpdate(body);
+        String password=GuestCommentRequest.password(body);
+        var changes=GuestCommentRequest.commentChanges(body);
         long parent=CommentWriteRequest.id(contentId),id=CommentWriteRequest.id(commentId);
         String ip=addresses.resolve(request);
         security.check(ip,resource+":"+id+":password",false);
-        return ApiResponse.of(CommentResponse.from(comments.updateGuest(target(resource),parent,id,password,text)));
+        return ApiResponse.of(CommentResponse.from(comments.updateGuest(target(resource),parent,id,password,changes)));
+    }
+    @PostMapping(value="/{commentId:[0-9]+}/guest/read",consumes="application/json")
+    public ApiResponse<CommentResponse> read(@PathVariable String resource,@PathVariable String contentId,@PathVariable String commentId,
+            @RequestBody JsonNode body,HttpServletRequest request,HttpServletResponse response) {
+        prepare(request,response);
+        GuestCommentRequest.validate(body,Set.of("password"));
+        String password=GuestCommentRequest.password(body);
+        long parent=CommentWriteRequest.id(contentId),id=CommentWriteRequest.id(commentId);
+        String ip=addresses.resolve(request);
+        security.check(ip,resource+":"+id+":password",false);
+        return ApiResponse.of(CommentResponse.from(comments.readGuest(target(resource),parent,id,password)));
     }
     @PostMapping(value="/{commentId:[0-9]+}/guest/delete",consumes="application/json")
     public ResponseEntity<Void> delete(@PathVariable String resource,@PathVariable String contentId,@PathVariable String commentId,

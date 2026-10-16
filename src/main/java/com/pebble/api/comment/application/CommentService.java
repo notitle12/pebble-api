@@ -57,7 +57,7 @@ public class CommentService {
                 : projectComments.saveAndFlush(new ProjectComment(contentId, author, input.body(), input.visibility()));
     }
 
-    public Page<Comment> list(CommentTarget type, long contentId, Long requesterId, Pageable pageable) {
+    public Page<CommentView> list(CommentTarget type, long contentId, Long requesterId, Pageable pageable) {
         Content content = content(type, contentId, false);
         boolean owner = Objects.equals(content.ownerId(), requesterId);
         if (!content.publicVisible()) {
@@ -67,22 +67,29 @@ public class CommentService {
         Long privateReader = requesterId != null && members.canReadPrivateInteractions(requesterId) ? requesterId : null;
         boolean ownerReader = owner && privateReader != null;
         return type == CommentTarget.POST
-                ? postComments.findVisible(contentId, privateReader, ownerReader, pageable).map(comment -> (Comment) comment)
-                : projectComments.findVisible(contentId, privateReader, ownerReader, pageable).map(comment -> (Comment) comment);
+                ? postComments.findVisible(contentId, privateReader, ownerReader, pageable)
+                        .map(comment -> visible(comment, ownerReader))
+                : projectComments.findVisible(contentId, privateReader, ownerReader, pageable)
+                        .map(comment -> visible(comment, ownerReader));
     }
 
-    public Comment detail(CommentTarget type, long contentId, long commentId, Long requesterId) {
+    public CommentView detail(CommentTarget type, long contentId, long commentId, Long requesterId) {
         Content content = content(type, contentId, false);
         Comment comment = find(type, contentId, commentId, false);
         boolean owner = Objects.equals(content.ownerId(), requesterId);
         if (comment.getVisibility() == CommentVisibility.SECRET) {
-            if (!owner && (comment.isGuest() || !Objects.equals(comment.getAuthor().getId(), requesterId))) throw notFound();
+            if (comment.isGuest()) {
+                if (!owner) throw notFound();
+                members.findActiveById(requesterId);
+                return new CommentView(comment, false);
+            }
+            if (!owner && !Objects.equals(comment.getAuthor().getId(), requesterId)) throw notFound();
             members.findActiveById(requesterId);
         } else if (!content.publicVisible()) {
             if (!owner) throw notFound();
             members.findActiveById(requesterId);
         }
-        return comment;
+        return new CommentView(comment, false);
     }
 
     @Transactional
@@ -108,23 +115,33 @@ public class CommentService {
     }
 
     @Transactional
-    public Comment createGuest(CommentTarget type,long contentId,String nickname,String password,String body) {
+    public Comment createGuest(CommentTarget type,long contentId,String nickname,String password,CommentChanges changes) {
         Content content=content(type,contentId,true);
         if(!content.publicVisible())throw notFound();
         String hash=guestSecurity.encode(password);
+        CommentVisibility visibility = changes.hasVisibility() ? changes.visibility() : CommentVisibility.PUBLIC;
         Comment comment=type==CommentTarget.POST
-                ?postComments.saveAndFlush(new PostComment(contentId,nickname,hash,body))
-                :projectComments.saveAndFlush(new ProjectComment(contentId,nickname,hash,body));
+                ?postComments.saveAndFlush(new PostComment(contentId,nickname,hash,changes.body(),visibility))
+                :projectComments.saveAndFlush(new ProjectComment(contentId,nickname,hash,changes.body(),visibility));
         return comment;
     }
     @Transactional
-    public Comment updateGuest(CommentTarget type,long contentId,long commentId,String password,String body) {
+    public Comment updateGuest(CommentTarget type,long contentId,long commentId,String password,CommentChanges changes) {
         // 숨김 전 작성한 댓글도 올바른 비밀번호로 수정·삭제할 수 있으나 본문은 인증 전 반환하지 않는다.
         content(type,contentId,true);
         Comment comment=find(type,contentId,commentId,true);
         requireGuestPassword(comment,password);
-        comment.update(body,CommentVisibility.PUBLIC);
+        comment.update(changes.hasBody() ? changes.body() : comment.getBody(),
+                changes.hasVisibility() ? changes.visibility() : comment.getVisibility());
         flush(type);
+        return comment;
+    }
+    @Transactional
+    public Comment readGuest(CommentTarget type,long contentId,long commentId,String password) {
+        Content content=content(type,contentId,true);
+        if(!content.publicVisible())throw notFound();
+        Comment comment=find(type,contentId,commentId,true);
+        requireGuestPassword(comment,password);
         return comment;
     }
     @Transactional
@@ -139,6 +156,11 @@ public class CommentService {
         if(!comment.isGuest())throw notFound();
         if(!guestSecurity.matches(password,comment.getGuestPasswordHash()))
             throw new ApplicationException(CommentError.INVALID_COMMENT_PASSWORD);
+    }
+
+    private CommentView visible(Comment comment, boolean ownerReader) {
+        boolean locked = comment.isGuest() && comment.getVisibility() == CommentVisibility.SECRET && !ownerReader;
+        return new CommentView(comment, locked);
     }
 
     private Comment find(CommentTarget type, long contentId, long commentId, boolean forWrite) {
