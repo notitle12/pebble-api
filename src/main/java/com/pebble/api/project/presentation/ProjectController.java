@@ -62,7 +62,15 @@ public class ProjectController {
                 throw invalid("visibilityStatus");
             }
         }
-        return ApiResponse.of(page(likes.decorate(projects.listMine(memberId(jwt), visibility, pageable(query)), requesterId(jwt))));
+        return ApiResponse.of(page(likes.decorate(projects.listMine(memberId(jwt), visibility, minePageable(query)), requesterId(jwt))));
+    }
+
+    @PatchMapping(value = "/api/v1/projects/{projectId:[0-9]+}/order", consumes = "application/json")
+    public ApiResponse<ProjectResponse> move(@PathVariable String projectId, @AuthenticationPrincipal Jwt jwt,
+                                             @RequestBody JsonNode body) {
+        if(body==null || !body.isObject() || body.size()!=1 || !body.has("targetId") || !body.get("targetId").isTextual()) throw invalid("targetId");
+        return ApiResponse.of(response(likes.decorate(projects.move(ProjectWriteRequest.id(projectId,"projectId"),
+                memberId(jwt),ProjectWriteRequest.id(body.get("targetId").textValue(),"targetId")), requesterId(jwt))));
     }
 
     @PostMapping(value = "/api/v1/projects", consumes = "application/json")
@@ -120,6 +128,16 @@ public class ProjectController {
 
     private Long requesterId(Jwt jwt) {
         return jwt != null && "USER".equals(jwt.getClaimAsString("role")) ? memberId(jwt) : null;
+    }
+
+    private PageRequest minePageable(MultiValueMap<String,String> query) {
+        String sort=query.getFirst("sort");
+        if(sort==null || "displayOrder,asc".equals(sort)) {
+            int page=integer(query.getFirst("page"),0,"page"), size=integer(query.getFirst("size"),20,"size");
+            if(page<0 || size<1 || size>100 || (long)page*size>Integer.MAX_VALUE) throw invalid("page/size");
+            return PageRequest.of(page,size,Sort.by("displayOrder","id"));
+        }
+        return pageable(query);
     }
 
     private PageRequest pageable(MultiValueMap<String, String> query) {
