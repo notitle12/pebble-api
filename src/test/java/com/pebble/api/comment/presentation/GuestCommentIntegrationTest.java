@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pebble.api.auth.application.AccessTokenService;
 import com.pebble.api.auth.application.oauth.OAuthProviderClient;
 import com.pebble.api.comment.application.CommentService;
+import com.pebble.api.comment.application.CommentChanges;
 import com.pebble.api.comment.domain.CommentTarget;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.domain.Member;
@@ -16,6 +17,7 @@ import com.pebble.api.member.infrastructure.persistence.MemberRepository;
 import com.pebble.api.support.AuthenticationTestSupport;
 import java.time.Instant;
 import java.util.Map;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -40,6 +42,7 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
     @Autowired MemberProfileService profiles;
     @Autowired AccessTokenService tokens;
     @Autowired JdbcTemplate jdbc;
+    @Autowired EntityManager entityManager;
     @Autowired StringRedisTemplate redis;
     @Autowired CommentService comments;
     @MockitoBean(name="naverOAuthClient") OAuthProviderClient naver;
@@ -77,6 +80,93 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select guest_password_hash from "+table+" where id=?",String.class,Long.parseLong(id))).isNull();
         assertThat(jdbc.queryForObject("select guest_nickname from "+table+" where id=?",String.class,Long.parseLong(id))).isEqualTo("삭제된 방문자");
     }
+    @ParameterizedTest @ValueSource(strings={"posts","projects"})
+    void guestSecretIsMaskedUntilPasswordOrOwnerAuthorizationAndUpdatePreservesVisibility(String resource) throws Exception {
+        String path=collection(resource,"PUBLIC");
+        String createJson=mapper.writeValueAsString(Map.of("nickname","visitor","password",PASSWORD,
+                "body","secret original","visibility","SECRET"));
+        String created=mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(createJson))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.visibility").value("SECRET"))
+                .andExpect(jsonPath("$.data.body").value("secret original")).andExpect(jsonPath("$.data.locked").value(false))
+                .andReturn().getResponse().getContentAsString();
+        String id=mapper.readTree(created).at("/data/id").asText();
+        String commentPath=path+"/"+id;
+
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].body").value("비밀 댓글입니다."))
+                .andExpect(jsonPath("$.data.content[0].visibility").value("SECRET"))
+                .andExpect(jsonPath("$.data.content[0].locked").value(true));
+        mvc.perform(get(commentPath)).andExpect(status().isNotFound());
+        var other=members.saveAndFlush(agreedMember(new Member("other-secret-reader",null,MemberStatus.ACTIVE,null,null)));
+        mvc.perform(get(path).header("Authorization",bearer(other))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].body").value("비밀 댓글입니다."))
+                .andExpect(jsonPath("$.data.content[0].locked").value(true));
+        mvc.perform(get(commentPath).header("Authorization",bearer(other))).andExpect(status().isNotFound());
+        String passwordJson=mapper.writeValueAsString(Map.of("password",PASSWORD));
+        mvc.perform(post(commentPath+"/guest/read").contentType(MediaType.APPLICATION_JSON).content(passwordJson))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(commentPath+"/guest/read").header("Origin","https://evil.example").contentType(MediaType.APPLICATION_JSON).content(passwordJson))
+                .andExpect(status().isForbidden());
+        mvc.perform(post(commentPath+"/guest/read?password=leak").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(passwordJson))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(commentPath+"/guest/read").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD,"ownerId","1"))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(commentPath+"/guest/read").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password","incorrect"))))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("INVALID_COMMENT_PASSWORD"));
+        mvc.perform(post(commentPath+"/guest/read").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD))))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.body").value("secret original"))
+                .andExpect(jsonPath("$.data.locked").value(false));
+        mvc.perform(get(path).header("Authorization",bearer(owner))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].body").value("secret original"))
+                .andExpect(jsonPath("$.data.content[0].locked").value(false));
+        mvc.perform(get(commentPath).header("Authorization",bearer(owner))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.body").value("secret original")).andExpect(jsonPath("$.data.locked").value(false));
+
+        mvc.perform(post(commentPath+"/guest/update").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD,"body","updated secret"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.visibility").value("SECRET"));
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].body").value("비밀 댓글입니다."))
+                .andExpect(jsonPath("$.data.content[0].locked").value(true));
+        mvc.perform(post(commentPath+"/guest/update").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD,"body","now public","visibility","PUBLIC"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.visibility").value("PUBLIC"));
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].body").value("now public"))
+                .andExpect(jsonPath("$.data.content[0].locked").value(false));
+    }
+    @ParameterizedTest @ValueSource(strings={"posts","projects"})
+    void guestSecretPasswordReadRejectsHiddenParentWrongContentAndMemberComment(String resource) throws Exception {
+        String path=collection(resource,"PUBLIC");
+        String createJson=mapper.writeValueAsString(Map.of("nickname","visitor","password",PASSWORD,
+                "body","secret","visibility","SECRET"));
+        String secret=mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(createJson))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String secretId=mapper.readTree(secret).at("/data/id").asText();
+        String otherPath=collection(resource,"PUBLIC");
+        mvc.perform(post(otherPath+"/"+secretId+"/guest/read").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD))))
+                .andExpect(status().isNotFound());
+
+        String memberComment=mvc.perform(post(path).header("Authorization",bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"member secret\",\"visibility\":\"SECRET\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String memberId=mapper.readTree(memberComment).at("/data/id").asText();
+        mvc.perform(post(path+"/"+memberId+"/guest/read").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD))))
+                .andExpect(status().isNotFound());
+        mvc.perform(post(path+"/999999999999999999/guest/read").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD))))
+                .andExpect(status().isNotFound());
+
+        long contentId=Long.parseLong(path.split("/")[4]);
+        String table=resource.equals("posts")?"post":"project";
+        jdbc.update("update "+table+" set visibility_status='HIDDEN' where id=?",contentId);
+        entityManager.clear();
+        mvc.perform(post(path+"/"+secretId+"/guest/read").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("password",PASSWORD))))
+                .andExpect(status().isNotFound());
+    }
     @Test void newPasswordBoundsAndBlankNicknameUsePebbleWithoutConsent() throws Exception {
         String path=collection("posts","PUBLIC");
         String fourCharacterPayload=mapper.writeValueAsString(Map.of("password","1234","body","hello"));
@@ -96,7 +186,7 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(post(path+"/guest").header("Origin","https://evil.example").contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isForbidden());
         mvc.perform(post(path+"/guest").header("Origin",ORIGIN,ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isForbidden());
         mvc.perform(post(path+"/guest?password=leak").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json)).andExpect(status().isBadRequest());
-        for(String replacement:new String[]{json.replace("\"body\":", "\"visibility\":\"SECRET\",\"body\":"),json.replace("\"body\":", "\"ageConfirmed\":\"true\",\"body\":")})
+        for(String replacement:new String[]{json.replace("\"body\":", "\"ownerId\":\"1\",\"body\":"),json.replace("\"body\":", "\"ageConfirmed\":\"true\",\"body\":")})
             mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(replacement)).andExpect(status().isBadRequest());
         mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(json))
                 .andExpect(status().isCreated());
@@ -149,7 +239,8 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
         String path=collection("posts","PUBLIC");
         long contentId=Long.parseLong(path.split("/")[4]);
         String legacyPassword="legacy-pass1";
-        var legacy=comments.createGuest(CommentTarget.POST,contentId,"legacy",legacyPassword,"before migration");
+        var legacy=comments.createGuest(CommentTarget.POST,contentId,"legacy",legacyPassword,
+                new CommentChanges("before migration",null,true,false));
         String commentPath=path+"/"+legacy.getId();
         mvc.perform(post(commentPath+"/guest/update").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("password",legacyPassword,"body","updated"))))
