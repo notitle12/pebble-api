@@ -1,6 +1,8 @@
 package com.pebble.api.comment.presentation.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.pebble.api.comment.application.CommentChanges;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
 import java.nio.charset.StandardCharsets;
@@ -11,7 +13,7 @@ public final class GuestCommentRequest {
     private static final String DEFAULT_NICKNAME = "조약돌";
     private static final Set<String> CREATE_REQUIRED_FIELDS = Set.of("password", "body");
     private static final Set<String> CREATE_ALLOWED_FIELDS = Set.of(
-            "nickname", "password", "body", "privacyAccepted", "ageConfirmed");
+            "nickname", "password", "body", "visibility", "privacyAccepted", "ageConfirmed");
 
     private GuestCommentRequest() { }
     public static void validate(JsonNode json, Set<String> fields) {
@@ -25,6 +27,18 @@ public final class GuestCommentRequest {
             if (!CREATE_ALLOWED_FIELDS.contains(key)) throw invalid();
             if ((key.equals("privacyAccepted") || key.equals("ageConfirmed")) && !json.get(key).isBoolean()) throw invalid();
         });
+    }
+    public static void validateUpdate(JsonNode json) {
+        if (json == null || !json.isObject() || !json.has("password") || !json.has("body")) throw invalid();
+        json.fieldNames().forEachRemaining(key -> {
+            if (!Set.of("password", "body", "visibility").contains(key)) throw invalid();
+        });
+    }
+    public static CommentChanges commentChanges(JsonNode json) {
+        var fields = JsonNodeFactory.instance.objectNode();
+        fields.set("body", json.get("body"));
+        if (json.has("visibility")) fields.set("visibility", json.get("visibility"));
+        return CommentWriteRequest.parse(fields, false);
     }
     public static String nickname(JsonNode json) {
         JsonNode node = json == null ? null : json.get("nickname");

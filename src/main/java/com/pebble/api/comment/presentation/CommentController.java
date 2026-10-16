@@ -102,7 +102,8 @@ public class CommentController {
     private ApplicationException invalid(String field) {
         return new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, field, "지원되는 요청 값을 입력해 주세요.");
     }
-    private CommentResponse response(com.pebble.api.comment.domain.Comment view) { return CommentResponse.from(view, profileImages::url); }
-    private CommentPage page(org.springframework.data.domain.Page<com.pebble.api.comment.domain.Comment> view) { return CommentPage.from(view, profileImages::url); }
+    private CommentResponse response(com.pebble.api.comment.domain.Comment comment) { return CommentResponse.from(comment, profileImages::url); }
+    private CommentResponse response(com.pebble.api.comment.application.CommentView view) { return CommentResponse.from(view, profileImages::url); }
+    private CommentPage page(org.springframework.data.domain.Page<com.pebble.api.comment.application.CommentView> view) { return CommentPage.from(view, profileImages::url); }
 
 }

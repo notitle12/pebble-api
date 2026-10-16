@@ -17,7 +17,8 @@ class GuestCommentRequestTest {
         assertInvalid(() -> GuestCommentRequest.validateCreate(mapper.createObjectNode().put("body", "hello")));
         assertInvalid(() -> GuestCommentRequest.validateCreate(mapper.createObjectNode().put("password", "pass")));
         assertInvalid(() -> GuestCommentRequest.validateCreate(mapper.createArrayNode()));
-        assertInvalid(() -> GuestCommentRequest.validateCreate(validCreate().put("visibility", "SECRET")));
+        assertInvalid(() -> GuestCommentRequest.validateCreate(validCreate().put("remoteAddress", "192.0.2.1")));
+        GuestCommentRequest.validateCreate(validCreate().put("visibility", "SECRET"));
     }
 
     @Test
