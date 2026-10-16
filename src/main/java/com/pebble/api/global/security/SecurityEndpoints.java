@@ -134,6 +134,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}", Access.USER),
             new Endpoint(HttpMethod.POST, "/api/v1/projects", Access.USER),
             new Endpoint(HttpMethod.PATCH, "/api/v1/projects/{projectId:[0-9]+}", Access.USER),
+            new Endpoint(HttpMethod.PATCH, "/api/v1/projects/{projectId:[0-9]+}/order", Access.USER),
             new Endpoint(HttpMethod.DELETE, "/api/v1/projects/{projectId:[0-9]+}", Access.USER)
     );
 
