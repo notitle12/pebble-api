@@ -68,6 +68,38 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void projectOrderPersistsAndRejectsOtherOwnersAndDeletedTargets() throws Exception {
+        String a=projectId(create(owner,"PUBLIC","A",null,null,List.of(),List.of(),List.of(),"IN_PROGRESS",null,null));
+        String b=projectId(create(owner,"HIDDEN","B",null,null,List.of(),List.of(),List.of(),"IN_PROGRESS",null,null));
+        String foreign=projectId(create(other,"PUBLIC","Other",null,null,List.of(),List.of(),List.of(),"IN_PROGRESS",null,null));
+        mvc.perform(get("/api/v1/members/me/projects").header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(b));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(PATH+"/"+a+"/order")
+                .header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content("{\"targetId\":\""+b+"\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.displayOrder").value(0));
+        mvc.perform(get("/api/v1/members/me/projects?sort=displayOrder,asc").header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(a)).andExpect(jsonPath("$.data.content[1].id").value(b));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(PATH+"/"+a+"/order")
+                .header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content("{\"targetId\":\""+foreign+"\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(PATH+"/"+a+"/order")
+                .header(HttpHeaders.AUTHORIZATION,bearer(other)).contentType(MediaType.APPLICATION_JSON).content("{\"targetId\":\""+foreign+"\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(PATH+"/"+a+"/order")
+                .header(HttpHeaders.ORIGIN,ORIGIN).contentType(MediaType.APPLICATION_JSON).content("{\"targetId\":\""+b+"\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete(PATH+"/"+a).header(HttpHeaders.AUTHORIZATION,bearer(owner))).andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/members/me/projects").header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(b)).andExpect(jsonPath("$.data.content[0].displayOrder").value(0));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(PATH+"/"+b+"/order")
+                .header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content("{\"targetId\":\""+a+"\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(PATH+"/"+b+"/order")
+                .header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content("{\"targetId\":12}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void documentRoundTripPreservesOmittedFieldsAndCanBeCleared() throws Exception {
         String id=projectId(create(owner,"PUBLIC","Document",null,null,List.of(),List.of(),List.of(),"IN_PROGRESS",null,null));
         String document="{\"version\":1,\"teamSize\":3,\"role\":\"백엔드\",\"sections\":[{\"key\":\"BACKGROUND\",\"blocks\":[{\"type\":\"HTML\",\"content\":\"<p>배경과 목적</p>\",\"language\":null,\"title\":null}]}]}";

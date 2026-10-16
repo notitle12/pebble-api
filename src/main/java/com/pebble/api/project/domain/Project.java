@@ -37,6 +37,11 @@ public class Project extends BaseTimeEntity {
         this.document = document == null ? null : document.deepCopy();
         updatedAt = Instant.now();
     }
+    @Column(name = "display_order", nullable = false)
+    private int displayOrder;
+    public int getDisplayOrder() { return displayOrder; }
+    public void changeOrder(int value) { ensureNotDeleted(); if(value < 0) throw new IllegalArgumentException("Invalid order"); displayOrder=value; }
+
     @Id
     private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

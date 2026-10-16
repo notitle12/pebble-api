@@ -15,6 +15,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.Modifying;
 
 public interface ProjectRepository extends JpaRepository<Project, Long>, JpaSpecificationExecutor<Project> {
+    java.util.List<Project> findByOwnerIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(long ownerId, com.pebble.api.project.domain.ProjectVisibility visibility);
+
     @Query("select p.owner.id from Project p where p.id = :id")
     Optional<Long> findOwnerIdForManagement(@Param("id") long id);
 
