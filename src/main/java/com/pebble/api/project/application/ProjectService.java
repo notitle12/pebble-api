@@ -65,6 +65,10 @@ public class ProjectService {
         Project project = projects.saveAndFlush(new Project(owner, input.name(), input.summary(), input.description(),
                 input.architectureDescription(), input.executionInstructions(), input.lifecycleStatus(),
                 input.startedOn(), input.completedOn(), input.visibilityStatus()));
+        var ordered = orderedProjects(memberId);
+        ordered.removeIf(item -> item.getId().equals(project.getId()));
+        ordered.add(0, project);
+        applyOrder(ordered);
         if(input.has("document")){validateDocumentImages(project,input.document());project.changeDocument(input.document());}
         replaceFeatures(project, input.features());
         replaceLinks(project, input.links());
@@ -140,6 +144,8 @@ public class ProjectService {
         postProjects.detachForManagement(ownerId, projectId);
         media.deleteForProject(projectId);
         project.delete();
+        projects.flush();
+        applyOrder(orderedProjects(project.getOwner().getId()));
         projects.flush();
     }
 
@@ -222,6 +228,29 @@ public class ProjectService {
         media.deleteForProject(projectId);
         project.delete();
         projects.flush();
+        applyOrder(orderedProjects(project.getOwner().getId()));
+        projects.flush();
+    }
+
+    private List<Project> orderedProjects(long memberId) {
+        return new ArrayList<>(projects.findByOwnerIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, ProjectVisibility.DELETED));
+    }
+    private void applyOrder(List<Project> rows) {
+        for (int i=0;i<rows.size();i++) rows.get(i).changeOrder(i);
+    }
+    @Transactional
+    public ProjectView move(long projectId, long memberId, long targetId) {
+        members.findProfileCompletedForWrite(memberId);
+        Project project = ownedForUpdate(projectId, memberId);
+        var rows = orderedProjects(memberId);
+        int position = -1;
+        for (int i=0;i<rows.size();i++) if(rows.get(i).getId().equals(targetId)) position=i;
+        if(position<0) throw notFound();
+        rows.removeIf(item -> item.getId().equals(projectId));
+        rows.add(position,project);
+        applyOrder(rows);
+        projects.flush();
+        return detailView(project,true);
     }
 
     private Project ownedForUpdate(long projectId, long memberId) {
