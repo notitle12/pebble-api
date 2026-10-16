@@ -118,6 +118,10 @@ public class CommentService {
     public Comment createGuest(CommentTarget type,long contentId,String nickname,String password,CommentChanges changes) {
         Content content=content(type,contentId,true);
         if(!content.publicVisible())throw notFound();
+        // 부모 행 잠금 안에서 이름을 정해 같은 콘텐츠의 동시 등록도 순서대로 구분한다.
+        var usedNames = type == CommentTarget.POST ? postComments.findGuestNicknames(contentId)
+                : projectComments.findGuestNicknames(contentId);
+        nickname = availableGuestNickname(nickname, new java.util.HashSet<>(usedNames));
         String hash=guestSecurity.encode(password);
         CommentVisibility visibility = changes.hasVisibility() ? changes.visibility() : CommentVisibility.PUBLIC;
         Comment comment=type==CommentTarget.POST
@@ -156,6 +160,16 @@ public class CommentService {
         if(!comment.isGuest())throw notFound();
         if(!guestSecurity.matches(password,comment.getGuestPasswordHash()))
             throw new ApplicationException(CommentError.INVALID_COMMENT_PASSWORD);
+    }
+
+    static String availableGuestNickname(String requested, java.util.Set<String> used) {
+        if (!used.contains(requested)) return requested;
+        for (int number = 1; ; number++) {
+            String suffix = Integer.toString(number);
+            int length = Math.min(requested.codePointCount(0, requested.length()), 30 - suffix.length());
+            String candidate = requested.substring(0, requested.offsetByCodePoints(0, length)) + suffix;
+            if (!used.contains(candidate)) return candidate;
+        }
     }
 
     private CommentView visible(Comment comment, boolean ownerReader) {
