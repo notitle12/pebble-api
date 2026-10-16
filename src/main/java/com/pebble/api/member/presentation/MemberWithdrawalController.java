@@ -24,6 +24,34 @@ public class MemberWithdrawalController {
     private static final String MEMBER_SUBJECT_PREFIX = "member:";
     private final OAuthLoginService oauth;
 
+    private final com.pebble.api.member.application.MemberWithdrawalService withdrawals;
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper;
+
+    @org.springframework.web.bind.annotation.PostMapping(value="/withdrawal", consumes="application/json")
+    public ResponseEntity<ApiResponse<WithdrawalResponse>> confirm(@AuthenticationPrincipal Jwt jwt,
+            @org.springframework.web.bind.annotation.RequestBody String json, HttpServletRequest request) {
+        if (request.getQueryString() != null || json.length() > 4096) throw invalid();
+        String confirmation;
+        try {
+            var tree = mapper.reader().with(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+                    .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(json);
+            if (tree == null || !tree.isObject() || tree.size()!=1 || !tree.has("confirmation")
+                    || !tree.get("confirmation").isTextual()) throw invalid();
+            confirmation=tree.get("confirmation").textValue();
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) { throw invalid(); }
+        long memberId=Long.parseLong(jwt.getSubject().substring(MEMBER_SUBJECT_PREFIX.length()));
+        withdrawals.confirmWithdrawal(memberId,confirmation);
+        ResponseCookie refreshCookie=ResponseCookie.from("refresh_token", "").httpOnly(true).secure(true)
+                .sameSite("Lax").path("/api/v1/auth").maxAge(java.time.Duration.ZERO).build();
+        ResponseCookie stateCookie=ResponseCookie.from("naver_oauth_state", "").httpOnly(true).secure(true)
+                .sameSite("Lax").path("/api/v1/auth/naver").maxAge(java.time.Duration.ZERO).build();
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL,"no-store")
+                .header(HttpHeaders.SET_COOKIE,refreshCookie.toString(),stateCookie.toString())
+                .body(ApiResponse.of(new WithdrawalResponse(true)));
+    }
+    private static ApplicationException invalid() { return new ApplicationException(GlobalErrorCode.INVALID_REQUEST); }
+    public record WithdrawalResponse(boolean deleted) { }
+
     @DeleteMapping
     public ResponseEntity<ApiResponse<AuthorizationResponse>> request(
             @AuthenticationPrincipal Jwt jwt, HttpServletRequest request) {
