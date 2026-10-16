@@ -167,6 +167,25 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
                         .content(mapper.writeValueAsString(Map.of("password",PASSWORD))))
                 .andExpect(status().isNotFound());
     }
+    @ParameterizedTest @ValueSource(strings={"posts","projects"})
+    void duplicateGuestNamesAreScopedToContentAndDeletedNamesCanBeReused(String resource) throws Exception {
+        String path=collection(resource,"PUBLIC");
+        String first=create(path,"조약돌",PASSWORD);
+        String second=create(path,"조약돌",PASSWORD);
+        assertThat(mapper.readTree(first).at("/data/author/nickname").asText()).isEqualTo("조약돌");
+        assertThat(mapper.readTree(second).at("/data/author/nickname").asText()).isEqualTo("조약돌1");
+        long parent=Long.parseLong(path.split("/")[4]);
+        CommentTarget target=resource.equals("posts")?CommentTarget.POST:CommentTarget.PROJECT;
+        var secret=comments.createGuest(target,parent,"조약돌",PASSWORD,
+                new CommentChanges("secret",com.pebble.api.comment.domain.CommentVisibility.SECRET,true,true));
+        assertThat(secret.getGuestNickname()).isEqualTo("조약돌2");
+        String other=collection(resource,"PUBLIC");
+        assertThat(mapper.readTree(create(other,"조약돌",PASSWORD)).at("/data/author/nickname").asText()).isEqualTo("조약돌");
+        comments.deleteGuest(target,parent,Long.parseLong(mapper.readTree(second).at("/data/id").asText()),PASSWORD);
+        var reused=comments.createGuest(target,parent,"조약돌",PASSWORD,new CommentChanges("again",null,true,false));
+        assertThat(reused.getGuestNickname()).isEqualTo("조약돌1");
+    }
+
     @Test void newPasswordBoundsAndBlankNicknameUsePebbleWithoutConsent() throws Exception {
         String path=collection("posts","PUBLIC");
         String fourCharacterPayload=mapper.writeValueAsString(Map.of("password","1234","body","hello"));
@@ -174,7 +193,7 @@ class GuestCommentIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.data.author.nickname").value("조약돌"));
         String tenCharacterPayload=mapper.writeValueAsString(Map.of("nickname","  ","password","1234567890","body","hello"));
         mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(tenCharacterPayload))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.author.nickname").value("조약돌"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.author.nickname").value("조약돌1"));
         String elevenCharacterPayload=mapper.writeValueAsString(Map.of("nickname","visitor","password","12345678901","body","hello"));
         mvc.perform(post(path+"/guest").header("Origin",ORIGIN).contentType(MediaType.APPLICATION_JSON).content(elevenCharacterPayload))
                 .andExpect(status().isBadRequest());

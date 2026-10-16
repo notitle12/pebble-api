@@ -13,6 +13,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ProjectCommentRepository extends JpaRepository<ProjectComment, Long> {
+    @Query("select c.guestNickname from ProjectComment c where c.contentId=:contentId and c.author is null and c.deletedAt is null")
+    java.util.List<String> findGuestNicknames(@Param("contentId") long contentId);
+
     @Override
     @EntityGraph(attributePaths = "author")
     Optional<ProjectComment> findById(Long id);
