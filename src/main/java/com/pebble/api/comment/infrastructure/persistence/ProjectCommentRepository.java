@@ -45,6 +45,7 @@ public interface ProjectCommentRepository extends JpaRepository<ProjectComment, 
             where c.contentId=:contentId and c.deletedAt is null
               and (a is null or a.status <> com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING)
               and (c.visibility = com.pebble.api.comment.domain.CommentVisibility.PUBLIC
+                   or (a is null and c.visibility = com.pebble.api.comment.domain.CommentVisibility.SECRET)
                    or a.id=:requesterId or :owner=true)
             """)
     Page<ProjectComment> findVisible(@Param("contentId") long contentId, @Param("requesterId") Long requesterId,
