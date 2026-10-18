@@ -86,7 +86,7 @@ class ArchitectureSpecInputTest {
     @Test void acceptsExpandedTechnologyIconsButRejectsExternalImages() throws Exception {
         ObjectNode value = spec();
         ObjectNode node = (ObjectNode) value.withArray("nodes").get(0);
-        for (String icon : List.of("JAVA", "SPRING_BOOT", "PYTHON", "NEXTJS", "MYSQL", "KUBERNETES", "GOOGLE_CLOUD", "PYTORCH", "OPENAI", "GITHUB_ACTIONS")) {
+        for (String icon : List.of("REDUX", "JAVA", "SPRING_BOOT", "PYTHON", "NEXTJS", "MYSQL", "KUBERNETES", "GOOGLE_CLOUD", "PYTORCH", "OPENAI", "GITHUB_ACTIONS")) {
             node.put("icon", icon); validate(value.toString());
         }
         for (String icon : List.of("https://example.com/icon.svg", "UNKNOWN", "<svg/>")) {
