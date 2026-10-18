@@ -84,8 +84,8 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2));
         mvc.perform(get("/api/v1/members/me/projects").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(3))
-                .andExpect(jsonPath("$.data.content[?(@.id == '" + hidden + "')].thumbnailUrl",
-                        org.hamcrest.Matchers.contains("https://images.example.com/" + hidden)));
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + hidden + "')].thumbnailUrl").isEmpty());
+        org.mockito.Mockito.verify(storage, org.mockito.Mockito.never()).signedUrl("thumb-" + hidden);
     }
 
     @Test

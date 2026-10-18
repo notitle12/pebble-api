@@ -309,7 +309,7 @@ public class ProjectService {
                 Map<Long, Project> projectMap = page.getContent().stream().collect(Collectors.toMap(Project::getId, p -> p));
                 for (var item : thumbMedia) {
                     Project p = projectMap.get(item.getProjectId());
-                    if (p != null && (owner || isPublic(p))) {
+                    if (p != null && isPublic(p)) {
                         String key = item.getThumbnailStorageKey() != null ? item.getThumbnailStorageKey() : item.getStorageKey();
                         thumbnailsByProject.put(item.getProjectId(), client.signedUrl(key));
                     }
