@@ -22,7 +22,7 @@ public final class ArchitectureSpecInput {
             .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final Set<String> GROUP_TYPES = Set.of("ORACLE_CLOUD", "AWS", "CLOUDFLARE", "DOCKER", "CLOUD", "CONTAINER", "CUSTOM");
     private static final Set<String> NODE_TYPES = Set.of("CLIENT", "APP", "DATABASE", "CACHE", "STORAGE", "PROXY", "CUSTOM");
-    private static final Set<String> ICONS = Set.of("ANDROID", "ANGULAR", "AWS", "AZURE", "C", "CACHE", "CLIENT", "CLOUD", "CLOUDFLARE", "CONTAINER", "CPP", "CSHARP", "CSS", "DART", "DATABASE", "DJANGO", "DOCKER", "DOCKER_COMPOSE", "DOTNET", "ELASTICSEARCH", "EXPRESS", "FASTAPI", "FIGMA", "FIREBASE", "FLASK", "FLUTTER", "GIT", "GITHUB_ACTIONS", "GITLAB_CI", "GO", "GOOGLE_CLOUD", "GRAFANA", "GRAPHQL", "HIBERNATE", "HTML", "HUGGING_FACE", "IOS", "JAVA", "JAVASCRIPT", "JENKINS", "JPA", "KAFKA", "KOTLIN", "KUBERNETES", "LANGCHAIN", "LARAVEL", "LINUX", "MARIADB", "MONGODB", "MYSQL", "NAVER_CLOUD", "NESTJS", "NETLIFY", "NEXTJS", "NGINX", "NODEJS", "NUXT", "OLLAMA", "OPENAI", "OPENSEARCH", "ORACLE", "ORACLE_CLOUD", "PHP", "POSTGRESQL", "PROMETHEUS", "PYTHON", "PYTORCH", "R2", "RABBITMQ", "REACT", "REACT_NATIVE", "REDIS", "RUBY", "RUBY_ON_RAILS", "RUST", "SCIKIT_LEARN", "SENTRY", "SERVER", "SPRING", "SPRING_BOOT", "SQLITE", "STORAGE", "STRIPE", "SUPABASE", "SVELTE", "SVELTEKIT", "SWIFT", "TAILWIND_CSS", "TENSORFLOW", "TERRAFORM", "TOSS_PAYMENTS", "TYPESCRIPT", "VERCEL", "VUEJS", "WORKERS");
+    private static final Set<String> ICONS = Set.of("ANDROID", "ANGULAR", "AWS", "AZURE", "C", "CACHE", "CLIENT", "CLOUD", "CLOUDFLARE", "CONTAINER", "CPP", "CSHARP", "CSS", "DART", "DATABASE", "DJANGO", "DOCKER", "DOCKER_COMPOSE", "DOTNET", "ELASTICSEARCH", "EXPRESS", "FASTAPI", "FIGMA", "FIREBASE", "FLASK", "FLUTTER", "GIT", "GITHUB_ACTIONS", "GITLAB_CI", "GO", "GOOGLE_CLOUD", "GRAFANA", "GRAPHQL", "HIBERNATE", "HTML", "HUGGING_FACE", "IOS", "JAVA", "JAVASCRIPT", "JENKINS", "JPA", "KAFKA", "KOTLIN", "KUBERNETES", "LANGCHAIN", "LARAVEL", "LINUX", "MARIADB", "MONGODB", "MYSQL", "NAVER_CLOUD", "NESTJS", "NETLIFY", "NEXTJS", "NGINX", "NODEJS", "NUXT", "OLLAMA", "OPENAI", "OPENSEARCH", "ORACLE", "ORACLE_CLOUD", "PERSON", "PHP", "POSTGRESQL", "PROMETHEUS", "PYTHON", "PYTORCH", "R2", "RABBITMQ", "REACT", "REACT_NATIVE", "REDIS", "RUBY", "RUBY_ON_RAILS", "RUST", "SCIKIT_LEARN", "SENTRY", "SERVER", "SPRING", "SPRING_BOOT", "SQLITE", "STORAGE", "STRIPE", "SUPABASE", "SVELTE", "SVELTEKIT", "SWIFT", "TAILWIND_CSS", "TENSORFLOW", "TERRAFORM", "TOSS_PAYMENTS", "TYPESCRIPT", "VERCEL", "VUEJS", "WORKERS");
     private ArchitectureSpecInput() {}
     private static boolean container(String type) { return "DOCKER".equals(type) || "CONTAINER".equals(type); }
 
@@ -46,12 +46,15 @@ public final class ArchitectureSpecInput {
         int index = 0;
         for (JsonNode group : groups) {
             String prefix = field + ".groups[" + index++ + "]";
-            object(group, Set.of("id", "type", "label", "typeLabel", "parentId", "bounds"), prefix);
+            object(group, Set.of("id", "type", "label", "typeLabel", "parentId", "bounds", "icon"), prefix);
             String id = uniqueId(group.get("id"), prefix + ".id", ids);
             String type = text(group.get("type"), prefix + ".type", 40, true);
             if (!GROUP_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 그룹입니다.");
             text(group.get("label"), prefix + ".label", 100, false);
             customTypeLabel(group, type, prefix);
+            JsonNode groupIcon = group.get("icon");
+            if (groupIcon != null && !groupIcon.isNull() && (!groupIcon.isTextual() || !ICONS.contains(groupIcon.textValue())))
+                fail(prefix + ".icon", "지원하는 기본 아이콘을 선택해 주세요.");
             JsonNode bounds = group.get("bounds");
             if (bounds != null && !bounds.isNull()) {
                 object(bounds, Set.of("x", "y", "width", "height"), prefix + ".bounds");
@@ -98,13 +101,17 @@ public final class ArchitectureSpecInput {
         index = 0;
         for (JsonNode edge : edges) {
             String prefix = field + ".edges[" + index++ + "]";
-            object(edge, Set.of("id", "source", "target", "label", "sourceSide", "targetSide", "waypoint"), prefix);
+            object(edge, Set.of("id", "source", "target", "label", "sourceSide", "targetSide", "waypoint", "direction"), prefix);
             uniqueId(edge.get("id"), prefix + ".id", ids);
             String source = identifier(edge.get("source"), prefix + ".source");
             String target = identifier(edge.get("target"), prefix + ".target");
             if (!(nodeIds.contains(source) || groupTypes.containsKey(source)) || !(nodeIds.contains(target) || groupTypes.containsKey(target))) fail(prefix, "존재하는 요소 또는 그룹끼리 연결해 주세요.");
             if (source.equals(target) || !pairs.add(source + ":" + target)) fail(prefix, "자기 연결이나 같은 방향의 중복 연결은 허용하지 않습니다.");
             optionalText(edge, "label", prefix, 200);
+            JsonNode direction = edge.get("direction");
+            if (direction != null && !direction.isNull() && (!direction.isTextual()
+                    || !Set.of("NONE", "FORWARD", "BOTH").contains(direction.textValue())))
+                fail(prefix + ".direction", "연결선 또는 단방향·양방향 화살표를 선택해 주세요.");
             for (String side : Set.of("sourceSide", "targetSide")) {
                 JsonNode value = edge.get(side);
                 if (value != null && !value.isNull() && (!value.isTextual()
