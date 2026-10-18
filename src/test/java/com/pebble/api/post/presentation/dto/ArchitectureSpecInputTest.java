@@ -49,8 +49,38 @@ class ArchitectureSpecInputTest {
         reject(value.toString());
         ((ObjectNode) value.withArray("groups").get(0)).put("type", "CUSTOM").put("typeLabel", "VPC");
         validate(value.toString());
+        for (String color : List.of("BLUE", "GREEN", "PURPLE", "AMBER", "ROSE", "PEACH", "TEAL", "INDIGO", "PINK", "GRAY")) {
+            ((ObjectNode) value.withArray("groups").get(0)).put("color", color);
+            validate(value.toString());
+        }
+        ((ObjectNode) value.withArray("groups").get(0)).putNull("color");
+        validate(value.toString());
+        ((ObjectNode) value.withArray("groups").get(0)).put("color", "NEON_RED");
+        reject(value.toString());
+        ((ObjectNode) value.withArray("groups").get(0)).remove("color");
         ((ObjectNode) value.withArray("groups").get(0)).put("label", "x".repeat(101));
         reject(value.toString());
+    }
+
+    @Test void nestedGroupsAndColorsRoundTripButCyclesAndContainerParentsAreRejected() throws Exception {
+        ObjectNode value = spec();
+        ObjectNode outer = (ObjectNode) value.withArray("groups").get(0);
+        ObjectNode inner = (ObjectNode) value.withArray("groups").get(1);
+        outer.put("type", "CUSTOM").put("color", "TEAL");
+        inner.put("type", "CUSTOM").put("color", "ROSE");
+        value.withArray("groups").addObject().put("id", "leaf").put("type", "CONTAINER")
+                .put("label", "실행 환경").put("parentId", "docker");
+        var parsed = PostWriteRequest.parse(request(value.toString()), false).blocks().getFirst();
+        assertThat(mapper.readTree(parsed.content()).at("/groups/0/color").asText()).isEqualTo("TEAL");
+        assertThat(mapper.readTree(parsed.content()).at("/groups/2/parentId").asText()).isEqualTo("docker");
+        outer.put("parentId", "docker"); reject(value.toString());
+        outer.remove("parentId");
+        outer.put("parentId", "leaf"); reject(value.toString());
+        outer.remove("parentId");
+        inner.put("parentId", "absent"); reject(value.toString());
+        inner.put("parentId", "docker"); reject(value.toString());
+        inner.put("parentId", "oci"); outer.put("type", "CONTAINER"); reject(value.toString());
+        outer.put("type", "CUSTOM"); inner.put("color", 1); reject(value.toString());
     }
 
     @Test void acceptsExpandedTechnologyIconsButRejectsExternalImages() throws Exception {
@@ -103,7 +133,7 @@ class ArchitectureSpecInputTest {
                 VALID.replace("\"id\":\"sql\"", "\"id\":\"db\""), VALID.replace("\"id\":\"sql\"", "\"id\":\"Bad ID\""),
                 VALID.replace("\"parentId\":\"oci\"", "\"parentId\":\"docker\""),
                 VALID.replace("\"parentId\":\"oci\"", "\"parentId\":\"absent\""),
-                VALID.replace("\"DOCKER\"", "\"AWS\""), VALID.replace("\"ORACLE_CLOUD\"", "\"DOCKER\""),
+                VALID.replace("\"ORACLE_CLOUD\"", "\"DOCKER\""),
                 VALID.replace("\"groupId\":\"docker\"", "\"groupId\":\"absent\""),
                 VALID.replace("\"target\":\"db\"", "\"target\":\"absent\""),
                 VALID.replace("\"target\":\"db\"", "\"target\":\"app\""), VALID.replace("\"APP\"", "\"UNKNOWN\""))) reject(value);
