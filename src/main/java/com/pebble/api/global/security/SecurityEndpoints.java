@@ -104,6 +104,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.DELETE, "/api/v1/posts/{postId:[0-9]+}/thumbnail", Access.USER),
             new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/media", Access.USER),
             new Endpoint(HttpMethod.PUT, "/api/v1/projects/{projectId:[0-9]+}/cover", Access.USER),
+            new Endpoint(HttpMethod.DELETE, "/api/v1/projects/{projectId:[0-9]+}/cover", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/projects/{projectId:[0-9]+}/media/{mediaId:[0-9]+}/content", Access.PUBLIC),
             new Endpoint(HttpMethod.PATCH, "/api/v1/projects/{projectId:[0-9]+}/media/{mediaId:[0-9]+}", Access.USER),
             new Endpoint(HttpMethod.DELETE, "/api/v1/projects/{projectId:[0-9]+}/media/{mediaId:[0-9]+}", Access.USER),
