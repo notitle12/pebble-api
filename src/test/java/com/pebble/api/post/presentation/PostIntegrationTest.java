@@ -337,7 +337,7 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         String table = """
                 {"schemaVersion":1,"display":"BOTH","tables":[
                   {"id":"member","name":"member","description":"","position":{"x":32,"y":80},"columns":[
-                    {"id":"id","name":"id","dataType":"BIGINT","nullable":false,"primaryKey":true,"unique":false,"description":"","reference":null},
+                    {"id":"id","name":"id","logicalName":"회원 번호","dataType":"BIGINT","nullable":false,"primaryKey":true,"unique":false,"description":"","reference":null,"defaultValue":"1","autoIncrement":true},
                     {"id":"parent","name":"parent_id","dataType":"BIGINT","nullable":true,"primaryKey":false,"unique":false,"description":"","reference":{"tableId":"member","columnId":"id"}}
                   ]}
                 ]}
