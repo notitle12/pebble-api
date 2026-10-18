@@ -20,6 +20,26 @@ class ArchitectureSpecInputTest {
          "edges":[{"id":"sql","source":"app","target":"db","label":"SQL"}]}
         """;
 
+    @Test void acceptsGenericToolboxAndPreservesNewFieldsThroughPostWrite() throws Exception {
+        ObjectNode value = spec();
+        ((ObjectNode)value.withArray("nodes").get(0)).put("icon", "PERSON");
+        ObjectNode group = (ObjectNode)value.withArray("groups").get(0);
+        group.put("icon", "CLOUD");
+        ObjectNode edge = (ObjectNode)value.withArray("edges").get(0);
+        for (String direction : List.of("NONE", "FORWARD", "BOTH")) {
+            edge.put("direction", direction);
+            var block = PostWriteRequest.parse(request(value.toString()), false).blocks().getFirst();
+            assertThat(mapper.readTree(block.content()).at("/edges/0/direction").asText()).isEqualTo(direction);
+            assertThat(mapper.readTree(block.content()).at("/groups/0/icon").asText()).isEqualTo("CLOUD");
+        }
+        edge.putNull("direction"); validate(value.toString());
+        edge.put("direction", "INVALID"); reject(value.toString());
+        edge.remove("direction");
+        group.put("icon", "https://example.com/logo.svg"); reject(value.toString());
+        group.put("icon", "PERSON"); validate(value.toString());
+        group.put("icon", 1); reject(value.toString());
+    }
+
     @Test void acceptsGenericGroupCategoriesAndOptionalDetails() throws Exception {
         ObjectNode value = spec();
         ((ObjectNode) value.withArray("groups").get(0)).put("type", "CLOUD").put("label", "");
