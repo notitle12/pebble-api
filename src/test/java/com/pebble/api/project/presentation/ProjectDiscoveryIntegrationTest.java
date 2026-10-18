@@ -54,6 +54,8 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
     @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
+    @MockitoBean com.pebble.api.global.media.R2ObjectStorage storage;
+    @Autowired com.pebble.api.project.infrastructure.persistence.ProjectMediaRepository media;
     Member owner;
     Member other;
 
@@ -61,6 +63,29 @@ class ProjectDiscoveryIntegrationTest extends AuthenticationTestSupport {
     void setup() {
         owner = initializedMember("discovery-owner");
         other = initializedMember("discovery-other");
+    }
+
+    @Test
+    void listThumbnailsSurviveLikeDecorationAndRespectPublicVisibility() throws Exception {
+        String visible = create(owner, "PUBLIC", "visible cover", null, null, List.of());
+        String hidden = create(owner, "HIDDEN", "hidden cover", null, null, List.of());
+        String plain = create(owner, "PUBLIC", "no cover", null, null, List.of());
+        for (String id : List.of(visible, hidden)) {
+            media.saveAndFlush(new com.pebble.api.project.domain.ProjectMedia(Long.parseLong(id),
+                    com.pebble.api.project.domain.MediaRole.THUMBNAIL, "display-" + id, "thumb-" + id, null, 0));
+            org.mockito.Mockito.when(storage.signedUrl("thumb-" + id)).thenReturn("https://images.example.com/" + id);
+        }
+        mvc.perform(get(PROJECTS)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + visible + "')].thumbnailUrl",
+                        org.hamcrest.Matchers.contains("https://images.example.com/" + visible)))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + plain + "')].thumbnailUrl").isEmpty());
+        mvc.perform(get("/api/v1/members/" + owner.getId() + "/projects"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2));
+        mvc.perform(get("/api/v1/members/me/projects").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(3))
+                .andExpect(jsonPath("$.data.content[?(@.id == '" + hidden + "')].thumbnailUrl",
+                        org.hamcrest.Matchers.contains("https://images.example.com/" + hidden)));
     }
 
     @Test
