@@ -85,6 +85,26 @@ class DatabaseSchemaInputTest {
             assertThatThrownBy(() -> PostWriteRequest.parse(request(content), false)).isInstanceOf(ApplicationException.class);
         }
     }
+    @Test void acceptsOptionalColumnMetadataAndRejectsInvalidValues() throws Exception {
+        ObjectNode schema = (ObjectNode) json.readTree(VALID);
+        ObjectNode column = (ObjectNode) schema.get("tables").get(0).get("columns").get(0);
+        column.put("logicalName", "회원 번호").put("defaultValue", "").put("autoIncrement", true);
+        String content = schema.toString();
+        assertThat(PostWriteRequest.parse(request(content), false).blocks().getFirst().content()).isEqualTo(content);
+        for (String key : List.of("logicalName", "defaultValue")) {
+            column.put(key, "😀".repeat(100));
+            PostWriteRequest.parse(request(schema.toString()), false);
+            for (var invalid : List.of(json.nullNode(), json.getNodeFactory().numberNode(1), json.getNodeFactory().textNode("😀".repeat(101)))) {
+                column.set(key, invalid);
+                assertThatThrownBy(() -> PostWriteRequest.parse(request(schema.toString()), false)).isInstanceOf(ApplicationException.class);
+            }
+            column.put(key, "");
+        }
+        for (var invalid : List.of(json.nullNode(), json.getNodeFactory().textNode("true"), json.getNodeFactory().numberNode(1))) {
+            column.set("autoIncrement", invalid);
+            assertThatThrownBy(() -> PostWriteRequest.parse(request(schema.toString()), false)).isInstanceOf(ApplicationException.class);
+        }
+    }
     @Test void rejectsLanguageAndOversizedContent() {
         ObjectNode req=request(VALID); ((ObjectNode) req.get("blocks").get(0)).put("language", "SQL");
         assertThatThrownBy(() -> PostWriteRequest.parse(req, false)).isInstanceOf(ApplicationException.class);

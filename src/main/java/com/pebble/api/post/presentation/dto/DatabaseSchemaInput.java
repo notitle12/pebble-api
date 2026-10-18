@@ -52,11 +52,14 @@ public final class DatabaseSchemaInput {
             Map<String, JsonNode> columnIds = new HashMap<>();
             Set<String> names = new HashSet<>();
             for (JsonNode column : columns) {
-                object(column, Set.of("id", "name", "dataType", "nullable", "primaryKey", "unique", "description", "reference"), field);
+                object(column, Set.of("id", "name", "logicalName", "dataType", "nullable", "primaryKey", "unique", "description", "reference", "defaultValue", "autoIncrement"), field);
                 String columnId = identifier(column.get("id"), field);
                 String columnName = text(column.get("name"), field, 100, true);
                 text(column.get("dataType"), field, 100, true);
                 text(column.get("description"), field, 500, false);
+                if (column.has("logicalName")) text(column.get("logicalName"), field + ".logicalName", 100, false);
+                if (column.has("defaultValue")) text(column.get("defaultValue"), field + ".defaultValue", 100, false);
+                if (column.has("autoIncrement")) bool(column.get("autoIncrement"), field + ".autoIncrement");
                 boolean nullable = bool(column.get("nullable"), field);
                 boolean pk = bool(column.get("primaryKey"), field);
                 bool(column.get("unique"), field);
