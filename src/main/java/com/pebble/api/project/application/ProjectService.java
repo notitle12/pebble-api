@@ -297,15 +297,29 @@ public class ProjectService {
 
     private Page<ProjectView> page(Page<Project> page, boolean owner) {
         Map<Long, List<TechStack>> byProject = new HashMap<>();
+        Map<Long, String> thumbnailsByProject = new HashMap<>();
         if (!page.isEmpty()) {
-            for (ProjectTechStack link : projectTechStacks.findForProjects(page.getContent().stream().map(Project::getId).toList())) {
+            List<Long> projectIds = page.getContent().stream().map(Project::getId).toList();
+            for (ProjectTechStack link : projectTechStacks.findForProjects(projectIds)) {
                 byProject.computeIfAbsent(link.getProject().getId(), id -> new ArrayList<>()).add(link.getTechStack());
+            }
+            var client = mediaStorage.getIfAvailable();
+            if (client != null) {
+                var thumbMedia = media.findByProjectIdInAndMediaRole(projectIds, com.pebble.api.project.domain.MediaRole.THUMBNAIL);
+                Map<Long, Project> projectMap = page.getContent().stream().collect(Collectors.toMap(Project::getId, p -> p));
+                for (var item : thumbMedia) {
+                    Project p = projectMap.get(item.getProjectId());
+                    if (p != null && isPublic(p)) {
+                        String key = item.getThumbnailStorageKey() != null ? item.getThumbnailStorageKey() : item.getStorageKey();
+                        thumbnailsByProject.put(item.getProjectId(), client.signedUrl(key));
+                    }
+                }
             }
         }
         return page.map(project -> {
             initializeOwner(project);
             return new ProjectView(project, null, null,
-                    List.copyOf(byProject.getOrDefault(project.getId(), List.of())), false, owner);
+                    List.copyOf(byProject.getOrDefault(project.getId(), List.of())), false, owner, 0, false, null, thumbnailsByProject.get(project.getId()));
         });
     }
 
@@ -345,7 +359,13 @@ public class ProjectService {
     private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }
 
     public record ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
-                              boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media) {
+                              boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media,
+                              String thumbnailUrl) {
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
+                           boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media) {
+            this(project, features, links, techStacks, detail, owner, likeCount, likedByMe, media,
+                    media == null ? null : media.stream().filter(m -> m.mediaRole() == com.pebble.api.project.domain.MediaRole.THUMBNAIL).findFirst().map(m -> m.thumbnailUrl() != null ? m.thumbnailUrl() : m.url()).orElse(null));
+        }
         public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
                            boolean detail, boolean owner, long likeCount, boolean likedByMe) {
             this(project, features, links, techStacks, detail, owner, likeCount, likedByMe, detail ? List.of() : null);

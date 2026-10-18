@@ -59,3 +59,15 @@ test('body images require signed, unexpired URLs and an exact WebP path', async 
    assert.equal((await s.call(signed(undefined,Buffer.from(invalid).toString('base64url')))).status,403);
  assert.equal(reads,1);
 });
+
+test('project cover reuse permits credential-free CORS only after signature validation, including cache hits',async()=>{
+ const key='project/12345678-1234-1234-1234-123456789abc/display.webp',path=Buffer.from(key).toString('base64url');
+ const s=setup();s.env.MEDIA_BUCKET.get=async value=>{assert.equal(value,key);return {body:new Uint8Array([1,2,3])};};
+ for(let i=0;i<2;i++){
+  const r=await s.call(signed(undefined,path),{headers:{Origin:'https://www.pebble-log.com'}});
+  assert.equal(r.status,200);assert.equal(r.headers.get('Access-Control-Allow-Origin'),'*');assert.equal(r.headers.get('Access-Control-Allow-Credentials'),null);
+  await r.arrayBuffer();await Promise.all(s.pending);
+ }
+ assert.equal((await s.call(signed(undefined,path),{},time+900000)).headers.get('Access-Control-Allow-Origin'),null);
+ assert.equal((await setup().call()).headers.get('Access-Control-Allow-Origin'),null);
+});
