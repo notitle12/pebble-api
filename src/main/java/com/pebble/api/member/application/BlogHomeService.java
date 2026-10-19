@@ -2,8 +2,6 @@ package com.pebble.api.member.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pebble.api.global.exception.ApplicationException;
-import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.post.application.PostQueryService;
 import com.pebble.api.project.application.ProjectQueryService;
 import java.time.Clock;
@@ -65,11 +63,7 @@ public class BlogHomeService {
         Settings settings = read(memberId);
         List<String> publicProjects = new ArrayList<>();
         for (String id : settings.featuredProjectIds()) {
-            try {
-                if (projects.requirePublic(Long.parseLong(id)) == memberId) publicProjects.add(id);
-            } catch (ApplicationException exception) {
-                if (exception.error() != GlobalErrorCode.RESOURCE_NOT_FOUND) throw exception;
-            }
+            if (projects.isPublicOwnedBy(Long.parseLong(id), memberId)) publicProjects.add(id);
         }
         LocalDate to = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul")));
         LocalDate from = to.minusYears(1).plusDays(1);
