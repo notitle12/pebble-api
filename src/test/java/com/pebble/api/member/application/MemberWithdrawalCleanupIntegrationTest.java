@@ -41,7 +41,8 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
             jdbc.update("delete from member_oauth_identity where member_id=?", id);
             jdbc.update("delete from post where author_member_id=?", id);
             jdbc.update("delete from project where owner_member_id=?", id);
-            for (int i = 0; i < 5; i++) jdbc.update("delete from board where owner_member_id=? and id not in (select parent_id from board where parent_id is not null)", id);
+            jdbc.update("update board set parent_id=null where owner_member_id=?", id);
+            jdbc.update("delete from board where owner_member_id=?", id);
             jdbc.update("delete from member where id=?", id);
         }
         if (sharedCategoryId != 0) jdbc.update("delete from category where id=?", sharedCategoryId);
@@ -92,6 +93,9 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
         long[] shared = ensureSharedClassifications();
         insertBoardChain(broken.getId(), 4);
         long brokenDeepestBoardId = lastBoardIds.get(broken.getId());
+        // 깊이에 관계없이 파기하므로 실제로 진행을 막는 순환을 손상 데이터로 구성한다.
+        jdbc.update("update board set parent_id=? where owner_member_id=? and parent_id is null",
+                brokenDeepestBoardId, broken.getId());
         insertBoardChain(healthy.getId(), 3);
         ContentFixture brokenContent = insertOwnedContent(broken.getId(), retainedOwner.getId(), shared[0], shared[1]);
         ContentFixture healthyContent = insertOwnedContent(healthy.getId(), retainedOwner.getId(), shared[0], shared[1]);
@@ -110,8 +114,9 @@ class MemberWithdrawalCleanupIntegrationTest extends AuthenticationTestSupport {
         assertThat(jdbc.queryForObject("select count(*) from category where id=?", Long.class, shared[0])).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from tech_stack where id=?", Long.class, shared[1])).isEqualTo(1);
 
-        // 테스트용으로 추가한 초과 깊이 게시판을 지우면 실패한 회원을 다시 파기할 수 있다.
-        jdbc.update("delete from board where owner_member_id=? and id=?", broken.getId(), brokenDeepestBoardId);
+        // 순환을 복구하면 4단계 트리도 다음 작업에서 전부 파기한다.
+        jdbc.update("update board set parent_id=null where owner_member_id=? and parent_id=?",
+                broken.getId(), brokenDeepestBoardId);
         cleanupJob.cleanup();
         assertThat(members.existsById(broken.getId())).isFalse();
         assertContentRemoved(brokenContent, broken.getId());
