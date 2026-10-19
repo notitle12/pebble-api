@@ -86,6 +86,16 @@ public class ProjectService {
         return detailView(project, owner);
     }
 
+    public Page<ProjectView> listPopular(Pageable pageable) {
+        var ranked = projects.findPopularIds(pageable);
+        if (ranked.isEmpty()) return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, ranked.getTotalElements());
+        // 순위 ID를 먼저 조회하고 관계를 일괄 로딩한다. 다시 공개 조건을 적용해 비공개 전환도 보호한다.
+        var visible = projects.findAll(publicFilter(null, null, null).and((root, query, cb) -> root.get("id").in(ranked.getContent())), Pageable.unpaged());
+        var byId = visible.getContent().stream().collect(java.util.stream.Collectors.toMap(Project::getId, value -> value));
+        var ordered = ranked.getContent().stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
+        return page(new org.springframework.data.domain.PageImpl<>(ordered, pageable, ranked.getTotalElements()), false);
+    }
+
     public Page<ProjectView> listPublic(Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
         return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, null), pageable), false);
     }

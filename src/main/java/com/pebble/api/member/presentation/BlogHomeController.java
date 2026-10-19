@@ -46,6 +46,14 @@ public class BlogHomeController {
         } catch (java.io.IOException exception) { throw MediaRequest.invalid(); }
     }
 
+    @PutMapping(value="/api/v1/members/me/projects/{projectId:[0-9]+}/featured", consumes="application/json")
+    public ApiResponse<BlogHomeService.Settings> featured(@AuthenticationPrincipal Jwt jwt, @PathVariable String projectId,
+                                                         HttpServletRequest request, @RequestBody JsonNode body) {
+        MediaRequest.noQuery(request);
+        if (body == null || !body.isObject() || body.size() != 1 || !body.has("featured") || !body.get("featured").isBoolean()) throw MediaRequest.invalid();
+        return ApiResponse.of(homes.setFeatured(memberId(jwt), com.pebble.api.project.presentation.dto.ProjectWriteRequest.id(projectId, "projectId"), body.get("featured").booleanValue()));
+    }
+
     private static long memberId(Jwt jwt) { return Long.parseLong(jwt.getSubject().substring("member:".length())); }
     private static void noPayload(HttpServletRequest request, String body) {
         MediaRequest.noQuery(request);

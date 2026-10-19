@@ -15,7 +15,16 @@ public final class BlogHomeRequest {
 
     public static BlogHomeService.Settings parse(JsonNode json) {
         if (json == null || !json.isObject()) throw MediaRequest.invalid();
-        fields(json, json.has("activityDisplay") ? Set.of("sections", "techStacks", "featuredProjectIds", "activityDisplay") : Set.of("sections", "techStacks", "featuredProjectIds"));
+        Set<String> allowed = new HashSet<>(Set.of("sections", "techStacks", "featuredProjectIds"));
+        if (json.has("activityDisplay")) allowed.add("activityDisplay");
+        if (json.has("featuredProjectLimit")) allowed.add("featuredProjectLimit");
+        fields(json, allowed);
+        int featuredProjectLimit = 6;
+        if (json.has("featuredProjectLimit")) {
+            var limit = json.get("featuredProjectLimit");
+            if (!limit.isIntegralNumber() || !limit.canConvertToInt() || limit.intValue() < 1 || limit.intValue() > 6) throw MediaRequest.invalid();
+            featuredProjectLimit = limit.intValue();
+        }
         String activityDisplay = "GRASS";
         if (json.has("activityDisplay")) {
             var display = json.get("activityDisplay");
@@ -49,7 +58,7 @@ public final class BlogHomeRequest {
             try { Long.parseLong(item.textValue()); } catch (NumberFormatException exception) { throw MediaRequest.invalid(); }
             ids.add(item.textValue());
         }
-        return new BlogHomeService.Settings(List.copyOf(sections), List.copyOf(stacks), List.copyOf(ids), activityDisplay);
+        return new BlogHomeService.Settings(List.copyOf(sections), List.copyOf(stacks), List.copyOf(ids), activityDisplay, featuredProjectLimit);
     }
 
     private static JsonNode array(JsonNode node, int max) {
