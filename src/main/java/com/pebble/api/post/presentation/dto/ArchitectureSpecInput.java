@@ -96,11 +96,12 @@ public final class ArchitectureSpecInput {
         index = 0;
         for (JsonNode node : nodes) {
             String prefix = field + ".nodes[" + index++ + "]";
-            object(node, Set.of("id", "type", "label", "typeLabel", "groupId", "icon", "position"), prefix);
+            object(node, Set.of("id", "type", "label", "typeLabel", "groupId", "icon", "position", "description"), prefix);
             nodeIds.add(uniqueId(node.get("id"), prefix + ".id", ids));
             String type = text(node.get("type"), prefix + ".type", 40, true);
             if (!NODE_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 요소입니다.");
             text(node.get("label"), prefix + ".label", 100, true);
+            optionalText(node, "description", prefix, 300);
             customTypeLabel(node, type, prefix);
             JsonNode icon = node.get("icon");
             if (icon != null && !icon.isNull() && (!icon.isTextual() || !ICONS.contains(icon.textValue())))
