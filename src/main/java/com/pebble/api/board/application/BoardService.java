@@ -26,8 +26,9 @@ public class BoardService {
     private final PostBoardService postBoards;
 
     public void purgeForMember(long memberId) {
-        // 미삭제·논리 삭제 Board를 모두 잎부터 제거해 자기 참조 FK를 보존한다.
-        for (int depth = 0; depth < 3; depth++) boards.deleteLeavesForMember(memberId);
+        // 논리 삭제된 자손은 부모 이동 후 3단계보다 깊게 남을 수 있다.
+        // 실제 삭제가 진행되는 동안 잎부터 제거하고, 순환 등으로 멈추면 롤백한다.
+        while (boards.deleteLeavesForMember(memberId) > 0) { }
         if (boards.existsByOwnerMemberId(memberId)) throw new ApplicationException(GlobalErrorCode.INTERNAL_ERROR);
     }
 
