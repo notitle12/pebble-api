@@ -87,6 +87,32 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(mine()).header("Authorization", bearer(owner))).andExpect(jsonPath("$.data.featuredProjectIds[0]").value(Long.toString(own)));
     }
 
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void unavailableFeaturedProjectsDoNotFailHomeAtRealTransactionBoundary() throws Exception {
+        try {
+            long visible = project(owner, "PUBLIC"), hidden = project(owner, "PUBLIC"), deleted = project(owner, "PUBLIC");
+            mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json")
+                    .content(mapper.writeValueAsString(settings(List.of("" + visible, "" + hidden, "" + deleted)))))
+                    .andExpect(status().isOk());
+            jdbc.update("update project set visibility_status='HIDDEN' where id=?", hidden);
+            jdbc.update("update project set visibility_status='DELETED' where id=?", deleted);
+            mvc.perform(get(path())).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(1))
+                    .andExpect(jsonPath("$.data.featuredProjectIds[0]").value("" + visible))
+                    .andExpect(jsonPath("$.data.sections.length()").value(4))
+                    .andExpect(jsonPath("$.data.activity.timeZone").value("Asia/Seoul"));
+            jdbc.update("delete from project where id=?", deleted);
+            mvc.perform(get(path())).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(1));
+            mvc.perform(get(mine()).header("Authorization", bearer(owner)))
+                    .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(3));
+        } finally {
+            jdbc.update("delete from project where owner_member_id in (?,?)", owner.getId(), other.getId());
+            jdbc.update("delete from member where id in (?,?)", owner.getId(), other.getId());
+        }
+    }
+
     @Test void activityUsesSeoulPublicationDatesAndExcludesPrivateBlockedDraftOtherAndExpiredPosts() throws Exception {
         var zone=ZoneId.of("Asia/Seoul");var today=LocalDate.now(zone);var from=today.minusYears(1).plusDays(1);
         Instant first=today.atStartOfDay(zone).toInstant();
