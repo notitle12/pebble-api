@@ -695,6 +695,45 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(PATH).param("sort", "displayOrder,asc")).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void editingBlocksReusesRowsAndClearsPreviousTypeFieldsAcrossGrowthAndShrink() throws Exception {
+        String id = create(owner, "PUBLIC", null, List.of());
+        List<Long> original = blockIds(id);
+        String grown = """
+                {"blocks":[
+                  {"type":"CODE","content":"new code","language":"JAVA","title":"new title","alignment":"RIGHT"},
+                  {"type":"TEXT","content":"plain"},
+                  {"type":"TEXT","content":"added"}]}
+                """;
+        JsonNode saved = response(change(id, grown).andExpect(status().isOk())).at("/data/blocks");
+        assertThat(blockIds(id).subList(0, 2)).isEqualTo(original);
+        assertThat(saved.size()).isEqualTo(3);
+        assertThat(saved.get(0).path("alignment").asText()).isEqualTo("RIGHT");
+        assertThat(saved.get(1).path("language").isNull()).isTrue();
+        assertThat(saved.get(1).path("title").isNull()).isTrue();
+        em.clear();
+        assertThat(response(mvc.perform(get(PATH + "/" + id)).andExpect(status().isOk())).at("/data/blocks"))
+                .isEqualTo(saved);
+        String shrunk = """
+                {"blocks":[{"type":"TEXT","content":"only remaining"}]}
+                """;
+        JsonNode remaining = response(change(id, shrunk).andExpect(status().isOk())).at("/data/blocks");
+        assertThat(blockIds(id)).containsExactly(original.getFirst());
+        assertThat(remaining.size()).isEqualTo(1);
+        assertThat(remaining.get(0).path("content").asText()).isEqualTo("only remaining");
+        assertThat(remaining.get(0).path("language").isNull()).isTrue();
+        assertThat(remaining.get(0).path("title").isNull()).isTrue();
+        assertThat(remaining.get(0).path("alignment").asText()).isEqualTo("LEFT");
+        em.clear();
+        assertThat(response(mvc.perform(get(PATH + "/" + id)).andExpect(status().isOk())).at("/data/blocks"))
+                .isEqualTo(remaining);
+    }
+
+    private List<Long> blockIds(String id) {
+        return jdbc.queryForList("select id from post_block where post_id=? order by display_order", Long.class,
+                Long.parseLong(id));
+    }
+
     private String create(Member member, String visibility, Category category, List<TechStack> selected) throws Exception {
         ResultActions result = mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(member)).contentType(MediaType.APPLICATION_JSON)
                 .content(withClassification(basic(visibility), category, selected))).andExpect(status().isCreated());
