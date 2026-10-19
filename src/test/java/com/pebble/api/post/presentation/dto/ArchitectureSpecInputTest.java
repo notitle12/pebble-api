@@ -227,6 +227,21 @@ class ArchitectureSpecInputTest {
         waypoint.remove("y"); reject(spec.toString()); edge.putNull("waypoint"); validate(spec.toString());
     }
 
+    @Test void optionalNodeDescriptionPreservesTextAndValidatesLimits() throws Exception {
+        ObjectNode value = spec();
+        ObjectNode node = (ObjectNode) value.withArray("nodes").get(0);
+        validate(value.toString());
+        node.putNull("description"); validate(value.toString());
+        node.put("description", ""); validate(value.toString());
+        String description = "😀".repeat(300);
+        node.put("description", description);
+        var block = PostWriteRequest.parse(request(value.toString()), false).blocks().getFirst();
+        assertThat(mapper.readTree(block.content()).at("/nodes/0/description").asText()).isEqualTo(description);
+        node.put("description", "a".repeat(301)); reject(value.toString());
+        node.put("description", 1); reject(value.toString());
+        node.put("description", "\u0000"); reject(value.toString());
+    }
+
     private ObjectNode spec() throws Exception { return (ObjectNode) mapper.readTree(VALID); }
     private void validate(String value) { PostWriteRequest.parse(request(value), false); }
     private void reject(String value) { assertThatThrownBy(() -> validate(value)).as(value).isInstanceOf(ApplicationException.class); }
