@@ -35,4 +35,24 @@ public interface ProjectRepository extends JpaRepository<Project, Long>, JpaSpec
     @Modifying
     @Query("delete from Project p where p.owner.id=:memberId")
     int deleteForMember(@Param("memberId") long memberId);
+    @Query(value = """
+            select p.id from project p join member owner on owner.id=p.owner_member_id
+            join (select l.project_id as content_id, count(*) as likes
+                  from project_like l join member voter on voter.id=l.member_id
+                  where l.deleted_at is null and voter.status <> 'WITHDRAWAL_PENDING'
+                  group by l.project_id) ranking on ranking.content_id=p.id
+            where p.visibility_status='PUBLIC' and not p.is_blocked
+              and owner.status <> 'WITHDRAWAL_PENDING'
+            order by ranking.likes desc, p.published_at desc nulls last, p.id desc
+            """, countQuery = """
+            select count(*) from project p join member owner on owner.id=p.owner_member_id
+            join (select l.project_id as content_id, count(*) as likes
+                  from project_like l join member voter on voter.id=l.member_id
+                  where l.deleted_at is null and voter.status <> 'WITHDRAWAL_PENDING'
+                  group by l.project_id) ranking on ranking.content_id=p.id
+            where p.visibility_status='PUBLIC' and not p.is_blocked
+              and owner.status <> 'WITHDRAWAL_PENDING'
+            """, nativeQuery = true)
+    Page<Long> findPopularIds(Pageable pageable);
+
 }
