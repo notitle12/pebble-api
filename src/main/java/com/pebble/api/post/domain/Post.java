@@ -78,7 +78,10 @@ public class Post extends BaseTimeEntity {
 
     public int getBoardDisplayOrder() { return boardDisplayOrder; }
 
-    public void changeBoardOrder(int position) { ensureNotDeleted(); boardDisplayOrder=position; }
+    public void changeBoardOrder(int position) {
+        ensureNotDeleted();
+        if (boardDisplayOrder != position) boardDisplayOrder = position;
+    }
 
     @Column(columnDefinition = "TEXT")
     private String summary;
@@ -201,7 +204,7 @@ public class Post extends BaseTimeEntity {
     public void changeOrder(int displayOrder) {
         ensureNotDeleted();
         if (displayOrder < 0) throw new IllegalArgumentException("Display order must not be negative");
-        this.displayOrder = displayOrder;
+        if (this.displayOrder != displayOrder) this.displayOrder = displayOrder;
     }
 
     private void ensureNotDeleted() {

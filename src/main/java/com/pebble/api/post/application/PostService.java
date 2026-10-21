@@ -68,12 +68,12 @@ public class PostService {
         post.changeProject(input.projectId());
         ordered.add(position, post);
         applyOrder(ordered);
-        replaceBlocks(post, input.blocks());
+        List<PostBlock> savedBlocks = insertBlocks(post, input.blocks());
         if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
         post.changeTags(input.tags());
         posts.flush();
         recordPublication(post);
-        return detailView(post, true);
+        return detailView(post, savedBlocks, true);
     }
 
     private void recordPublication(Post post) {
@@ -151,13 +151,13 @@ public class PostService {
         if (input.has("visibilityStatus")) post.changeVisibility(input.visibilityStatus());
         if (input.has("displayOrder")) move(post, input.displayOrder());
         if (input.has("boardDisplayOrder")) moveInBoard(post,input.boardDisplayOrder());
-        if (input.has("blocks")) replaceBlocks(post, input.blocks());
+        List<PostBlock> updatedBlocks = input.has("blocks") ? replaceBlocks(post, input.blocks()) : null;
         if (input.has("thumbnailImageId")) thumbnails.select(post, input.thumbnailImageId());
         else if (input.has("blocks")) thumbnails.clearIfNoLongerReferenced(post);
         if (input.has("tags")) post.changeTags(input.tags());
         posts.flush();
         recordPublication(post);
-        return detailView(post, true);
+        return updatedBlocks != null ? detailView(post, updatedBlocks, true) : detailView(post, true);
     }
 
     @Transactional
@@ -168,6 +168,16 @@ public class PostService {
         posts.flush();
         applyOrder(posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, PostVisibility.DELETED));
         normalizeBoard(memberId,post.getBoardId());
+    }
+
+    public Page<PostView> listPopular(Pageable pageable) {
+        var ranked = posts.findPopularIds(pageable);
+        if (ranked.isEmpty()) return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, ranked.getTotalElements());
+        // 순위 ID를 먼저 조회하고 관계를 일괄 로딩한다. 다시 공개 조건을 적용해 비공개 전환도 보호한다.
+        var visible = posts.findAll(publicFilter(null, null, null).and((root, query, cb) -> root.get("id").in(ranked.getContent())), Pageable.unpaged());
+        var byId = visible.getContent().stream().collect(java.util.stream.Collectors.toMap(Post::getId, value -> value));
+        var ordered = ranked.getContent().stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
+        return page(new org.springframework.data.domain.PageImpl<>(ordered, pageable, ranked.getTotalElements()), false);
     }
 
     public Page<PostView> listPublic(Long categoryId, Long authorId, Pageable pageable) {
@@ -230,6 +240,9 @@ public class PostService {
         applyOrder(posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(post.getAuthor().getId(), PostVisibility.DELETED));
         normalizeBoard(post.getAuthor().getId(),post.getBoardId());
     }
+
+    @Transactional
+    public Post lockForReportManagement(long id) { return forManagementUpdate(id); }
 
     private Post forManagementUpdate(long id) {
         long authorId = posts.findAuthorIdForManagement(id).orElseThrow(PostService::notFound);
@@ -315,16 +328,40 @@ public class PostService {
         return post;
     }
 
-    private void replaceBlocks(Post post, List<BlockInput> input) {
-        // 기존 순서 고유 제약과 충돌하지 않도록 삭제를 먼저 DB에 반영한다.
-        blocks.deleteForPost(post.getId());
-        List<PostBlock> replacement = new ArrayList<>();
+    private List<PostBlock> insertBlocks(Post post, List<BlockInput> input) {
+        List<PostBlock> created = new ArrayList<>(input.size());
         for (int order = 0; order < input.size(); order++) {
             BlockInput block = input.get(order);
-            replacement.add(new PostBlock(post, block.type(), block.content(), block.language(), block.title(), order,
+            created.add(new PostBlock(post, block.type(), block.content(), block.language(), block.title(), order,
                     block.alignment()));
         }
-        blocks.saveAll(replacement);
+        return blocks.saveAll(created);
+    }
+
+    private List<PostBlock> replaceBlocks(Post post, List<BlockInput> input) {
+        // 기존 블록을 순서대로 재사용(In-Place Dirty Checking)하고 초과분 삭제·신규분 삽입만 수행한다.
+        List<PostBlock> existing = blocks.findByPostIdOrderByDisplayOrderAsc(post.getId());
+        int commonSize = Math.min(existing.size(), input.size());
+        List<PostBlock> result = new ArrayList<>(input.size());
+        for (int order = 0; order < commonSize; order++) {
+            BlockInput block = input.get(order);
+            PostBlock target = existing.get(order);
+            target.update(block.type(), block.content(), block.language(), block.title(), order, block.alignment());
+            result.add(target);
+        }
+        if (existing.size() > input.size()) {
+            blocks.deleteAll(existing.subList(input.size(), existing.size()));
+        } else if (input.size() > existing.size()) {
+            List<PostBlock> additions = new ArrayList<>(input.size() - existing.size());
+            for (int order = existing.size(); order < input.size(); order++) {
+                BlockInput block = input.get(order);
+                additions.add(new PostBlock(post, block.type(), block.content(), block.language(), block.title(), order,
+                        block.alignment()));
+            }
+            result.addAll(blocks.saveAll(additions));
+        }
+        blocks.flush();
+        return result;
     }
 
     private Pageable boardPageable(Pageable pageable) {
@@ -371,8 +408,12 @@ public class PostService {
     }
 
     private PostView detailView(Post post, boolean owner) {
+        return detailView(post, blocks.findByPostIdOrderByDisplayOrderAsc(post.getId()), owner);
+    }
+
+    private PostView detailView(Post post, List<PostBlock> postBlocks, boolean owner) {
         initializeRelations(post);
-        return new PostView(post, blocks.findByPostIdOrderByDisplayOrderAsc(post.getId()),
+        return new PostView(post, postBlocks,
                 post.getTags(), owner, 0, false, thumbnailUrl(post));
     }
 

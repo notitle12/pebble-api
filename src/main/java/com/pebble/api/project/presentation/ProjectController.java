@@ -82,6 +82,14 @@ public class ProjectController {
                 .buildAndExpand(response.id()).encode().toUri()).body(ApiResponse.of(response));
     }
 
+    @GetMapping("/api/v1/projects/popular")
+    public ApiResponse<ProjectPage> popular(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size"));
+        var requested = pageable(query);
+        var rankedPage = PageRequest.of(requested.getPageNumber(), requested.getPageSize());
+        return ApiResponse.of(page(likes.decorate(projects.listPopular(rankedPage), requesterId(jwt))));
+    }
+
     @GetMapping("/api/v1/projects")
     public ApiResponse<ProjectPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "techStackId", "lifecycleStatus"));

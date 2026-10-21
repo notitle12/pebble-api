@@ -156,6 +156,37 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void deletingProjectCoverChecksOwnershipAndQueuesOnlyCoverFiles() throws Exception {
+        var cover = projectMedia.upload(owner.getId(), projectId, png(), MediaRole.THUMBNAIL, null, 0);
+        var coverKeys = List.copyOf(objectKeys);
+        var body = projectMedia.upload(owner.getId(), projectId, png(), MediaRole.BODY, null, 1);
+        String path = "/api/v1/projects/" + projectId + "/cover";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(path)
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000")).andExpect(status().isForbidden());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(path)
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000").header(HttpHeaders.AUTHORIZATION, bearer(other)))
+                .andExpect(status().isNotFound());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(path)
+                .header(HttpHeaders.ORIGIN, "https://evil.example").header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("select count(*) from project_media where id=?", Long.class, Long.parseLong(cover.id()))).isEqualTo(1);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(path)
+                    .header(HttpHeaders.ORIGIN, "http://localhost:3000").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                    .andExpect(status().isNoContent());
+        }
+        assertThat(jdbc.queryForObject("select count(*) from project_media where project_id=? and media_role='THUMBNAIL'", Long.class, projectId)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from project_media where id=?", Long.class, Long.parseLong(body.id()))).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key in (?,?)", Long.class,
+                coverKeys.get(0), coverKeys.get(1))).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select count(*) from media_deletion_job where storage_key in (?,?)", Long.class,
+                objectKeys.get(2), objectKeys.get(3))).isZero();
+        jdbc.update("delete from member_agreement where member_id=?", owner.getId());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(path)
+                .header(HttpHeaders.ORIGIN, "http://localhost:3000").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error.code").value("AGREEMENTS_REQUIRED"));
+    }
+
+    @Test
     void replacingCoverRollsBackOldImageWhenStorageFails() throws Exception {
         var old=projectMedia.upload(owner.getId(),projectId,png(),MediaRole.THUMBNAIL,null,0);
         failPut=true;
