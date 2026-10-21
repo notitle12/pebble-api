@@ -2,8 +2,6 @@ package com.pebble.api.member.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.pebble.api.global.exception.ApplicationException;
-import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.post.application.PostQueryService;
 import com.pebble.api.project.application.ProjectQueryService;
 import java.time.Clock;
@@ -30,12 +28,13 @@ public class BlogHomeService {
     private final Clock clock;
 
     public record Section(String key, boolean visible) { }
-    public record Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay) {
-        public Settings { if (activityDisplay == null) activityDisplay = "GRASS"; }
+    public record Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Integer featuredProjectLimit) {
+        public Settings { if (activityDisplay == null) activityDisplay = "GRASS"; if (featuredProjectLimit == null) featuredProjectLimit = 6; }
+        public Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay) { this(sections, techStacks, featuredProjectIds, activityDisplay, 6); }
         public Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds) { this(sections, techStacks, featuredProjectIds, "GRASS"); }
     }
     public record Activity(LocalDate from, LocalDate to, String timeZone, List<PostQueryService.ActivityDay> days) { }
-    public record Home(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Activity activity) { }
+    public record Home(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Integer featuredProjectLimit, Activity activity) { }
 
     public Settings mine(long memberId) {
         members.findProfileCompleted(memberId);
@@ -45,12 +44,17 @@ public class BlogHomeService {
     @Transactional
     public Settings save(long memberId, Settings settings) {
         members.findProfileCompletedForWrite(memberId);
-        // 회원 잠금 뒤 프로젝트 잠금을 획득한다. 다른 회원의 프로젝트는 연결하지 않는다.
+        Settings previous = read(memberId);
+        List<String> selected = new ArrayList<>();
+        // 이미 선택됐던 프로젝트가 비공개·삭제되면 설정 저장을 막지 않고 제외한다.
         for (String id : settings.featuredProjectIds()) {
+            if (previous.featuredProjectIds().contains(id) && !projects.isPublicOwnedBy(Long.parseLong(id), memberId)) continue;
             long projectId = Long.parseLong(id);
             projects.resolveForPost(projectId, memberId);
             projects.requirePublicForWrite(projectId);
+            selected.add(id);
         }
+        settings = new Settings(settings.sections(), settings.techStacks(), List.copyOf(selected), settings.activityDisplay(), settings.featuredProjectLimit());
         try {
             jdbc.update("""
                     insert into blog_home_settings(member_id, settings) values (?, ?::jsonb)
@@ -60,21 +64,36 @@ public class BlogHomeService {
         return settings;
     }
 
+    @Transactional
+    public Settings setFeatured(long memberId, long projectId, boolean featured) {
+        members.findProfileCompletedForWrite(memberId);
+        Settings current = read(memberId);
+        List<String> ids = new ArrayList<>(current.featuredProjectIds().stream()
+                .filter(id -> projects.isPublicOwnedBy(Long.parseLong(id), memberId)).toList());
+        String id = Long.toString(projectId);
+        if (featured) {
+            projects.resolveForPost(projectId, memberId);
+            projects.requirePublicForWrite(projectId);
+            if (!ids.contains(id)) {
+                if (ids.size() >= 6) throw new com.pebble.api.global.exception.ApplicationException(
+                        com.pebble.api.global.exception.GlobalErrorCode.VALIDATION_ERROR, "featuredProjectIds", "대표 프로젝트는 최대 6개까지 지정할 수 있습니다.");
+                ids.add(id);
+            }
+        } else ids.remove(id);
+        return save(memberId, new Settings(current.sections(), current.techStacks(), List.copyOf(ids), current.activityDisplay(), current.featuredProjectLimit()));
+    }
+
     public Home publicHome(String handle) {
         long memberId = members.findPublicBlog(handle).getId();
         Settings settings = read(memberId);
         List<String> publicProjects = new ArrayList<>();
         for (String id : settings.featuredProjectIds()) {
-            try {
-                if (projects.requirePublic(Long.parseLong(id)) == memberId) publicProjects.add(id);
-            } catch (ApplicationException exception) {
-                if (exception.error() != GlobalErrorCode.RESOURCE_NOT_FOUND) throw exception;
-            }
+            if (projects.isPublicOwnedBy(Long.parseLong(id), memberId)) publicProjects.add(id);
         }
         LocalDate to = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul")));
         LocalDate from = to.minusYears(1).plusDays(1);
         boolean activityVisible = settings.sections().stream().anyMatch(section -> section.key().equals("ACTIVITY") && section.visible());
-        return new Home(settings.sections(), settings.techStacks(), List.copyOf(publicProjects), settings.activityDisplay(),
+        return new Home(settings.sections(), settings.techStacks(), publicProjects.stream().limit(settings.featuredProjectLimit()).toList(), settings.activityDisplay(), settings.featuredProjectLimit(),
                 new Activity(from, to, "Asia/Seoul", activityVisible ? posts.publicActivity(memberId, from, to) : List.of()));
     }
 

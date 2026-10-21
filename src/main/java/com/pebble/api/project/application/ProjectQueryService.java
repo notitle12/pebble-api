@@ -38,6 +38,15 @@ public class ProjectQueryService {
         if (!project.getOwner().getId().equals(ownerId) || project.getVisibility() == ProjectVisibility.DELETED) throw notFound();
     }
 
+    /** 공개 홈의 선택 항목은 접근할 수 없으면 예외 없이 제외한다. */
+    public boolean isPublicOwnedBy(long projectId, long memberId) {
+        return projects.findById(projectId)
+                .filter(project -> project.getVisibility() == ProjectVisibility.PUBLIC && !project.isBlocked()
+                        && project.getOwner().getStatus() != MemberStatus.WITHDRAWAL_PENDING
+                        && project.getOwner().getId().equals(memberId))
+                .isPresent();
+    }
+
     public long requirePublic(long projectId) {
         Project project = projects.findById(projectId).orElseThrow(ProjectQueryService::notFound);
         if (project.getVisibility() != ProjectVisibility.PUBLIC || project.isBlocked()

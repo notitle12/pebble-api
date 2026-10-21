@@ -11,6 +11,8 @@ import org.springframework.data.repository.query.Param;
 public interface ProjectMediaRepository extends JpaRepository<ProjectMedia, Long> {
     List<ProjectMedia> findByProjectIdOrderByDisplayOrderAscIdAsc(long projectId);
 
+    List<ProjectMedia> findByProjectIdInAndMediaRole(java.util.Collection<Long> projectIds, MediaRole mediaRole);
+
     boolean existsByProjectIdAndMediaRole(long projectId, MediaRole mediaRole);
 
     @Modifying

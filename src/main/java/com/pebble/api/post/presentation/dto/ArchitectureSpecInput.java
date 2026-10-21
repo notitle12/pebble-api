@@ -21,8 +21,9 @@ public final class ArchitectureSpecInput {
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(8).maxStringLength(50000).build())
             .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final Set<String> GROUP_TYPES = Set.of("ORACLE_CLOUD", "AWS", "CLOUDFLARE", "DOCKER", "CLOUD", "CONTAINER", "CUSTOM");
+    private static final Set<String> GROUP_COLORS = Set.of("BLUE", "GREEN", "PURPLE", "AMBER", "ROSE", "PEACH", "TEAL", "INDIGO", "PINK", "GRAY");
     private static final Set<String> NODE_TYPES = Set.of("CLIENT", "APP", "DATABASE", "CACHE", "STORAGE", "PROXY", "CUSTOM");
-    private static final Set<String> ICONS = Set.of("ANDROID", "ANGULAR", "AWS", "AZURE", "C", "CACHE", "CLIENT", "CLOUD", "CLOUDFLARE", "CONTAINER", "CPP", "CSHARP", "CSS", "DART", "DATABASE", "DJANGO", "DOCKER", "DOCKER_COMPOSE", "DOTNET", "ELASTICSEARCH", "EXPRESS", "FASTAPI", "FIGMA", "FIREBASE", "FLASK", "FLUTTER", "GIT", "GITHUB_ACTIONS", "GITLAB_CI", "GO", "GOOGLE_CLOUD", "GRAFANA", "GRAPHQL", "HIBERNATE", "HTML", "HUGGING_FACE", "IOS", "JAVA", "JAVASCRIPT", "JENKINS", "JPA", "KAFKA", "KOTLIN", "KUBERNETES", "LANGCHAIN", "LARAVEL", "LINUX", "MARIADB", "MONGODB", "MYSQL", "NAVER_CLOUD", "NESTJS", "NETLIFY", "NEXTJS", "NGINX", "NODEJS", "NUXT", "OLLAMA", "OPENAI", "OPENSEARCH", "ORACLE", "ORACLE_CLOUD", "PHP", "POSTGRESQL", "PROMETHEUS", "PYTHON", "PYTORCH", "R2", "RABBITMQ", "REACT", "REACT_NATIVE", "REDIS", "RUBY", "RUBY_ON_RAILS", "RUST", "SCIKIT_LEARN", "SENTRY", "SERVER", "SPRING", "SPRING_BOOT", "SQLITE", "STORAGE", "STRIPE", "SUPABASE", "SVELTE", "SVELTEKIT", "SWIFT", "TAILWIND_CSS", "TENSORFLOW", "TERRAFORM", "TOSS_PAYMENTS", "TYPESCRIPT", "VERCEL", "VUEJS", "WORKERS");
+    private static final Set<String> ICONS = Set.of("ANDROID", "ANGULAR", "AWS", "AZURE", "C", "CACHE", "CLIENT", "CLOUD", "CLOUDFLARE", "CONTAINER", "CPP", "CSHARP", "CSS", "DART", "DATABASE", "DJANGO", "DOCKER", "DOCKER_COMPOSE", "DOTNET", "ELASTICSEARCH", "EXPRESS", "FASTAPI", "FIGMA", "FIREBASE", "FLASK", "FLUTTER", "GIT", "GITHUB_ACTIONS", "GITLAB_CI", "GO", "GOOGLE_CLOUD", "GRAFANA", "GRAPHQL", "HIBERNATE", "HTML", "HUGGING_FACE", "IOS", "JAVA", "JAVASCRIPT", "JENKINS", "JPA", "KAFKA", "KOTLIN", "KUBERNETES", "LANGCHAIN", "LARAVEL", "LINUX", "MARIADB", "MONGODB", "MYSQL", "NAVER_CLOUD", "NESTJS", "NETLIFY", "NEXTJS", "NGINX", "NODEJS", "NUXT", "OLLAMA", "OPENAI", "OPENSEARCH", "ORACLE", "ORACLE_CLOUD", "PERSON", "PHP", "POSTGRESQL", "PROMETHEUS", "PYTHON", "PYTORCH", "R2", "RABBITMQ", "REACT", "REACT_NATIVE", "REDIS", "REDUX", "RUBY", "RUBY_ON_RAILS", "RUST", "SCIKIT_LEARN", "SENTRY", "SERVER", "SPRING", "SPRING_BOOT", "SQLITE", "STORAGE", "STRIPE", "SUPABASE", "SVELTE", "SVELTEKIT", "SWIFT", "TAILWIND_CSS", "TENSORFLOW", "TERRAFORM", "TOSS_PAYMENTS", "TYPESCRIPT", "VERCEL", "VUEJS", "WORKERS");
     private ArchitectureSpecInput() {}
     private static boolean container(String type) { return "DOCKER".equals(type) || "CONTAINER".equals(type); }
 
@@ -46,12 +47,18 @@ public final class ArchitectureSpecInput {
         int index = 0;
         for (JsonNode group : groups) {
             String prefix = field + ".groups[" + index++ + "]";
-            object(group, Set.of("id", "type", "label", "typeLabel", "parentId", "bounds"), prefix);
+            object(group, Set.of("id", "type", "label", "typeLabel", "parentId", "bounds", "icon", "color"), prefix);
             String id = uniqueId(group.get("id"), prefix + ".id", ids);
             String type = text(group.get("type"), prefix + ".type", 40, true);
             if (!GROUP_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 그룹입니다.");
             text(group.get("label"), prefix + ".label", 100, false);
             customTypeLabel(group, type, prefix);
+            JsonNode groupIcon = group.get("icon");
+            if (groupIcon != null && !groupIcon.isNull() && (!groupIcon.isTextual() || !ICONS.contains(groupIcon.textValue())))
+                fail(prefix + ".icon", "지원하는 기본 아이콘을 선택해 주세요.");
+            JsonNode groupColor = group.get("color");
+            if (groupColor != null && !groupColor.isNull() && (!groupColor.isTextual() || !GROUP_COLORS.contains(groupColor.textValue())))
+                fail(prefix + ".color", "지원하는 그룹 색상을 선택해 주세요.");
             JsonNode bounds = group.get("bounds");
             if (bounds != null && !bounds.isNull()) {
                 object(bounds, Set.of("x", "y", "width", "height"), prefix + ".bounds");
@@ -66,21 +73,35 @@ public final class ArchitectureSpecInput {
             groupTypes.put(id, type);
         }
         index = 0;
+        Map<String, String> parentMap = new HashMap<>();
         for (JsonNode group : groups) {
             String prefix = field + ".groups[" + index++ + "]";
             String parent = optionalId(group, "parentId", prefix);
-            if (parent != null && (!container(group.get("type").textValue())
-                    || !groupTypes.containsKey(parent) || container(groupTypes.get(parent))))
-                fail(prefix + ".parentId", "컨테이너만 상위 그룹 안에 배치할 수 있습니다.");
+            if (parent != null) {
+                String id = group.get("id").textValue();
+                if (parent.equals(id) || !groupTypes.containsKey(parent) || container(groupTypes.get(parent)))
+                    fail(prefix + ".parentId", "올바른 상위 그룹을 선택해 주세요.");
+                parentMap.put(id, parent);
+            }
+        }
+        for (String id : parentMap.keySet()) {
+            Set<String> visited = new HashSet<>();
+            visited.add(id);
+            String curr = parentMap.get(id);
+            while (curr != null) {
+                if (!visited.add(curr)) fail(field + ".groups", "상위 그룹에 순환 참조가 존재합니다.");
+                curr = parentMap.get(curr);
+            }
         }
         index = 0;
         for (JsonNode node : nodes) {
             String prefix = field + ".nodes[" + index++ + "]";
-            object(node, Set.of("id", "type", "label", "typeLabel", "groupId", "icon", "position"), prefix);
+            object(node, Set.of("id", "type", "label", "typeLabel", "groupId", "icon", "position", "description"), prefix);
             nodeIds.add(uniqueId(node.get("id"), prefix + ".id", ids));
             String type = text(node.get("type"), prefix + ".type", 40, true);
             if (!NODE_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 요소입니다.");
             text(node.get("label"), prefix + ".label", 100, true);
+            optionalText(node, "description", prefix, 300);
             customTypeLabel(node, type, prefix);
             JsonNode icon = node.get("icon");
             if (icon != null && !icon.isNull() && (!icon.isTextual() || !ICONS.contains(icon.textValue())))
@@ -98,13 +119,17 @@ public final class ArchitectureSpecInput {
         index = 0;
         for (JsonNode edge : edges) {
             String prefix = field + ".edges[" + index++ + "]";
-            object(edge, Set.of("id", "source", "target", "label", "sourceSide", "targetSide", "waypoint"), prefix);
+            object(edge, Set.of("id", "source", "target", "label", "sourceSide", "targetSide", "waypoint", "direction"), prefix);
             uniqueId(edge.get("id"), prefix + ".id", ids);
             String source = identifier(edge.get("source"), prefix + ".source");
             String target = identifier(edge.get("target"), prefix + ".target");
             if (!(nodeIds.contains(source) || groupTypes.containsKey(source)) || !(nodeIds.contains(target) || groupTypes.containsKey(target))) fail(prefix, "존재하는 요소 또는 그룹끼리 연결해 주세요.");
             if (source.equals(target) || !pairs.add(source + ":" + target)) fail(prefix, "자기 연결이나 같은 방향의 중복 연결은 허용하지 않습니다.");
             optionalText(edge, "label", prefix, 200);
+            JsonNode direction = edge.get("direction");
+            if (direction != null && !direction.isNull() && (!direction.isTextual()
+                    || !Set.of("NONE", "FORWARD", "BOTH").contains(direction.textValue())))
+                fail(prefix + ".direction", "연결선 또는 단방향·양방향 화살표를 선택해 주세요.");
             for (String side : Set.of("sourceSide", "targetSide")) {
                 JsonNode value = edge.get(side);
                 if (value != null && !value.isNull() && (!value.isTextual()
