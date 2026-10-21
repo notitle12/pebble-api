@@ -16,14 +16,6 @@ public class PostComment extends Comment {
         super(author, body, visibility);
         this.contentId = contentId;
     }
-    public PostComment(long contentId, String guestNickname, String guestPasswordHash, String body) {
-        super(guestNickname, guestPasswordHash, body, CommentVisibility.PUBLIC);
-        this.contentId = contentId;
-    }
-    public PostComment(long contentId, String guestNickname, String guestPasswordHash, String body, CommentVisibility visibility) {
-        super(guestNickname, guestPasswordHash, body, visibility);
-        this.contentId = contentId;
-    }
     @Override
     public long getContentId() { return contentId; }
 }
