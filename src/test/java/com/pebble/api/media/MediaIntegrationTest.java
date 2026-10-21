@@ -133,6 +133,40 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void publicProjectThumbnailContentKeepsVisibilityAndOwnershipBoundaries() throws Exception {
+        var cover=projectMedia.upload(owner.getId(),projectId,png(),MediaRole.THUMBNAIL,null,0);
+        String path="/api/v1/projects/"+projectId+"/media/"+cover.id()+"/content";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path))
+                .andExpect(status().isFound()).andExpect(header().string("Location",cover.url()))
+                .andExpect(header().string("Cache-Control","no-store"));
+        long foreign=insertAndTrackProject(other.getId());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/projects/"+foreign+"/media/"+cover.id()+"/content")).andExpect(status().isNotFound());
+        jdbc.update("update project set visibility_status='HIDDEN' where id=?",projectId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+        jdbc.update("update project set visibility_status='PUBLIC',is_blocked=true,blocked_at=now(),blocked_by_admin_id=1 where id=?",projectId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+        jdbc.update("update project set is_blocked=false,blocked_at=null,blocked_by_admin_id=null where id=?",projectId);
+        jdbc.update("update member set status='WITHDRAWAL_PENDING',withdrawal_requested_at=now(),withdrawal_scheduled_at=now()+interval '7 days' where id=?",owner.getId());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void publicPostThumbnailContentDoesNotExposeUnselectedUploadsOrDrafts() throws Exception {
+        var selected=bodyImages.upload(owner.getId(),postId,png());
+        var unused=bodyImages.upload(owner.getId(),postId,png());
+        jdbc.update("update post set thumbnail_image_id=? where id=?",Long.parseLong(selected.id()),postId);
+        String path="/api/v1/posts/"+postId+"/images/"+selected.id()+"/content";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isFound()).andExpect(header().string("Cache-Control","no-store"));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/posts/"+postId+"/images/"+unused.id()+"/content")).andExpect(status().isNotFound());
+        jdbc.update("update post set is_draft=true,visibility_status='HIDDEN' where id=?",postId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+        jdbc.update("update post set is_draft=false,visibility_status='HIDDEN' where id=?",postId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+        jdbc.update("update post set visibility_status='PUBLIC',is_blocked=true,blocked_at=now(),blocked_by_admin_id=1 where id=?",postId);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)).andExpect(status().isNotFound());
+    }
+
+    @Test
     void projectBodyImagesRequirePublishedReferenceAndOwnerForWrites() throws Exception {
         var image=projectMedia.upload(owner.getId(),projectId,png(),MediaRole.BODY,null,0);
         String path="/api/v1/projects/"+projectId+"/media/"+image.id()+"/content";

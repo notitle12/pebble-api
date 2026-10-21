@@ -98,10 +98,12 @@ public class ProjectMediaService {
     public String publicBodyUrl(long projectId,long mediaId){
         Project project=projects.findById(projectId).orElseThrow(ProjectMediaService::notFound);
         if(project.getVisibility()!=ProjectVisibility.PUBLIC||project.isBlocked()
-                ||project.getOwner().getStatus()==com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING
-                ||!ProjectService.referencesImage(project,mediaId))throw notFound();
+                ||project.getOwner().getStatus()==com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING)throw notFound();
         ProjectMedia item=item(projectId,mediaId);
-        if(item.getMediaRole()!=MediaRole.BODY)throw notFound();
+        // 현재 대표 이미지와 실제 발행 본문에 연결된 이미지만 공개한다.
+        boolean thumbnail=item.getMediaRole()==MediaRole.THUMBNAIL;
+        boolean publishedBody=item.getMediaRole()==MediaRole.BODY&&ProjectService.referencesImage(project,mediaId);
+        if(!thumbnail&&!publishedBody)throw notFound();
         return client().signedUrl(item.getStorageKey());
     }
 
