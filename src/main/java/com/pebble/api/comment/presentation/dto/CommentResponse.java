@@ -19,10 +19,8 @@ public record CommentResponse(String id, Author author, String body, CommentVisi
             java.util.function.Function<com.pebble.api.member.domain.Member, String> imageUrl) {
         Comment comment = view.comment();
         var member = comment.getAuthor();
-        var author = member == null
-                ? new Author(null, null, null, comment.getGuestNickname(), null)
-                : new Author(member.getId().toString(), member.getHandle(), member.getBlogName(),
-                        member.getNickname(), imageUrl.apply(member));
+        var author = new Author(member.getId().toString(), member.getHandle(), member.getBlogName(),
+                member.getNickname(), imageUrl.apply(member));
         return new CommentResponse(comment.getId().toString(),
                 author,
                 view.locked() ? "비밀 댓글입니다." : comment.getBody(), comment.getVisibility(), view.locked(),

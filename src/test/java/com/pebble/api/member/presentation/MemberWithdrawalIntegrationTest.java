@@ -16,6 +16,8 @@ import com.pebble.api.auth.application.UserSessionService;
 import com.pebble.api.auth.application.OAuthLoginService;
 import com.pebble.api.auth.application.UserRefreshTokenService;
 import com.pebble.api.auth.application.oauth.OAuthProviderClient;
+import com.pebble.api.board.application.BoardChanges;
+import com.pebble.api.board.application.BoardService;
 import com.pebble.api.member.application.MemberProfileService;
 import com.pebble.api.member.application.MemberWithdrawalService;
 import com.pebble.api.member.domain.Member;
@@ -64,6 +66,7 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager em;
     @Autowired UserRefreshTokenService refreshTokens;
+    @Autowired BoardService boards;
     @MockitoBean(name = "naverOAuthClient") OAuthProviderClient naver;
 
     private Member member;
@@ -109,6 +112,26 @@ class MemberWithdrawalIntegrationTest extends AuthenticationTestSupport {
                 .header(HttpHeaders.AUTHORIZATION,bearer()).contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isNotFound());
         org.mockito.Mockito.verifyNoInteractions(naver);
+    }
+
+    @Test
+    void typedWithdrawalRemovesDeletedBoardDescendantAfterParentMove() throws Exception {
+        long owner = member.getId();
+        var names = java.util.Set.of("name", "parentId");
+        long a = boards.create(owner, new BoardChanges(names, "A", null, 0)).getId();
+        long b = boards.create(owner, new BoardChanges(names, "B", a, 0)).getId();
+        long c = boards.create(owner, new BoardChanges(names, "C", b, 0)).getId();
+        boards.delete(c, owner);
+        long d = boards.create(owner, new BoardChanges(names, "D", null, 0)).getId();
+        long e = boards.create(owner, new BoardChanges(names, "E", d, 0)).getId();
+        boards.update(b, owner, new BoardChanges(java.util.Set.of("parentId"), null, e, null));
+
+        mvc.perform(post(PATH + "/withdrawal").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                        .header(HttpHeaders.AUTHORIZATION, bearer()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"confirmation\":\"내 계정을 삭제하는데 동의합니다.\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.deleted").value(true));
+        assertThat(jdbc.queryForObject("select count(*) from member where id=?", Long.class, owner)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from board where owner_member_id=?", Long.class, owner)).isZero();
     }
 
     @Test

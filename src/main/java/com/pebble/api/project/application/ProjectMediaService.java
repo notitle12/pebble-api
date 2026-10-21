@@ -39,6 +39,15 @@ public class ProjectMediaService {
         return upload(memberId,projectId,source,MediaRole.THUMBNAIL,null,0);
     }
 
+    public void deleteCover(long memberId, long projectId) {
+        Project project = owned(memberId, projectId);
+        media.findByProjectIdOrderByDisplayOrderAscIdAsc(projectId).stream()
+                .filter(item -> item.getMediaRole() == MediaRole.THUMBNAIL).forEach(media::delete);
+        project.touchMedia();
+        media.flush();
+        projects.flush();
+    }
+
     public ProjectMediaView upload(
             long memberId, long projectId, byte[] source, MediaRole role, String altText, int order) {
         Project project = owned(memberId, projectId);

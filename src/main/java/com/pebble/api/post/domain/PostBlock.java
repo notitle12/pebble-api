@@ -63,6 +63,28 @@ public class PostBlock {
 
     public PostBlock(Post post, BlockType type, String content, CodeLanguage language, String title, Integer displayOrder,
                      BlockAlignment alignment) {
+        validate(type, language, displayOrder);
+        this.post = post;
+        this.type = type;
+        this.content = content;
+        this.language = language;
+        this.title = title;
+        this.displayOrder = displayOrder;
+        this.alignment = alignment == null ? BlockAlignment.LEFT : alignment;
+    }
+
+    public void update(BlockType type, String content, CodeLanguage language, String title, Integer displayOrder,
+                       BlockAlignment alignment) {
+        validate(type, language, displayOrder);
+        this.type = type;
+        this.content = content;
+        this.language = language;
+        this.title = title;
+        this.displayOrder = displayOrder;
+        this.alignment = alignment == null ? BlockAlignment.LEFT : alignment;
+    }
+
+    private static void validate(BlockType type, CodeLanguage language, Integer displayOrder) {
         if (type == BlockType.CODE && language == null) {
             throw new IllegalArgumentException("Code block requires a language");
         }
@@ -72,13 +94,6 @@ public class PostBlock {
         if (displayOrder == null || displayOrder < 0) {
             throw new IllegalArgumentException("Display order must not be negative");
         }
-        this.post = post;
-        this.type = type;
-        this.content = content;
-        this.language = language;
-        this.title = title;
-        this.displayOrder = displayOrder;
-        this.alignment = alignment == null ? BlockAlignment.LEFT : alignment;
     }
 
     @PrePersist

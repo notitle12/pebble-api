@@ -35,6 +35,3 @@ pebble:
     published: ${PEBBLE_LEGAL_PUBLISHED:false}
     # 네이버 개발중 테스트 계정의 가입 동의를 위한 명시적 설정. 공개 검수 승인과 별개다.
     test-mode: ${PEBBLE_LEGAL_TEST_MODE:false}
-  comment:
-    # X-Real-IP를 덮어쓰는 자체 프록시의 실제 연결 주소만 지정한다. 기본은 전달 헤더를 신뢰하지 않는다.
-    trusted-proxy-cidrs: ${COMMENT_TRUSTED_PROXY_CIDRS:}
