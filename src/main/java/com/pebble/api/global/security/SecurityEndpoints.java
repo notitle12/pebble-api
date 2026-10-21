@@ -15,6 +15,12 @@ public final class SecurityEndpoints {
     public record Endpoint(HttpMethod method, String path, Access access) {}
 
     public static final List<Endpoint> API = List.of(
+            new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/reports", Access.USER),
+            new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/reports", Access.USER),
+            new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/comments/{commentId:[0-9]+}/reports", Access.USER),
+            new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/comments/{commentId:[0-9]+}/reports", Access.USER),
+            new Endpoint(HttpMethod.GET, "/api/v1/admin/reports", Access.ADMIN),
+            new Endpoint(HttpMethod.POST, "/api/v1/admin/reports/{reportId:[0-9]+}/resolve", Access.ADMIN),
             new Endpoint(HttpMethod.POST, "/api/v1/auth/naver/authorization", Access.PUBLIC),
             new Endpoint(HttpMethod.POST, "/api/v1/auth/naver/login", Access.PUBLIC),
             new Endpoint(HttpMethod.POST, "/api/v1/auth/naver/withdrawal/cancel", Access.PUBLIC),

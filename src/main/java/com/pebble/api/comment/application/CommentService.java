@@ -36,6 +36,12 @@ public class CommentService {
     }
 
     @Transactional
+    public Comment lockForReportManagement(CommentTarget type,long id) {
+        return type==CommentTarget.POST?postComments.findForManagementUpdate(id).orElseThrow(CommentService::notFound):
+            projectComments.findForManagementUpdate(id).orElseThrow(CommentService::notFound);
+    }
+
+    @Transactional
     public void deleteForManagement(CommentTarget type, long commentId) {
         // 부모·회원 상태와 무관한 삭제는 댓글 행만 잠가 작성자 수정과 직렬화한다.
         Comment comment = type == CommentTarget.POST
