@@ -92,7 +92,7 @@ class MemberAgreementIntegrationTest extends AuthenticationTestSupport {
                 payload().replace("true", "null"), payload().replace("\"ageConfirmed\":true", "\"ageConfirmed\":true,\"memberId\":\"1\"")}) {
             mvc.perform(post(PATH).header("Authorization", token).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
         }
-        mvc.perform(post(PATH).header("Authorization", token).contentType(MediaType.APPLICATION_JSON).content(payload().replace("2026-10-15", "old")))
+        mvc.perform(post(PATH).header("Authorization", token).contentType(MediaType.APPLICATION_JSON).content(payload().replace("2026-10-21", "old")))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("AGREEMENT_VERSION_CHANGED"));
         assertThat(jdbc.queryForObject("select count(*) from member_agreement where member_id=?", Long.class, member.getId())).isZero();
     }
@@ -125,5 +125,5 @@ class MemberAgreementIntegrationTest extends AuthenticationTestSupport {
 
     private Member pending() { return members.saveAndFlush(new Member("consent-"+UUID.randomUUID().toString().substring(0,12), null, MemberStatus.ACTIVE, null, null)); }
     private String bearer(Member member) { return "Bearer " + tokens.issueForMember(member.getId(), Instant.now()); }
-    private String payload() { return "{\"termsVersion\":\"2026-10-15\",\"privacyVersion\":\"2026-10-15\",\"termsAccepted\":true,\"privacyAccepted\":true,\"ageConfirmed\":true}"; }
+    private String payload() { return "{\"termsVersion\":\"2026-10-21\",\"privacyVersion\":\"2026-10-21\",\"termsAccepted\":true,\"privacyAccepted\":true,\"ageConfirmed\":true}"; }
 }
