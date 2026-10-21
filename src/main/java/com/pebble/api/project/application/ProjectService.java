@@ -159,6 +159,13 @@ public class ProjectService {
         projects.flush();
     }
 
+    @Transactional
+    public Project lockForReportManagement(long id) {
+        Long ownerId = projects.findOwnerIdForManagement(id).orElseThrow(ProjectService::notFound);
+        members.findForManagementWrite(ownerId);
+        return projects.findByIdForUpdate(id).orElseThrow(ProjectService::notFound);
+    }
+
     private Project managementForUpdate(long projectId) {
         Long ownerId = projects.findOwnerIdForManagement(projectId).orElseThrow(ProjectService::notFound);
         members.findForManagementWrite(ownerId);
