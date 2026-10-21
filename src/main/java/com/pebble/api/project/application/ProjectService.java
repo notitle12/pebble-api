@@ -86,6 +86,16 @@ public class ProjectService {
         return detailView(project, owner);
     }
 
+    public Page<ProjectView> listPopular(Pageable pageable) {
+        var ranked = projects.findPopularIds(pageable);
+        if (ranked.isEmpty()) return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, ranked.getTotalElements());
+        // 순위 ID를 먼저 조회하고 관계를 일괄 로딩한다. 다시 공개 조건을 적용해 비공개 전환도 보호한다.
+        var visible = projects.findAll(publicFilter(null, null, null).and((root, query, cb) -> root.get("id").in(ranked.getContent())), Pageable.unpaged());
+        var byId = visible.getContent().stream().collect(java.util.stream.Collectors.toMap(Project::getId, value -> value));
+        var ordered = ranked.getContent().stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
+        return page(new org.springframework.data.domain.PageImpl<>(ordered, pageable, ranked.getTotalElements()), false);
+    }
+
     public Page<ProjectView> listPublic(Long techStackId, ProjectLifecycleStatus lifecycleStatus, Pageable pageable) {
         return page(projects.findAll(publicFilter(techStackId, lifecycleStatus, null), pageable), false);
     }
@@ -147,6 +157,13 @@ public class ProjectService {
         projects.flush();
         applyOrder(orderedProjects(project.getOwner().getId()));
         projects.flush();
+    }
+
+    @Transactional
+    public Project lockForReportManagement(long id) {
+        Long ownerId = projects.findOwnerIdForManagement(id).orElseThrow(ProjectService::notFound);
+        members.findForManagementWrite(ownerId);
+        return projects.findByIdForUpdate(id).orElseThrow(ProjectService::notFound);
     }
 
     private Project managementForUpdate(long projectId) {
@@ -297,15 +314,29 @@ public class ProjectService {
 
     private Page<ProjectView> page(Page<Project> page, boolean owner) {
         Map<Long, List<TechStack>> byProject = new HashMap<>();
+        Map<Long, String> thumbnailsByProject = new HashMap<>();
         if (!page.isEmpty()) {
-            for (ProjectTechStack link : projectTechStacks.findForProjects(page.getContent().stream().map(Project::getId).toList())) {
+            List<Long> projectIds = page.getContent().stream().map(Project::getId).toList();
+            for (ProjectTechStack link : projectTechStacks.findForProjects(projectIds)) {
                 byProject.computeIfAbsent(link.getProject().getId(), id -> new ArrayList<>()).add(link.getTechStack());
+            }
+            var client = mediaStorage.getIfAvailable();
+            if (client != null) {
+                var thumbMedia = media.findByProjectIdInAndMediaRole(projectIds, com.pebble.api.project.domain.MediaRole.THUMBNAIL);
+                Map<Long, Project> projectMap = page.getContent().stream().collect(Collectors.toMap(Project::getId, p -> p));
+                for (var item : thumbMedia) {
+                    Project p = projectMap.get(item.getProjectId());
+                    if (p != null && isPublic(p)) {
+                        String key = item.getThumbnailStorageKey() != null ? item.getThumbnailStorageKey() : item.getStorageKey();
+                        thumbnailsByProject.put(item.getProjectId(), client.signedUrl(key));
+                    }
+                }
             }
         }
         return page.map(project -> {
             initializeOwner(project);
             return new ProjectView(project, null, null,
-                    List.copyOf(byProject.getOrDefault(project.getId(), List.of())), false, owner);
+                    List.copyOf(byProject.getOrDefault(project.getId(), List.of())), false, owner, 0, false, null, thumbnailsByProject.get(project.getId()));
         });
     }
 
@@ -345,7 +376,13 @@ public class ProjectService {
     private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }
 
     public record ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
-                              boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media) {
+                              boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media,
+                              String thumbnailUrl) {
+        public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
+                           boolean detail, boolean owner, long likeCount, boolean likedByMe, List<ProjectMediaView> media) {
+            this(project, features, links, techStacks, detail, owner, likeCount, likedByMe, media,
+                    media == null ? null : media.stream().filter(m -> m.mediaRole() == com.pebble.api.project.domain.MediaRole.THUMBNAIL).findFirst().map(m -> m.thumbnailUrl() != null ? m.thumbnailUrl() : m.url()).orElse(null));
+        }
         public ProjectView(Project project, List<ProjectFeature> features, List<ProjectLink> links, List<TechStack> techStacks,
                            boolean detail, boolean owner, long likeCount, boolean likedByMe) {
             this(project, features, links, techStacks, detail, owner, likeCount, likedByMe, detail ? List.of() : null);

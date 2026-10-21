@@ -69,6 +69,14 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/api/v1/posts/popular")
+    public ApiResponse<PostPage> popular(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size"));
+        var requested = pageable(query, "publishedAt");
+        var rankedPage = PageRequest.of(requested.getPageNumber(), requested.getPageSize());
+        return ApiResponse.of(page(likes.decorate(posts.listPopular(rankedPage), requesterId(jwt))));
+    }
+
     @GetMapping("/api/v1/posts")
     public ApiResponse<PostPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "categoryId", "authorId"));

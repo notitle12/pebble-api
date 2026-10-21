@@ -66,4 +66,24 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     @Query("select p.author.id from Post p where p.id = :id")
     Optional<Long> findAuthorIdForManagement(@Param("id") long id);
+    @Query(value = """
+            select p.id from post p join member owner on owner.id=p.author_member_id
+            join (select l.post_id as content_id, count(*) as likes
+                  from post_like l join member voter on voter.id=l.member_id
+                  where l.deleted_at is null and voter.status <> 'WITHDRAWAL_PENDING'
+                  group by l.post_id) ranking on ranking.content_id=p.id
+            where p.visibility_status='PUBLIC' and not p.is_blocked and not p.is_draft
+              and owner.status <> 'WITHDRAWAL_PENDING'
+            order by ranking.likes desc, p.published_at desc nulls last, p.id desc
+            """, countQuery = """
+            select count(*) from post p join member owner on owner.id=p.author_member_id
+            join (select l.post_id as content_id, count(*) as likes
+                  from post_like l join member voter on voter.id=l.member_id
+                  where l.deleted_at is null and voter.status <> 'WITHDRAWAL_PENDING'
+                  group by l.post_id) ranking on ranking.content_id=p.id
+            where p.visibility_status='PUBLIC' and not p.is_blocked and not p.is_draft
+              and owner.status <> 'WITHDRAWAL_PENDING'
+            """, nativeQuery = true)
+    Page<Long> findPopularIds(Pageable pageable);
+
 }

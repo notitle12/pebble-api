@@ -87,6 +87,32 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(mine()).header("Authorization", bearer(owner))).andExpect(jsonPath("$.data.featuredProjectIds[0]").value(Long.toString(own)));
     }
 
+    @Test
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void unavailableFeaturedProjectsDoNotFailHomeAtRealTransactionBoundary() throws Exception {
+        try {
+            long visible = project(owner, "PUBLIC"), hidden = project(owner, "PUBLIC"), deleted = project(owner, "PUBLIC");
+            mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json")
+                    .content(mapper.writeValueAsString(settings(List.of("" + visible, "" + hidden, "" + deleted)))))
+                    .andExpect(status().isOk());
+            jdbc.update("update project set visibility_status='HIDDEN' where id=?", hidden);
+            jdbc.update("update project set visibility_status='DELETED' where id=?", deleted);
+            mvc.perform(get(path())).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(1))
+                    .andExpect(jsonPath("$.data.featuredProjectIds[0]").value("" + visible))
+                    .andExpect(jsonPath("$.data.sections.length()").value(4))
+                    .andExpect(jsonPath("$.data.activity.timeZone").value("Asia/Seoul"));
+            jdbc.update("delete from project where id=?", deleted);
+            mvc.perform(get(path())).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(1));
+            mvc.perform(get(mine()).header("Authorization", bearer(owner)))
+                    .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(3));
+        } finally {
+            jdbc.update("delete from project where owner_member_id in (?,?)", owner.getId(), other.getId());
+            jdbc.update("delete from member where id in (?,?)", owner.getId(), other.getId());
+        }
+    }
+
     @Test void activityUsesSeoulPublicationDatesAndExcludesPrivateBlockedDraftOtherAndExpiredPosts() throws Exception {
         var zone=ZoneId.of("Asia/Seoul");var today=LocalDate.now(zone);var from=today.minusYears(1).plusDays(1);
         Instant first=today.atStartOfDay(zone).toInstant();
@@ -173,6 +199,80 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
         jdbc.update("delete from post where id=?",Long.parseLong(id));
         jdbc.update("delete from member where id=?",owner.getId());
         assertThat(jdbc.queryForObject("select count(*) from post_publication_history where member_id=?",Long.class,owner.getId())).isZero();
+    }
+
+    @Test void featuredProjectManagementPreservesPreferencesAndStaleChoicesDoNotBlockSaving() throws Exception {
+        long stale = project(owner, "PUBLIC"), first = project(owner, "PUBLIC"), second = project(owner, "PUBLIC");
+        var input = settings(List.of("" + stale, "" + first, "" + second));
+        mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.featuredProjectLimit").value(6));
+        jdbc.update("update project set visibility_status='DELETED' where id=?", stale);
+        entityManager.clear();
+        input.put("featuredProjectLimit", 1);
+        input.put("techStacks", List.of("Java"));
+        mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.featuredProjectIds.length()").value(2));
+        mvc.perform(get(path())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(1))
+                .andExpect(jsonPath("$.data.featuredProjectIds[0]").value("" + first));
+        long added = project(owner, "PUBLIC");
+        String endpoint = "/api/v1/members/me/projects/" + added + "/featured";
+        mvc.perform(put(endpoint).header("Authorization", bearer(owner)).contentType("application/json").content("{\"featured\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.featuredProjectIds.length()").value(3))
+                .andExpect(jsonPath("$.data.featuredProjectLimit").value(1)).andExpect(jsonPath("$.data.techStacks[0]").value("Java"));
+        mvc.perform(put(endpoint).header("Authorization", bearer(owner)).contentType("application/json").content("{\"featured\":true}"))
+                .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(3));
+        mvc.perform(put(endpoint).header("Authorization", bearer(owner)).contentType("application/json").content("{\"featured\":false}"))
+                .andExpect(jsonPath("$.data.featuredProjectIds.length()").value(2));
+        long foreign = project(other, "PUBLIC");
+        mvc.perform(put("/api/v1/members/me/projects/" + foreign + "/featured").header("Authorization", bearer(owner))
+                .contentType("application/json").content("{\"featured\":true}")).andExpect(status().isNotFound());
+        for (Object limit : List.of(0, 7, "2", 1.5)) {
+            input.put("featuredProjectLimit", limit);
+            mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input)))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test void popularityRanksAllPublicContentAndExcludesUnavailableAndCancelledLikes() throws Exception {
+        var now = Instant.now();
+        long oldPost = post(owner, now.minusSeconds(86400 * 30), "PUBLIC", false, false);
+        long newPost = post(owner, now, "PUBLIC", false, false);
+        long hiddenPost = post(owner, now, "HIDDEN", false, false);
+        long blockedPost = post(owner, now, "PUBLIC", true, false);
+        post(owner, now, "PUBLIC", false, false);
+        long oldProject = project(owner, "PUBLIC"), newProject = project(owner, "PUBLIC");
+        long hiddenProject = project(owner, "HIDDEN");
+        project(owner, "PUBLIC");
+        jdbc.update("update project set published_at=? where id=?", java.sql.Timestamp.from(now.minusSeconds(86400 * 30)), oldProject);
+        jdbc.update("update project set published_at=? where id=?", java.sql.Timestamp.from(now), newProject);
+        for (String kind : List.of("post", "project")) {
+            long oldId = kind.equals("post") ? oldPost : oldProject;
+            long newId = kind.equals("post") ? newPost : newProject;
+            long hiddenId = kind.equals("post") ? hiddenPost : hiddenProject;
+            for (long contentId : List.of(oldId, hiddenId)) {
+                for (Member voter : List.of(owner, other)) {
+                    jdbc.update("insert into " + kind + "_like(id," + kind + "_id,member_id,created_at) values(?,?,?,now())",
+                            TsidGenerator.generate(), contentId, voter.getId());
+                }
+            }
+            jdbc.update("insert into " + kind + "_like(id," + kind + "_id,member_id,created_at) values(?,?,?,now())",
+                    TsidGenerator.generate(), newId, owner.getId());
+            if (kind.equals("post")) jdbc.update("insert into post_like(id,post_id,member_id,created_at) values(?,?,?,now())",
+                    TsidGenerator.generate(), blockedPost, owner.getId());
+            String endpoint = "/api/v1/" + kind + "s/popular";
+            mvc.perform(get(endpoint).param("size", "1")).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].id").value("" + oldId))
+                    .andExpect(jsonPath("$.data.content[0].likeCount").value(2))
+                    .andExpect(jsonPath("$.data.totalElements").value(2))
+                    .andExpect(jsonPath("$.data.hasNext").value(true));
+            mvc.perform(get(endpoint).param("size", "1").param("page", "1"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value("" + newId));
+            jdbc.update("update " + kind + "_like set deleted_at=now() where " + kind + "_id=? and member_id=?", oldId, other.getId());
+            mvc.perform(get(endpoint)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].id").value("" + newId));
+            mvc.perform(get(endpoint).param("sort", "createdAt,desc")).andExpect(status().isBadRequest());
+        }
     }
 
     private Map<String,Object> settings(List<String> ids) { return new java.util.LinkedHashMap<>(Map.of("sections",List.of(section("ACTIVITY",true),section("TECH_STACKS",true),section("PROJECTS",true),section("RECENT_POSTS",true)),"techStacks",List.of(),"featuredProjectIds",ids)); }
