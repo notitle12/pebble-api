@@ -241,6 +241,9 @@ public class PostService {
         normalizeBoard(post.getAuthor().getId(),post.getBoardId());
     }
 
+    @Transactional
+    public Post lockForReportManagement(long id) { return forManagementUpdate(id); }
+
     private Post forManagementUpdate(long id) {
         long authorId = posts.findAuthorIdForManagement(id).orElseThrow(PostService::notFound);
         members.findForManagementWrite(authorId);
