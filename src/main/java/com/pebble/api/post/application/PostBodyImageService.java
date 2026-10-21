@@ -71,7 +71,7 @@ public class PostBodyImageService {
         boolean referenced=blocks.findByPostIdOrderByDisplayOrderAsc(postId).stream()
                 .filter(block->block.getType()==BlockType.HTML || block.getType()==BlockType.MARKDOWN)
                 .anyMatch(block->block.getContent().contains(reference));
-        if(!referenced)throw notFound();
+        if(!referenced&&!java.util.Objects.equals(post.getThumbnailImageId(),imageId))throw notFound();
         return client().signedUrl(image.getStorageKey());
     }
 
