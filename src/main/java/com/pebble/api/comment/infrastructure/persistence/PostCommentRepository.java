@@ -28,7 +28,7 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
     @EntityGraph(attributePaths = "author")
     @Query("""
             select c from PostComment c
-            left join c.author a
+            join c.author a
             where (:contentId is null or c.contentId=:contentId)
               and (:authorId is null or a.id=:authorId)
               and (:visibility is null or c.visibility=:visibility)
@@ -41,11 +41,10 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
     @EntityGraph(attributePaths = "author")
     @Query("""
             select c from PostComment c
-            left join c.author a
+            join c.author a
             where c.contentId=:contentId and c.deletedAt is null
-              and (a is null or a.status <> com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING)
+              and a.status <> com.pebble.api.member.domain.MemberStatus.WITHDRAWAL_PENDING
               and (c.visibility = com.pebble.api.comment.domain.CommentVisibility.PUBLIC
-                   or (a is null and c.visibility = com.pebble.api.comment.domain.CommentVisibility.SECRET)
                    or a.id=:requesterId or :owner=true)
             """)
     Page<PostComment> findVisible(@Param("contentId") long contentId, @Param("requesterId") Long requesterId,
