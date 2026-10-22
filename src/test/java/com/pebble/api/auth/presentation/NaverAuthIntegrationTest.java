@@ -86,8 +86,10 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
                 .thenReturn(new OAuthProfile("consent-subject", "pebble", null, proof));
         var data = dataFrom(login("code", cookie.getValue(), cookie));
-        var member = (Map<?, ?>) data.get("member");
-        assertThat(member.get("agreementsAccepted")).isEqualTo("current".equals(kind));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/members/me")
+                        .header("Authorization", "Bearer " + data.get("accessToken")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agreementsAccepted").value("current".equals(kind)));
         assertThat(memberRepository.findAll().getFirst().hasAcceptedAgreements()).isEqualTo("current".equals(kind));
     }
 
