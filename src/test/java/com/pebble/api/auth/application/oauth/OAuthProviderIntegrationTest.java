@@ -68,7 +68,7 @@ class OAuthProviderIntegrationTest extends AuthenticationTestSupport {
         OAuthProviderRegistration testGoogleRegistration() {
             return new OAuthProviderRegistration(OAuthProvider.GOOGLE, Duration.ofMinutes(2), new OAuthProviderClient() {
                 public String authorizationUrl(String state) { return "https://example.test/google?state=" + state; }
-                public OAuthProfile authenticate(String code, String state) { return new OAuthProfile("same-subject", "same-name", null); }
+                public OAuthProfile authenticate(String code, String state) { return new OAuthProfile("same-subject", "same-name", null, null, true); }
             });
         }
     }

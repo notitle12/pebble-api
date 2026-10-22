@@ -30,11 +30,13 @@ public class OAuthMemberService {
         this.names = names;
     }
 
-    public Member resolve(OAuthProvider provider, String subject, String nickname, String profileImageUrl) {
+    public Member resolve(OAuthProvider provider, String subject, String nickname, String profileImageUrl, boolean registrationAllowed) {
         try {
             return Objects.requireNonNull(transaction.execute(status -> {
                 var existing = identityRepository.findByProviderAndProviderSubject(provider, subject);
                 if (existing.isPresent()) return existing.get().getMember();
+                if (!registrationAllowed) throw new com.pebble.api.global.exception.ApplicationException(
+                        com.pebble.api.member.domain.MemberError.SNS_AGE_CONFIRMATION_REQUIRED);
                 names.lockNames();
                 // 잠금을 기다리는 동안 동일 OAuth 계정이 생성됐을 수 있으므로 다시 확인한다.
                 return identityRepository.findByProviderAndProviderSubject(provider, subject)
