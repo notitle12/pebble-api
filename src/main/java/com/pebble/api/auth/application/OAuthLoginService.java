@@ -22,6 +22,7 @@ public class OAuthLoginService {
     private final OAuthProviders providers;
     private final OAuthStateStore stateStore;
     private final OAuthMemberService memberService;
+    private final com.pebble.api.member.application.MemberAgreementService agreements;
     private final UserSessionService sessions;
     private final MemberWithdrawalService withdrawals;
 
@@ -37,6 +38,10 @@ public class OAuthLoginService {
                 profile.nickname(), profile.profileImageUrl());
         // 공급자 인증 뒤 회원 쓰기 잠금으로 기한 내 예약을 취소하고 최신 상태로 로그인한다.
         withdrawals.restoreOnLogin(member.getId());
+        if (profile.serviceAgreement() != null) {
+            agreements.acceptVerifiedProviderAgreement(member.getId(), profile.serviceAgreement().termsVersion(),
+                    profile.serviceAgreement().privacyVersion());
+        }
         var grant = sessions.login(member.getId());
         return new LoginGrant(grant.accessToken(), grant.refreshToken(), grant.cookieTtl(), grant.member());
     }

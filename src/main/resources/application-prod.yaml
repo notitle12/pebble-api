@@ -43,6 +43,14 @@ pebble:
       token-uri: https://nid.naver.com/oauth2.0/token
       profile-uri: https://openapi.naver.com/v1/nid/me
       state-ttl: 5m
+      # 네이버 개발자센터 TERMS_20261022/PRIVACY_20261022 필수 동의 및 만14세 제한 설정과 일치해야 한다.
+      plus:
+        enabled: ${NAVER_PLUS_ENABLED:true}
+        age-restricted: ${NAVER_PLUS_AGE_RESTRICTED:true}
+        terms-tag: ${NAVER_PLUS_TERMS_TAG:TERMS_20261022}
+        privacy-tag: ${NAVER_PLUS_PRIVACY_TAG:PRIVACY_20261022}
+        terms-version: ${NAVER_PLUS_TERMS_VERSION:2026-10-22}
+        privacy-version: ${NAVER_PLUS_PRIVACY_VERSION:2026-10-22}
     jwt:
       issuer: ${JWT_ISSUER}
       audience: ${JWT_AUDIENCE}
