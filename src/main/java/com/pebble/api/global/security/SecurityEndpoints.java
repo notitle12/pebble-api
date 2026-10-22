@@ -66,6 +66,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.PUT, "/api/v1/members/me/projects/{projectId:[0-9]+}/featured", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/projects", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/projects/{projectId:[0-9]+}/posts", Access.USER),
+            new Endpoint(HttpMethod.PUT, "/api/v1/members/me/projects/{projectId:[0-9]+}/posts/order", Access.USER),
             new Endpoint(HttpMethod.PATCH, "/api/v1/members/me/projects/{projectId:[0-9]+}/posts/{postId:[0-9]+}/order", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/profile/availability", Access.USER),
             new Endpoint(HttpMethod.DELETE, "/api/v1/members/me", Access.USER),
