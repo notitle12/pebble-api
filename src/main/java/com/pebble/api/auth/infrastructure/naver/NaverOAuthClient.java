@@ -19,6 +19,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Component("naverOAuthClient")
 public class NaverOAuthClient implements OAuthProviderClient {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NaverOAuthClient.class);
+
     private final RestClient restClient;
     private final NaverOAuthProperties properties;
 
@@ -121,20 +123,38 @@ public class NaverOAuthClient implements OAuthProviderClient {
                 || isBlank(plus.termsTag()) || isBlank(plus.privacyTag())
                 || plus.termsTag().equals(plus.privacyTag())
                 || !com.pebble.api.member.domain.MemberAgreement.TERMS_VERSION.equals(plus.termsVersion())
-                || !com.pebble.api.member.domain.MemberAgreement.PRIVACY_VERSION.equals(plus.privacyVersion())) return null;
+                || !com.pebble.api.member.domain.MemberAgreement.PRIVACY_VERSION.equals(plus.privacyVersion())) {
+            log.warn("Naver agreement verification: configuration_unavailable");
+            return null;
+        }
         try {
             var response = restClient.get().uri("https://openapi.naver.com/v1/nid/agreement")
                     .headers(headers -> headers.setBearerAuth(accessToken)).retrieve().body(NaverAgreementResponse.class);
-            if (response == null || !"success".equals(response.result()) || response.agreementInfos() == null) return null;
+            if (response == null || !"success".equals(response.result()) || response.agreementInfos() == null) {
+                log.warn("Naver agreement verification: invalid_response");
+                return null;
+            }
             boolean terms = false, privacy = false;
+            int sameClient = 0, dated = 0;
             for (var info : response.agreementInfos()) {
-                if (info == null || !properties.clientId().equals(info.clientId()) || isBlank(info.agreeDate())) continue;
+                if (info == null || !properties.clientId().equals(info.clientId())) continue;
+                sameClient++;
+                if (isBlank(info.agreeDate())) continue;
+                dated++;
                 terms |= plus.termsTag().equals(info.termCode());
                 privacy |= plus.privacyTag().equals(info.termCode());
             }
-            return terms && privacy ? new VerifiedServiceAgreement(plus.termsVersion(), plus.privacyVersion()) : null;
+            if (terms && privacy) return new VerifiedServiceAgreement(plus.termsVersion(), plus.privacyVersion());
+            log.warn("Naver agreement verification: required_terms_missing entries={} same_client={} dated={} terms={} privacy={}",
+                    response.agreementInfos().size(), sameClient, dated, terms, privacy);
+            return null;
+        } catch (org.springframework.web.client.RestClientResponseException exception) {
+            // 예외 메시지에는 토큰·응답 원문이 포함될 수 있어 HTTP 상태만 기록한다.
+            log.warn("Naver agreement verification: http_failure status={}", exception.getStatusCode().value());
+            return null;
         } catch (RestClientException exception) {
-            // 공급자 동의를 확인하지 못하면 로그인은 허용하되 Pebble의 필수 동의를 유지한다.
+            log.warn("Naver agreement verification: transport_or_decode_failure");
+            // 기존 회원의 동의 대체 화면과 신규 가입 제한은 유지한다.
             return null;
         }
     }
