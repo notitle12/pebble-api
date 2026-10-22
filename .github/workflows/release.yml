@@ -20,5 +20,5 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --generate-notes --latest
+            gh release create "$RELEASE_TAG" --verify-tag --target main --title "$RELEASE_TAG" --generate-notes --latest
           fi
