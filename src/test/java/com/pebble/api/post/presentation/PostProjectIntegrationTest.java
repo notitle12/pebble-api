@@ -185,6 +185,131 @@ class PostProjectIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(path).param("placement", "boards").param("q", "needle")).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void projectOrderIsIndependentAndFiltersPublicPostsAfterOrdering() throws Exception {
+        String project = project(owner, "PUBLIC");
+        String first = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        String hidden = id(createPost(owner, "HIDDEN", project, null).andExpect(status().isCreated()));
+        String last = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        String ownerPath = "/api/v1/members/me/projects/" + project + "/posts";
+        var original = jdbc.queryForList("select display_order, board_display_order from post where project_id=? order by id", Long.parseLong(project));
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(first))
+                .andExpect(jsonPath("$.data.content[1].id").value(hidden));
+        moveProject(project, last, owner, "{\"displayOrder\":0}").andExpect(status().isNoContent());
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)).param("size", "1").param("page", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(3))
+                .andExpect(jsonPath("$.data.content[0].id").value(first));
+        mvc.perform(get("/api/v1/projects/" + project + "/posts"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[0].id").value(last)).andExpect(jsonPath("$.data.content[1].id").value(first));
+        assertThat(jdbc.queryForList("select display_order, board_display_order from post where project_id=? order by id", Long.parseLong(project))).isEqualTo(original);
+        String appended = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[3].id").value(appended));
+        change(first, "{\"title\":\"same project\",\"projectId\":\"" + project + "\"}").andExpect(status().isOk());
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[1].id").value(first));
+        change(last, "{\"projectId\":null}").andExpect(status().isOk());
+        change(last, "{\"projectId\":\"" + project + "\"}").andExpect(status().isOk());
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[3].id").value(last));
+    }
+
+    @Test
+    void projectOrderRequiresOwnerAndStrictPositionAndDoesNotExposeHiddenProject() throws Exception {
+        String project = project(owner, "HIDDEN");
+        String post = id(createPost(owner, "HIDDEN", project, null).andExpect(status().isCreated()));
+        String unrelated = id(createPost(owner, "PUBLIC", null, null).andExpect(status().isCreated()));
+        String path = "/api/v1/members/me/projects/" + project + "/posts";
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(other))).andExpect(status().isNotFound());
+        moveProject(project, post, other, "{\"displayOrder\":0}").andExpect(status().isNotFound());
+        moveProject(project, unrelated, owner, "{\"displayOrder\":0}").andExpect(status().isNotFound());
+        for (String body : new String[]{"{}", "{\"displayOrder\":-1}", "{\"displayOrder\":1}", "{\"displayOrder\":0.5}",
+                "{\"displayOrder\":\"0\"}", "{\"displayOrder\":2147483648}", "{\"displayOrder\":0,\"extra\":true}"}) {
+            moveProject(project, post, owner, body).andExpect(status().isBadRequest());
+        }
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner)).param("sort", "createdAt,desc"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/projects/" + project + "/posts")).andExpect(status().isNotFound());
+        mvc.perform(options(path + "/" + post + "/order").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization,content-type"))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "PATCH"));
+        mvc.perform(delete("/api/v1/posts/" + post).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isNoContent());
+        moveProject(project, post, owner, "{\"displayOrder\":0}").andExpect(status().isNotFound());
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(jsonPath("$.data.totalElements").value(0));
+    }
+
+    private ResultActions moveProject(String project, String post, Member actor, String body) throws Exception {
+        return mvc.perform(patch("/api/v1/members/me/projects/" + project + "/posts/" + post + "/order")
+                .header(HttpHeaders.AUTHORIZATION, bearer(actor)).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    @Test
+    void batchSaveAppliesEntireOrderWithoutChangingOtherOrders() throws Exception {
+        String project = project(owner, "PUBLIC");
+        String first = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        String hidden = id(createPost(owner, "HIDDEN", project, null).andExpect(status().isCreated()));
+        String last = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        var original = jdbc.queryForList("select display_order, board_display_order from post where project_id=? order by id", Long.parseLong(project));
+        batchOrder(project, owner, java.util.List.of(first, hidden, last), java.util.List.of(last, first, hidden)).andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/projects/" + project + "/posts"))
+                .andExpect(jsonPath("$.data.content[0].id").value(last)).andExpect(jsonPath("$.data.content[1].id").value(first));
+        mvc.perform(get("/api/v1/members/me/projects/" + project + "/posts").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[2].id").value(hidden));
+        assertThat(jdbc.queryForList("select display_order, board_display_order from post where project_id=? order by id", Long.parseLong(project))).isEqualTo(original);
+        // 저장 확인 뒤 같은 순서를 다시 저장해도 다른 영역에는 영향이 없다.
+        batchOrder(project, owner, java.util.List.of(last, first, hidden), java.util.List.of(last, first, hidden)).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void batchSaveRejectsStaleOrderAndMembershipAtomically() throws Exception {
+        String project = project(owner, "PUBLIC");
+        String first = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        String second = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        moveProject(project, second, owner, "{\"displayOrder\":0}").andExpect(status().isNoContent());
+        batchOrder(project, owner, java.util.List.of(first, second), java.util.List.of(second, first))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("POST_ORDER_CONFLICT"));
+        String third = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        batchOrder(project, owner, java.util.List.of(second, first), java.util.List.of(first, second)).andExpect(status().isConflict());
+        mvc.perform(get("/api/v1/projects/" + project + "/posts"))
+                .andExpect(jsonPath("$.data.content[0].id").value(second)).andExpect(jsonPath("$.data.content[1].id").value(first))
+                .andExpect(jsonPath("$.data.content[2].id").value(third));
+    }
+
+    @Test
+    void batchSaveValidatesPermutationOwnershipAndCors() throws Exception {
+        String project = project(owner, "PUBLIC");
+        String first = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        String unrelated = id(createPost(owner, "PUBLIC", null, null).andExpect(status().isCreated()));
+        String path = "/api/v1/members/me/projects/" + project + "/posts/order";
+        batchOrder(project, other, java.util.List.of(first), java.util.List.of(first)).andExpect(status().isNotFound());
+        batchOrder(project, owner, java.util.List.of(first), java.util.List.of(unrelated)).andExpect(status().isBadRequest());
+        batchOrder(project, owner, java.util.List.of(first), java.util.List.of()).andExpect(status().isBadRequest());
+        for (String body : new String[]{"{}", "{\"expectedPostIds\":[],\"postIds\":[],\"extra\":true}",
+                "{\"expectedPostIds\":[\"1\",\"1\"],\"postIds\":[\"1\",\"1\"]}",
+                "{\"expectedPostIds\":[1],\"postIds\":[1]}", "{\"expectedPostIds\":null,\"postIds\":[]}"}) {
+            mvc.perform(put(path).header(HttpHeaders.AUTHORIZATION, bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+        }
+        // Bearer 없는 쓰기 요청은 기존 CSRF 방어에서 거절된다.
+        mvc.perform(put(path).contentType(MediaType.APPLICATION_JSON).content("{\"expectedPostIds\":[],\"postIds\":[]}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(options(path).header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PUT").header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,"authorization,content-type"))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "PUT"));
+        mvc.perform(get("/api/v1/projects/" + project + "/posts")).andExpect(jsonPath("$.data.content[0].id").value(first));
+        String empty = project(owner, "HIDDEN");
+        batchOrder(empty, owner, java.util.List.of(), java.util.List.of()).andExpect(status().isNoContent());
+    }
+
+    private ResultActions batchOrder(String project, Member actor, java.util.List<String> expected, java.util.List<String> desired) throws Exception {
+        return mvc.perform(put("/api/v1/members/me/projects/" + project + "/posts/order")
+                .header(HttpHeaders.AUTHORIZATION, bearer(actor)).contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(java.util.Map.of("expectedPostIds", expected, "postIds", desired))));
+    }
+
     private Member member() {
         Member value = members.saveAndFlush(agreedMember(new Member("project-link-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(value.getId(), "blog-" + value.getId(), "author-" + value.getId(), null);
