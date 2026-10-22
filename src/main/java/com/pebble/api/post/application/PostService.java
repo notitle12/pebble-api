@@ -287,6 +287,23 @@ public class PostService {
         for (int index = 0; index < ordered.size(); index++) ordered.get(index).changeProjectOrder(index);
     }
 
+    @Transactional
+    public void saveProjectOrder(long projectId, long memberId, List<Long> expected, List<Long> desired) {
+        members.findProfileCompletedForWrite(memberId);
+        projects.resolveForPost(projectId, memberId);
+        var expectedSet = new java.util.HashSet<>(expected);
+        if (expectedSet.size() != expected.size() || desired.size() != expected.size()
+                || new java.util.HashSet<>(desired).size() != desired.size()
+                || !expectedSet.equals(new java.util.HashSet<>(desired))) {
+            throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, "postIds", "연결된 글의 전체 순서를 중복이나 누락 없이 전달해 주세요.");
+        }
+        List<Post> current = projectPosts(memberId, projectId);
+        // 회원 잠금 안에서 기준 목록과 순서를 비교해 다른 창의 편집·연결 변경을 덮어쓰지 않는다.
+        if (!current.stream().map(Post::getId).toList().equals(expected)) throw new ApplicationException(PostError.POST_ORDER_CONFLICT);
+        var byId = current.stream().collect(java.util.stream.Collectors.toMap(Post::getId, post -> post));
+        for (int index = 0; index < desired.size(); index++) byId.get(desired.get(index)).changeProjectOrder(index);
+    }
+
     private List<Post> projectPosts(long memberId, long projectId) {
         return posts.findByAuthorIdAndProjectIdAndVisibilityNotOrderByProjectDisplayOrderAscIdAsc(memberId, projectId, PostVisibility.DELETED);
     }
