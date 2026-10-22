@@ -66,6 +66,7 @@ public class PostService {
         post.changeBoard(input.boardId());
         moveToBoardStart(post, null);
         post.changeProject(input.projectId());
+        appendToProject(post);
         ordered.add(position, post);
         applyOrder(ordered);
         List<PostBlock> savedBlocks = insertBlocks(post, input.blocks());
@@ -139,7 +140,9 @@ public class PostService {
         }
         if (input.has("projectId")) {
             if (input.projectId() != null) projects.resolveForPost(input.projectId(), memberId);
+            Long previousProject = post.getProjectId();
             post.changeProject(input.projectId());
+            if (!Objects.equals(previousProject, input.projectId())) appendToProject(post);
         }
         Category category = post.getCategory();
         if (input.has("categoryId")) {
@@ -259,6 +262,59 @@ public class PostService {
         long ownerId = projects.requirePublic(projectId);
         Specification<Post> placement = (root, query, cb) -> cb.equal(root.get("projectId"), projectId);
         return page(posts.findAll(publicFilter(null, ownerId, null).and(placement), pageable), false);
+    }
+
+    public Page<PostView> listProjectForOwner(long projectId, long memberId, Pageable pageable) {
+        members.findProfileCompleted(memberId);
+        projects.resolveForPost(projectId, memberId);
+        Specification<Post> filter = (root, query, cb) -> cb.and(
+                cb.equal(root.get("author").get("id"), memberId), cb.equal(root.get("projectId"), projectId),
+                cb.notEqual(root.get("visibility"), PostVisibility.DELETED));
+        return page(posts.findAll(filter, pageable), true);
+    }
+
+    @Transactional
+    public void moveInProject(long projectId, long postId, long memberId, int position) {
+        // 연결 변경·프로젝트 삭제·다른 순서 변경과 동일한 회원 행 잠금을 사용한다.
+        members.findProfileCompletedForWrite(memberId);
+        projects.resolveForPost(projectId, memberId);
+        List<Post> ordered = projectPosts(memberId, projectId);
+        Post post = ordered.stream().filter(item -> item.getId().equals(postId)).findFirst().orElseThrow(PostService::notFound);
+        if (position < 0 || position >= ordered.size()) throw new ApplicationException(
+                GlobalErrorCode.VALIDATION_ERROR, "displayOrder", "프로젝트에 연결된 글의 범위 안에서 위치를 지정해 주세요.");
+        ordered.remove(post);
+        ordered.add(position, post);
+        for (int index = 0; index < ordered.size(); index++) ordered.get(index).changeProjectOrder(index);
+    }
+
+    @Transactional
+    public void saveProjectOrder(long projectId, long memberId, List<Long> expected, List<Long> desired) {
+        members.findProfileCompletedForWrite(memberId);
+        projects.resolveForPost(projectId, memberId);
+        var expectedSet = new java.util.HashSet<>(expected);
+        if (expectedSet.size() != expected.size() || desired.size() != expected.size()
+                || new java.util.HashSet<>(desired).size() != desired.size()
+                || !expectedSet.equals(new java.util.HashSet<>(desired))) {
+            throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, "postIds", "연결된 글의 전체 순서를 중복이나 누락 없이 전달해 주세요.");
+        }
+        List<Post> current = projectPosts(memberId, projectId);
+        // 회원 잠금 안에서 기준 목록과 순서를 비교해 다른 창의 편집·연결 변경을 덮어쓰지 않는다.
+        if (!current.stream().map(Post::getId).toList().equals(expected)) throw new ApplicationException(PostError.POST_ORDER_CONFLICT);
+        var byId = current.stream().collect(java.util.stream.Collectors.toMap(Post::getId, post -> post));
+        for (int index = 0; index < desired.size(); index++) byId.get(desired.get(index)).changeProjectOrder(index);
+    }
+
+    private List<Post> projectPosts(long memberId, long projectId) {
+        return posts.findByAuthorIdAndProjectIdAndVisibilityNotOrderByProjectDisplayOrderAscIdAsc(memberId, projectId, PostVisibility.DELETED);
+    }
+
+    private void appendToProject(Post post) {
+        if (post.getProjectId() == null) { post.changeProjectOrder(0); return; }
+        List<Post> ordered = projectPosts(post.getAuthor().getId(), post.getProjectId());
+        ordered.removeIf(item -> item.getId().equals(post.getId()));
+        // 삭제 등으로 남은 간격도 함께 정규화하고 새 연결은 마지막에 둔다.
+        for (int index = 0; index < ordered.size(); index++) ordered.get(index).changeProjectOrder(index);
+        post.changeProjectOrder(ordered.size());
     }
 
     private Specification<Post> publicFilter(Long categoryId, Long authorId, Long boardId) {

@@ -83,6 +83,17 @@ public class Post extends BaseTimeEntity {
         if (boardDisplayOrder != position) boardDisplayOrder = position;
     }
 
+    @Column(name = "project_display_order", nullable = false)
+    private int projectDisplayOrder;
+
+    public int getProjectDisplayOrder() { return projectDisplayOrder; }
+
+    public void changeProjectOrder(int position) {
+        ensureNotDeleted();
+        if (position < 0) throw new IllegalArgumentException("Position must be nonnegative");
+        projectDisplayOrder = position;
+    }
+
     @Column(columnDefinition = "TEXT")
     private String summary;
 
