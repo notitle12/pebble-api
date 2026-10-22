@@ -25,6 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+@org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
 class NaverOAuthClientTest {
 
     @Test
@@ -160,7 +161,8 @@ class NaverOAuthClientTest {
 
     @ParameterizedTest
     @MethodSource("providerAgreements")
-    void onlyBothRequiredTermsForThisClientProduceVerifiedAgreement(String json, boolean accepted) {
+    void onlyBothRequiredTermsForThisClientProduceVerifiedAgreement(String json, boolean accepted,
+            org.springframework.boot.test.system.CapturedOutput output) {
         var builder = RestClient.builder();
         var server = MockRestServiceServer.bindTo(builder).build();
         var properties = plusProperties("2026-10-22", true);
@@ -173,17 +175,23 @@ class NaverOAuthClientTest {
         assertThat(profile.ageRestrictionApplied()).isEqualTo(accepted);
         if (accepted) assertThat(profile.serviceAgreement().termsVersion()).isEqualTo("2026-10-22");
         assertThat(profile.toString()).doesNotContain("provider-token", "agreementInfos", "10/22");
+        assertThat(output.getAll()).doesNotContain("provider-token", "client-id", "another-client", "11:00:00", json);
+        if (!accepted) assertThat(output.getAll()).contains("Naver agreement verification:");
         server.verify();
     }
 
     @Test
-    void agreementOutageFallsBackToPebbleConsentWithoutBreakingLogin() {
+    void agreementOutageFallsBackToPebbleConsentWithoutBreakingLogin(
+            org.springframework.boot.test.system.CapturedOutput output) {
         var builder = RestClient.builder();
         var server = MockRestServiceServer.bindTo(builder).build();
         var properties = plusProperties("2026-10-22", true);
         expectProfile(server, properties);
-        server.expect(requestTo("https://openapi.naver.com/v1/nid/agreement")).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        server.expect(requestTo("https://openapi.naver.com/v1/nid/agreement")).andRespond(
+                withStatus(HttpStatus.SERVICE_UNAVAILABLE).body("sensitive-provider-response-token").contentType(MediaType.TEXT_PLAIN));
         assertThat(new NaverOAuthClient(builder.build(), properties).authenticate("code", "state").serviceAgreement()).isNull();
+        assertThat(output.getAll()).contains("http_failure status=503")
+                .doesNotContain("sensitive-provider-response-token", "provider-token", "client-secret");
         server.verify();
     }
 
