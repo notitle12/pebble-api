@@ -15,6 +15,13 @@ public final class SecurityEndpoints {
     public record Endpoint(HttpMethod method, String path, Access access) {}
 
     public static final List<Endpoint> API = List.of(
+            new Endpoint(HttpMethod.GET, "/api/v1/updates", Access.PUBLIC),
+            new Endpoint(HttpMethod.GET, "/api/v1/updates/{id:[0-9]+}", Access.PUBLIC),
+            new Endpoint(HttpMethod.GET, "/api/v1/admin/updates", Access.ADMIN),
+            new Endpoint(HttpMethod.GET, "/api/v1/admin/updates/{id:[0-9]+}", Access.ADMIN),
+            new Endpoint(HttpMethod.POST, "/api/v1/admin/updates", Access.ADMIN),
+            new Endpoint(HttpMethod.PUT, "/api/v1/admin/updates/{id:[0-9]+}", Access.ADMIN),
+            new Endpoint(HttpMethod.DELETE, "/api/v1/admin/updates/{id:[0-9]+}", Access.ADMIN),
             new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/reports", Access.USER),
             new Endpoint(HttpMethod.POST, "/api/v1/projects/{projectId:[0-9]+}/reports", Access.USER),
             new Endpoint(HttpMethod.POST, "/api/v1/posts/{postId:[0-9]+}/comments/{commentId:[0-9]+}/reports", Access.USER),
