@@ -39,6 +39,13 @@ public class MemberAgreementService {
         members.flush();
         return state(member.currentAgreementAcceptedAt().orElseThrow());
     }
+    @Transactional
+    public void acceptVerifiedProviderAgreement(long memberId, String termsVersion, String privacyVersion) {
+        if (!published || !MemberAgreement.TERMS_VERSION.equals(termsVersion)
+                || !MemberAgreement.PRIVACY_VERSION.equals(privacyVersion)) return;
+        // accepted_at은 공급자 응답의 임의 시각이 아닌 Pebble 서버의 동의 확인 시각이다.
+        accept(memberId, termsVersion, privacyVersion);
+    }
     private State state(Instant at) {
         return new State(MemberAgreement.TERMS_VERSION, MemberAgreement.PRIVACY_VERSION, at != null, at, published);
     }

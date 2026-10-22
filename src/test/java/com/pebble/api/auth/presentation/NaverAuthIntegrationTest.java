@@ -46,7 +46,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest
+@SpringBootTest(properties = "pebble.legal.published=true")
 @AutoConfigureMockMvc
 @Transactional
 class NaverAuthIntegrationTest extends AuthenticationTestSupport {
@@ -74,6 +74,24 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
 
     @MockitoBean(name = "naverOAuthClient")
     private OAuthProviderClient naverOAuthGateway;
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"current", "missing", "old"})
+    void onlyVerifiedCurrentProviderConsentSkipsPebbleAgreement(String kind) throws Exception {
+        when(naverOAuthGateway.authorizationUrl(anyString()))
+                .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
+        Cookie cookie = beginAuthorizationAndGetCookie();
+        var proof = "missing".equals(kind) ? null : new OAuthProviderClient.VerifiedServiceAgreement(
+                "current".equals(kind) ? "2026-10-22" : "2026-10-21", "2026-10-22");
+        when(naverOAuthGateway.authenticate("code", cookie.getValue()))
+                .thenReturn(new OAuthProfile("consent-subject", "pebble", null, proof));
+        var data = dataFrom(login("code", cookie.getValue(), cookie));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/members/me")
+                        .header("Authorization", "Bearer " + data.get("accessToken")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agreementsAccepted").value("current".equals(kind)));
+        assertThat(memberRepository.findAll().getFirst().hasAcceptedAgreements()).isEqualTo("current".equals(kind));
+    }
 
     @Test
     void firstLoginCreatesMemberAndReturnsPebbleTokens() throws Exception {

@@ -21,12 +21,10 @@ public class NaverOAuthClient implements OAuthProviderClient {
 
     private final RestClient restClient;
     private final NaverOAuthProperties properties;
-    private final java.time.Clock clock;
 
-    public NaverOAuthClient(@Qualifier("naverRestClient") RestClient restClient, NaverOAuthProperties properties, java.time.Clock clock) {
+    public NaverOAuthClient(@Qualifier("naverRestClient") RestClient restClient, NaverOAuthProperties properties) {
         this.restClient = restClient;
         this.properties = properties;
-        this.clock = clock;
     }
 
     @Override
@@ -106,9 +104,8 @@ public class NaverOAuthClient implements OAuthProviderClient {
                     throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
                 }
             }
-            // 탈퇴는 나이 정보가 없거나 연령 미달이어도 본인 확인 후 가능해야 한다.
-            if (expectedSubject == null) requireMinimumAge(profile.birthyear(), profile.birthday());
-            return new OAuthProfile(profile.id(), profile.nickname(), null);
+            return new OAuthProfile(profile.id(), profile.nickname(), null,
+                    expectedSubject == null ? verifiedAgreement(token.accessToken()) : null);
         } catch (HttpClientErrorException exception) {
             throw new AuthException(AuthError.INVALID_CREDENTIALS);
         } catch (RestClientException exception) {
@@ -116,26 +113,38 @@ public class NaverOAuthClient implements OAuthProviderClient {
         }
     }
 
-    private void requireMinimumAge(String birthyear, String birthday) {
-        // 공급자 생년 정보는 이 요청의 메모리에서만 확인한다. 회원 DTO·DB·로그로 전달하지 않는다.
-        if (birthyear == null || !birthyear.matches("[0-9]{4}")
-                || birthday == null || !birthday.matches("[0-9]{2}-[0-9]{2}")) {
-            throw new AuthException(AuthError.AGE_VERIFICATION_REQUIRED);
-        }
-        java.time.LocalDate birthDate;
+    private VerifiedServiceAgreement verifiedAgreement(String accessToken) {
+        var plus = properties.plus();
+        // 네이버 설정과 현재 문서의 버전 매핑이 명시된 경우에만 동의 대행을 신뢰한다.
+        if (plus == null || !plus.enabled() || !plus.ageRestricted()
+                || isBlank(plus.termsTag()) || isBlank(plus.privacyTag())
+                || plus.termsTag().equals(plus.privacyTag())
+                || !com.pebble.api.member.domain.MemberAgreement.TERMS_VERSION.equals(plus.termsVersion())
+                || !com.pebble.api.member.domain.MemberAgreement.PRIVACY_VERSION.equals(plus.privacyVersion())) return null;
         try {
-            birthDate = java.time.LocalDate.parse(birthyear + "-" + birthday,
-                    java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-        } catch (java.time.DateTimeException exception) {
-            throw new AuthException(AuthError.AGE_VERIFICATION_REQUIRED);
+            var response = restClient.get().uri("https://openapi.naver.com/v1/nid/agreement")
+                    .headers(headers -> headers.setBearerAuth(accessToken)).retrieve().body(NaverAgreementResponse.class);
+            if (response == null || !"success".equals(response.result()) || response.agreementInfos() == null) return null;
+            boolean terms = false, privacy = false;
+            for (var info : response.agreementInfos()) {
+                if (info == null || !properties.clientId().equals(info.clientId()) || isBlank(info.agreeDate())) continue;
+                terms |= plus.termsTag().equals(info.termCode());
+                privacy |= plus.privacyTag().equals(info.termCode());
+            }
+            return terms && privacy ? new VerifiedServiceAgreement(plus.termsVersion(), plus.privacyVersion()) : null;
+        } catch (RestClientException exception) {
+            // 공급자 동의를 확인하지 못하면 로그인은 허용하되 Pebble의 필수 동의를 유지한다.
+            return null;
         }
-        var today = java.time.LocalDate.now(clock.withZone(java.time.ZoneId.of("Asia/Seoul")));
-        if (birthDate.getYear() < 1 || birthDate.isAfter(today)) {
-            throw new AuthException(AuthError.AGE_VERIFICATION_REQUIRED);
-        }
-        if (java.time.Period.between(birthDate, today).getYears() < 14) {
-            throw new AuthException(AuthError.AGE_RESTRICTED);
-        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record NaverAgreementResponse(String result, java.util.List<NaverAgreementInfo> agreementInfos) {
+        @Override public String toString() { return "NaverAgreementResponse[personalData=redacted]"; }
+    }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record NaverAgreementInfo(String termCode, String clientId, String agreeDate) {
+        @Override public String toString() { return "NaverAgreementInfo[personalData=redacted]"; }
     }
 
     private MultiValueMap<String, String> tokenRequest(String authorizationCode, String state) {
@@ -175,9 +184,7 @@ public class NaverOAuthClient implements OAuthProviderClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record NaverProfileFields(
             String id,
-            String nickname,
-            String birthyear,
-            String birthday) {
+            String nickname) {
         @Override public String toString() { return "NaverProfileFields[personalData=redacted]"; }
     }
 }
