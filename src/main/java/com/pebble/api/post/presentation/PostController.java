@@ -157,7 +157,33 @@ public class PostController {
                                          @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort"));
         return ApiResponse.of(page(likes.decorate(posts.listProject(PostWriteRequest.id(projectId, "projectId"),
-                pageable(query, "publishedAt")), requesterId(jwt))));
+                projectPageable(query)), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/members/me/projects/{projectId:[0-9]+}/posts")
+    public ApiResponse<PostPage> projectForOwner(@PathVariable String projectId,
+            @RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
+        checkQuery(query, Set.of("page", "size"));
+        return ApiResponse.of(page(likes.decorate(posts.listProjectForOwner(PostWriteRequest.id(projectId, "projectId"),
+                memberId(jwt), projectPageable(query)), requesterId(jwt))));
+    }
+
+    @PatchMapping(value = "/api/v1/members/me/projects/{projectId:[0-9]+}/posts/{postId:[0-9]+}/order", consumes = "application/json")
+    public ResponseEntity<Void> moveInProject(@PathVariable String projectId, @PathVariable String postId,
+            @RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt, @RequestBody JsonNode body) {
+        checkQuery(query, Set.of());
+        if (body == null || !body.isObject() || body.size() != 1 || !body.has("displayOrder")
+                || !body.get("displayOrder").isIntegralNumber() || !body.get("displayOrder").canConvertToInt()
+                || body.get("displayOrder").intValue() < 0) throw invalid("displayOrder");
+        posts.moveInProject(PostWriteRequest.id(projectId, "projectId"), PostWriteRequest.id(postId, "postId"),
+                memberId(jwt), body.get("displayOrder").intValue());
+        return ResponseEntity.noContent().build();
+    }
+
+    private PageRequest projectPageable(MultiValueMap<String, String> query) {
+        if (query.containsKey("sort")) return pageable(query, "publishedAt");
+        var page = pageable(query, "publishedAt");
+        return PageRequest.of(page.getPageNumber(), page.getPageSize(), Sort.by("projectDisplayOrder", "id"));
     }
 
     private long memberId(Jwt jwt) {
