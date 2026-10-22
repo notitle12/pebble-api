@@ -7,8 +7,8 @@ import java.time.Instant;
 @Entity
 @Table(name = "member_agreement", uniqueConstraints = @UniqueConstraint(name = "uk_member_agreement_versions", columnNames = {"member_id", "terms_version", "privacy_version"}))
 public class MemberAgreement {
-    public static final String TERMS_VERSION = "2026-10-21";
-    public static final String PRIVACY_VERSION = "2026-10-21";
+    public static final String TERMS_VERSION = "2026-10-22";
+    public static final String PRIVACY_VERSION = "2026-10-22";
     @Id private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "member_id", nullable = false, updatable = false)

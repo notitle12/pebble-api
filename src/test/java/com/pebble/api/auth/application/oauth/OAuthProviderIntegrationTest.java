@@ -46,7 +46,7 @@ class OAuthProviderIntegrationTest extends AuthenticationTestSupport {
     void sameSubjectInDifferentProvidersDoesNotMergeAccounts() {
         when(naver.authorizationUrl(org.mockito.ArgumentMatchers.anyString())).thenReturn("https://example.test/naver");
         when(naver.authenticate(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
-                .thenReturn(new OAuthProviderClient.OAuthProfile("same-subject", "same-name", null));
+                .thenReturn(new OAuthProviderClient.OAuthProfile("same-subject", "same-name", null, null, true));
         var naverState = login.beginAuthorization(OAuthProvider.NAVER);
         var naverMember = login.login(OAuthProvider.NAVER, "test-code", naverState.state(), naverState.state()).member();
         var googleState = login.beginAuthorization(OAuthProvider.GOOGLE);
@@ -68,7 +68,7 @@ class OAuthProviderIntegrationTest extends AuthenticationTestSupport {
         OAuthProviderRegistration testGoogleRegistration() {
             return new OAuthProviderRegistration(OAuthProvider.GOOGLE, Duration.ofMinutes(2), new OAuthProviderClient() {
                 public String authorizationUrl(String state) { return "https://example.test/google?state=" + state; }
-                public OAuthProfile authenticate(String code, String state) { return new OAuthProfile("same-subject", "same-name", null); }
+                public OAuthProfile authenticate(String code, String state) { return new OAuthProfile("same-subject", "same-name", null, null, true); }
             });
         }
     }

@@ -11,7 +11,11 @@ public record NaverOAuthProperties(
         String authorizationUri,
         String tokenUri,
         String profileUri,
-        Duration stateTtl) {
+        Duration stateTtl,
+        Plus plus) {
+
+    public record Plus(boolean enabled, boolean ageRestricted, String termsTag, String privacyTag,
+            String termsVersion, String privacyVersion) {}
 
     @Override
     public String toString() {
