@@ -69,7 +69,7 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
             for (String identitySubject : subjects) {
                 results.add(workers.submit(() -> {
                     start.await();
-                    return memberService.resolve(OAuthProvider.NAVER, identitySubject, base, null);
+                    return memberService.resolve(OAuthProvider.NAVER, identitySubject, base, null, true);
                 }));
             }
             start.countDown();
@@ -102,8 +102,8 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
         String identitySubject = subject();
         createdSubjects.add(identitySubject);
 
-        Member first = memberService.resolve(OAuthProvider.NAVER, identitySubject, "Original nickname", null);
-        Member second = memberService.resolve(OAuthProvider.NAVER, identitySubject, "Changed nickname", null);
+        Member first = memberService.resolve(OAuthProvider.NAVER, identitySubject, "Original nickname", null, true);
+        Member second = memberService.resolve(OAuthProvider.NAVER, identitySubject, "Changed nickname", null, true);
 
         assertThat(second.getId()).isEqualTo(first.getId());
         assertThat(second.getNickname()).isEqualTo("Original nickname");
@@ -117,8 +117,8 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
         createdSubjects.addAll(List.of(identitySubjectOne, identitySubjectTwo));
         String base = "가".repeat(30);
 
-        Member first = memberService.resolve(OAuthProvider.NAVER, identitySubjectOne, base, null);
-        Member second = memberService.resolve(OAuthProvider.NAVER, identitySubjectTwo, base, null);
+        Member first = memberService.resolve(OAuthProvider.NAVER, identitySubjectOne, base, null, true);
+        Member second = memberService.resolve(OAuthProvider.NAVER, identitySubjectTwo, base, null, true);
 
         assertThat(first.getNickname()).isEqualTo(base);
         assertThat(second.getNickname()).matches("가{24,26}[0-9]{4,6}");
@@ -132,8 +132,8 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
         String blankSubject = subject();
         createdSubjects.addAll(List.of(absentSubject, blankSubject));
 
-        Member absent = memberService.resolve(OAuthProvider.NAVER, absentSubject, null, null);
-        Member blank = memberService.resolve(OAuthProvider.NAVER, blankSubject, "   ", null);
+        Member absent = memberService.resolve(OAuthProvider.NAVER, absentSubject, null, null, true);
+        Member blank = memberService.resolve(OAuthProvider.NAVER, blankSubject, "   ", null, true);
 
         assertThat(absent.getNickname()).startsWith("pebble");
         assertThat(blank.getNickname()).startsWith("pebble");
@@ -144,7 +144,7 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
     void concurrentNicknameChangesAllowOnlyOneAfterCommittedCooldownExpires() throws Exception {
         String identitySubject = subject();
         createdSubjects.add(identitySubject);
-        Member member = memberService.resolve(OAuthProvider.NAVER, identitySubject, "Before change", null);
+        Member member = memberService.resolve(OAuthProvider.NAVER, identitySubject, "Before change", null, true);
         acceptFixture(member.getId());
         profileService.complete(member.getId(), "blog-" + UUID.randomUUID(), "handle-" + UUID.randomUUID()
                 .toString().substring(0, 8), null);
@@ -167,8 +167,8 @@ class MemberNicknameConcurrencyTest extends AuthenticationTestSupport {
         String firstSubject = subject();
         String secondSubject = subject();
         createdSubjects.addAll(List.of(firstSubject, secondSubject));
-        Member first = memberService.resolve(OAuthProvider.NAVER, firstSubject, "First", null);
-        Member second = memberService.resolve(OAuthProvider.NAVER, secondSubject, "Second", null);
+        Member first = memberService.resolve(OAuthProvider.NAVER, firstSubject, "First", null, true);
+        Member second = memberService.resolve(OAuthProvider.NAVER, secondSubject, "Second", null, true);
         acceptFixture(first.getId());
         acceptFixture(second.getId());
         String handle = "shared-" + UUID.randomUUID().toString().substring(0, 8);
