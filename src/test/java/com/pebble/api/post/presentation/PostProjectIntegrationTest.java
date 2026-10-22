@@ -185,6 +185,68 @@ class PostProjectIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(path).param("placement", "boards").param("q", "needle")).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void projectOrderIsIndependentAndFiltersPublicPostsAfterOrdering() throws Exception {
+        String project = project(owner, "PUBLIC");
+        String first = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        String hidden = id(createPost(owner, "HIDDEN", project, null).andExpect(status().isCreated()));
+        String last = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        String ownerPath = "/api/v1/members/me/projects/" + project + "/posts";
+        var original = jdbc.queryForList("select display_order, board_display_order from post where project_id=? order by id", Long.parseLong(project));
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].id").value(first))
+                .andExpect(jsonPath("$.data.content[1].id").value(hidden));
+        moveProject(project, last, owner, "{\"displayOrder\":0}").andExpect(status().isNoContent());
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)).param("size", "1").param("page", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(3))
+                .andExpect(jsonPath("$.data.content[0].id").value(first));
+        mvc.perform(get("/api/v1/projects/" + project + "/posts"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[0].id").value(last)).andExpect(jsonPath("$.data.content[1].id").value(first));
+        assertThat(jdbc.queryForList("select display_order, board_display_order from post where project_id=? order by id", Long.parseLong(project))).isEqualTo(original);
+        String appended = id(createPost(owner, "PUBLIC", project, null).andExpect(status().isCreated()));
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[3].id").value(appended));
+        change(first, "{\"title\":\"same project\",\"projectId\":\"" + project + "\"}").andExpect(status().isOk());
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[1].id").value(first));
+        change(last, "{\"projectId\":null}").andExpect(status().isOk());
+        change(last, "{\"projectId\":\"" + project + "\"}").andExpect(status().isOk());
+        mvc.perform(get(ownerPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.content[3].id").value(last));
+    }
+
+    @Test
+    void projectOrderRequiresOwnerAndStrictPositionAndDoesNotExposeHiddenProject() throws Exception {
+        String project = project(owner, "HIDDEN");
+        String post = id(createPost(owner, "HIDDEN", project, null).andExpect(status().isCreated()));
+        String unrelated = id(createPost(owner, "PUBLIC", null, null).andExpect(status().isCreated()));
+        String path = "/api/v1/members/me/projects/" + project + "/posts";
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(other))).andExpect(status().isNotFound());
+        moveProject(project, post, other, "{\"displayOrder\":0}").andExpect(status().isNotFound());
+        moveProject(project, unrelated, owner, "{\"displayOrder\":0}").andExpect(status().isNotFound());
+        for (String body : new String[]{"{}", "{\"displayOrder\":-1}", "{\"displayOrder\":1}", "{\"displayOrder\":0.5}",
+                "{\"displayOrder\":\"0\"}", "{\"displayOrder\":2147483648}", "{\"displayOrder\":0,\"extra\":true}"}) {
+            moveProject(project, post, owner, body).andExpect(status().isBadRequest());
+        }
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner)).param("sort", "createdAt,desc"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/projects/" + project + "/posts")).andExpect(status().isNotFound());
+        mvc.perform(options(path + "/" + post + "/order").header(HttpHeaders.ORIGIN, "http://localhost:3000")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization,content-type"))
+                .andExpect(status().isOk()).andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "PATCH"));
+        mvc.perform(delete("/api/v1/posts/" + post).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isNoContent());
+        moveProject(project, post, owner, "{\"displayOrder\":0}").andExpect(status().isNotFound());
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(jsonPath("$.data.totalElements").value(0));
+    }
+
+    private ResultActions moveProject(String project, String post, Member actor, String body) throws Exception {
+        return mvc.perform(patch("/api/v1/members/me/projects/" + project + "/posts/" + post + "/order")
+                .header(HttpHeaders.AUTHORIZATION, bearer(actor)).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
     private Member member() {
         Member value = members.saveAndFlush(agreedMember(new Member("project-link-" + UUID.randomUUID().toString().substring(0, 8), null, MemberStatus.ACTIVE, null, null)));
         return profiles.complete(value.getId(), "blog-" + value.getId(), "author-" + value.getId(), null);
