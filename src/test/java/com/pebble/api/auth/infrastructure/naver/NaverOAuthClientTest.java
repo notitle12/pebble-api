@@ -154,6 +154,7 @@ class NaverOAuthClientTest {
         var profile = new NaverOAuthClient(builder.build(), properties).authenticate("code", "state");
         assertThat(profile.subject()).isEqualTo("subject");
         assertThat(profile.serviceAgreement()).isNull();
+        assertThat(profile.ageRestrictionApplied()).isFalse();
         server.verify();
     }
 
@@ -169,6 +170,7 @@ class NaverOAuthClientTest {
                 .andRespond(withSuccess(json, MediaType.APPLICATION_JSON));
         var profile = new NaverOAuthClient(builder.build(), properties).authenticate("code", "state");
         assertThat(profile.serviceAgreement() != null).isEqualTo(accepted);
+        assertThat(profile.ageRestrictionApplied()).isEqualTo(accepted);
         if (accepted) assertThat(profile.serviceAgreement().termsVersion()).isEqualTo("2026-10-22");
         assertThat(profile.toString()).doesNotContain("provider-token", "agreementInfos", "10/22");
         server.verify();
