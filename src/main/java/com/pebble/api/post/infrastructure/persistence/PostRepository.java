@@ -22,6 +22,8 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
 
     List<Post> findByAuthorIdAndBoardIdAndVisibilityNotOrderByBoardDisplayOrderAscIdAsc(Long authorId, Long boardId, PostVisibility visibility);
 
+    List<Post> findByAuthorIdAndProjectIdAndVisibilityNotOrderByProjectDisplayOrderAscIdAsc(Long authorId, Long projectId, PostVisibility visibility);
+
     @Override
     @EntityGraph(attributePaths = {"author", "category"})
     Optional<Post> findById(Long id);
