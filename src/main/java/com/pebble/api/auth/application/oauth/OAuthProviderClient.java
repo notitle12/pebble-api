@@ -13,7 +13,13 @@ public interface OAuthProviderClient {
         throw new UnsupportedOperationException("Withdrawal is not supported");
     }
 
-    record OAuthProfile(String subject, String nickname, String profileImageUrl) {
+    /** 각 공급자 서버에서 확인한 서비스 동의. 브라우저 입력으로 생성하지 않는다. */
+    record VerifiedServiceAgreement(String termsVersion, String privacyVersion) {}
+
+    record OAuthProfile(String subject, String nickname, String profileImageUrl, VerifiedServiceAgreement serviceAgreement) {
+        public OAuthProfile(String subject, String nickname, String profileImageUrl) {
+            this(subject, nickname, profileImageUrl, null);
+        }
         @Override
         public String toString() {
             return "OAuthProfile[personalData=redacted]";
