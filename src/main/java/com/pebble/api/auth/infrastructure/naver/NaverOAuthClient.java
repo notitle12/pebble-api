@@ -104,8 +104,9 @@ public class NaverOAuthClient implements OAuthProviderClient {
                     throw new AuthException(AuthError.OAUTH_PROVIDER_UNAVAILABLE);
                 }
             }
-            return new OAuthProfile(profile.id(), profile.nickname(), null,
-                    expectedSubject == null ? verifiedAgreement(token.accessToken()) : null);
+            var agreement = expectedSubject == null ? verifiedAgreement(token.accessToken()) : null;
+            // 공급자의 연령 제한 흐름을 신뢰하며 실명인증된 연령이라는 의미는 아니다.
+            return new OAuthProfile(profile.id(), profile.nickname(), null, agreement, agreement != null);
         } catch (HttpClientErrorException exception) {
             throw new AuthException(AuthError.INVALID_CREDENTIALS);
         } catch (RestClientException exception) {

@@ -39,7 +39,7 @@ class OAuthMemberConcurrencyTest extends AuthenticationTestSupport {
             for (int i = 0; i < 4; i++) {
                 results.add(workers.submit(() -> {
                     start.await();
-                    return memberService.resolve(OAuthProvider.NAVER, subject, "pebble", null).getId();
+                    return memberService.resolve(OAuthProvider.NAVER, subject, "pebble", null, true).getId();
                 }));
             }
             start.countDown();
