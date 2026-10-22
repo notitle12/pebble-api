@@ -46,7 +46,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest
+@SpringBootTest(properties = "pebble.legal.published=true")
 @AutoConfigureMockMvc
 @Transactional
 class NaverAuthIntegrationTest extends AuthenticationTestSupport {
@@ -75,6 +75,42 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
     @MockitoBean(name = "naverOAuthClient")
     private OAuthProviderClient naverOAuthGateway;
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"current", "missing", "old"})
+    void onlyVerifiedCurrentProviderConsentSkipsPebbleAgreement(String kind) throws Exception {
+        when(naverOAuthGateway.authorizationUrl(anyString()))
+                .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
+        Cookie cookie = beginAuthorizationAndGetCookie();
+        var proof = "missing".equals(kind) ? null : new OAuthProviderClient.VerifiedServiceAgreement(
+                "current".equals(kind) ? "2026-10-22" : "2026-10-21", "2026-10-22");
+        when(naverOAuthGateway.authenticate("code", cookie.getValue()))
+                .thenReturn(new OAuthProfile("consent-subject", "pebble", null, proof, true));
+        var data = dataFrom(login("code", cookie.getValue(), cookie));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/members/me")
+                        .header("Authorization", "Bearer " + data.get("accessToken")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agreementsAccepted").value("current".equals(kind)));
+        assertThat(memberRepository.findAll().getFirst().hasAcceptedAgreements()).isEqualTo("current".equals(kind));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void missingProviderAgeConfirmationCannotCreateAccountOrIssueSession(boolean hasConsent) throws Exception {
+        when(naverOAuthGateway.authorizationUrl(anyString()))
+                .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
+        Cookie cookie = beginAuthorizationAndGetCookie();
+        when(naverOAuthGateway.authenticate("code", cookie.getValue()))
+                .thenReturn(new OAuthProfile("unconfirmed-subject", "name", null,
+                        hasConsent ? new OAuthProviderClient.VerifiedServiceAgreement("2026-10-22", "2026-10-22") : null, false));
+        mockMvc.perform(post("/api/v1/auth/naver/login").cookie(cookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(
+                            Map.of("authorizationCode", "code", "state", cookie.getValue()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("SNS_AGE_CONFIRMATION_REQUIRED"));
+        assertThat(identityRepository.findByProviderAndProviderSubject(OAuthProvider.NAVER, "unconfirmed-subject")).isEmpty();
+        assertThat(memberRepository.count()).isZero();
+    }
+
     @Test
     void firstLoginCreatesMemberAndReturnsPebbleTokens() throws Exception {
         when(naverOAuthGateway.authorizationUrl(anyString()))
@@ -82,7 +118,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         Cookie stateCookie = beginAuthorizationAndGetCookie();
         String state = stateCookie.getValue();
         when(naverOAuthGateway.authenticate("one-time-code", state))
-                .thenReturn(new OAuthProfile("naver-id-1", "pebble", null));
+                .thenReturn(new OAuthProfile("naver-id-1", "pebble", null, null, true));
         MvcResult result = login("one-time-code", state, stateCookie);
 
         Map<String, Object> data = dataFrom(result);
@@ -164,7 +200,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
         Cookie cookie = beginAuthorizationAndGetCookie();
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
-                .thenReturn(new OAuthProfile("existing-subject", "changed-naver-name", "https://nid.naver.com/profile_image?new-photo=true"));
+                .thenReturn(new OAuthProfile("existing-subject", "changed-naver-name", "https://nid.naver.com/profile_image?new-photo=true", null, false));
         Map<String, Object> data = dataFrom(login("code", cookie.getValue(), cookie));
         assertThat(data.get("member")).isInstanceOf(Map.class);
         assertThat(((Map<?, ?>) data.get("member")).get("id")).isEqualTo(member.getId().toString());
@@ -182,7 +218,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
         Cookie cookie = beginAuthorizationAndGetCookie();
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
-                .thenReturn(new OAuthProfile("no-profile-subject", null, null));
+                .thenReturn(new OAuthProfile("no-profile-subject", null, null, null, true));
         Map<String, Object> data = dataFrom(login("code", cookie.getValue(), cookie));
         assertThat(((Map<?, ?>) data.get("member")).get("nickname")).isEqualTo("pebble");
         assertThat(((Map<?, ?>) data.get("member")).get("profileImageUrl")).isNull();
@@ -249,7 +285,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         String issuedState = stateCookie.getValue();
         stateCookie.setValue(issuedState);
         when(naverOAuthGateway.authenticate("code", issuedState))
-                .thenReturn(new OAuthProfile("naver-id-reused", "pebble", null));
+                .thenReturn(new OAuthProfile("naver-id-reused", "pebble", null, null, true));
 
         login("code", issuedState, stateCookie);
         mockMvc.perform(post("/api/v1/auth/naver/login")
@@ -274,7 +310,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
         Cookie stateCookie = beginAuthorizationAndGetCookie();
         String state = stateCookie.getValue();
         when(naverOAuthGateway.authenticate("code", state))
-                .thenReturn(new OAuthProfile("pending-naver-id", "pending", null));
+                .thenReturn(new OAuthProfile("pending-naver-id", "pending", null, null, true));
         mockMvc.perform(post("/api/v1/auth/naver/login")
                         .cookie(stateCookie)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -310,7 +346,7 @@ class NaverAuthIntegrationTest extends AuthenticationTestSupport {
                 .thenAnswer(invocation -> "https://nid.naver.com/oauth2.0/authorize?state=" + invocation.getArgument(0));
         Cookie cookie = beginAuthorizationAndGetCookie();
         when(naverOAuthGateway.authenticate("code", cookie.getValue()))
-                .thenReturn(new OAuthProfile("suspended-subject", "suspended", null));
+                .thenReturn(new OAuthProfile("suspended-subject", "suspended", null, null, true));
         MvcResult result = mockMvc.perform(post("/api/v1/auth/naver/login")
                         .cookie(cookie).contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody("code", cookie.getValue())))
