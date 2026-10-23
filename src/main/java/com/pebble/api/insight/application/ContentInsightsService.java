@@ -28,11 +28,13 @@ public class ContentInsightsService {
         private final String owner;
         Kind(String table,String owner) { this.table=table; this.owner=owner; }
     }
+    public enum ListSort { LATEST,VIEWS,POPULAR }
+    public enum Direction { ASC,DESC }
     public enum Source { UNKNOWN,DIRECT,INTERNAL,GOOGLE,NAVER,BING,DAUM,GITHUB,KAKAO,OTHER }
     public record Point(String date,long views) { }
     public record Month(String month,long views) { }
     public record Referrer(Source source,long views) { }
-    public record ContentList(String kind,int page,int size,long totalElements,long totalPages,List<Item> items) { }
+    public record ContentList(String kind,int page,int size,long totalElements,long totalPages,List<Item> items,String sort,String direction,Map<String,Long> likeCounts) { }
     public record Detail(String kind,int days,Item item,long totalViews,String fromDate,String toDate,String timeZone,
                          Instant trackingStartedAt,Instant sourceTrackingStartedAt,String monthlyCoverageFrom,int chartDays,
                          List<Point> daily,List<Month> monthly,int sourceDays,String sourceFromDate,List<Referrer> sources) { }
@@ -121,15 +123,54 @@ public class ContentInsightsService {
 
     @Transactional
     public ContentList list(long owner,Kind kind,int page,String query) {
+        return list(owner,kind,page,query,ListSort.LATEST,Direction.DESC);
+    }
+    @Transactional
+    public ContentList list(long owner,Kind kind,int page,String query,ListSort sort,Direction direction) {
         authorize(owner);
-        if(page<0||page>10000||query==null||query.codePointCount(0,query.length())>100||query.codePoints().anyMatch(Character::isISOControl)) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
-        String fields=kind==Kind.POST?"c.title,coalesce(c.slug,c.post_number::text),c.is_draft":"c.name,null::text,false";
+        if(page<0||page>10000||query==null||query.codePointCount(0,query.length())>100||query.codePoints().anyMatch(Character::isISOControl)||sort==null||direction==null) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        String fields=kind==Kind.POST?"c.title as insight_title,coalesce(c.slug,c.post_number::text) as insight_url_key,c.is_draft as insight_draft":"c.name as insight_title,null::text as insight_url_key,false as insight_draft";
         String title=kind==Kind.POST?"c.title":"c.name";
-        String where=" from "+kind.table+" c left join content_view_stats s on s.kind=? and s.target_id=c.id where c."+kind.owner+"=? and c.deleted_at is null and c.visibility_status<>'DELETED' and position(lower(?) in lower("+title+"))>0";
-        long total=jdbc.queryForObject("select count(*)"+where,Long.class,kind.name(),owner,query);
-        var items=jdbc.query("select c.id,"+fields+",coalesce(s.views,0),c.visibility_status,c.is_blocked"+where+" order by c.id desc limit 10 offset ?",
-            (r,n)->new Item(Long.toString(r.getLong(1)),r.getString(2),r.getString(3),r.getLong(5),r.getString(6),r.getBoolean(7),r.getBoolean(4)),kind.name(),owner,query,page*10);
-        return new ContentList(route(kind),page,10,total,(total+9)/10,items);
+        String where=" where c."+kind.owner+"=? and c.deleted_at is null and c.visibility_status<>'DELETED'";
+        if(!query.isEmpty()) where+=" and position(lower(?) in lower("+title+"))>0";
+        Object[] countArgs=query.isEmpty()?new Object[]{owner}:new Object[]{owner,query};
+        // 개수에는 통계·공감 조인을 하지 않는다. 조회 0인 콘텐츠도 작성자 범위에 포함한다.
+        long total=jdbc.queryForObject("select count(*) from "+kind.table+" c"+where,Long.class,countArgs);
+        String popularity="";
+        if(sort==ListSort.POPULAR) {
+            String target=kind==Kind.POST?"post_id":"project_id";
+            popularity=" left join lateral (select count(*) likes from "+kind.table+"_like l join member voter on voter.id=l.member_id where l."+target+"=c.id and l.deleted_at is null and voter.status<>'WITHDRAWAL_PENDING') pop on true";
+        }
+        // LIMIT을 유지한 lateral로 본인 콘텐츠의 PK 조회만 하며 전체 통계의 조인 집계를 피한다.
+        String stats=" left join lateral (select st.views from content_view_stats st where st.kind=? and st.target_id=c.id limit 1) s on true";
+        String metric=sort==ListSort.POPULAR?"pop.likes":"null::bigint";
+        String order=switch(sort) {
+            case LATEST -> "c.created_at "+direction+",c.id "+direction;
+            case VIEWS -> "coalesce(s.views,0) "+direction+",c.id "+direction;
+            case POPULAR -> "pop.likes "+direction+",c.created_at "+direction+",c.id "+direction;
+        };
+        String finalOrder=switch(sort) {
+            case LATEST -> "c.created_at "+direction+",c.id "+direction;
+            case VIEWS -> "c.insight_views "+direction+",c.id "+direction;
+            case POPULAR -> "c.insight_likes "+direction+",c.created_at "+direction+",c.id "+direction;
+        };
+        String selected="select c.id,"+fields+",c.created_at,c.visibility_status,c.is_blocked,"+metric+" as insight_likes"
+            +(sort==ListSort.VIEWS?",coalesce(s.views,0) as insight_views":"")+" from "+kind.table+" c"
+            +(sort==ListSort.VIEWS?stats:popularity)+where+" order by "+order+" limit 10 offset ?";
+        String sql="with selected as materialized ("+selected+") select c.id,c.insight_title,c.insight_url_key,c.insight_draft,"
+            +(sort==ListSort.VIEWS?"c.insight_views":"coalesce(s.views,0)")+",c.visibility_status,c.is_blocked,c.insight_likes from selected c"
+            +(sort==ListSort.VIEWS?"":stats)+" order by "+finalOrder;
+        var args=new ArrayList<Object>();
+        if(sort==ListSort.VIEWS) args.add(kind.name());
+        args.addAll(Arrays.asList(countArgs));args.add(page*10);
+        if(sort!=ListSort.VIEWS) args.add(kind.name());
+        var likes=new LinkedHashMap<String,Long>();
+        var items=jdbc.query(sql,(r,n)->{
+                String id=Long.toString(r.getLong(1));
+                if(sort==ListSort.POPULAR) likes.put(id,r.getLong(8));
+                return new Item(id,r.getString(2),r.getString(3),r.getLong(5),r.getString(6),r.getBoolean(7),r.getBoolean(4));
+            },args.toArray());
+        return new ContentList(route(kind),page,10,total,(total+9)/10,items,sort.name(),direction.name(),likes);
     }
 
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
