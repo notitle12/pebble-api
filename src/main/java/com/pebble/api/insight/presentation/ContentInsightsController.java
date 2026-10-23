@@ -77,7 +77,7 @@ public class ContentInsightsController {
     @GetMapping("/api/v1/members/me/content-insights/items")
     public ApiResponse<ContentInsightsService.ContentList> list(@AuthenticationPrincipal Jwt jwt,HttpServletRequest request,
         HttpServletResponse response,@RequestBody(required=false) String body) {
-        query(request,body,Set.of("kind","page","query"));
+        query(request,body,Set.of("kind","page","query","sort","direction"));
         String rawKind=request.getParameter("kind");
         String rawPage=request.getParameter("page");
         int page=0;
@@ -85,9 +85,15 @@ public class ContentInsightsController {
             if(!rawPage.matches("0|[1-9][0-9]{0,4}")) throw MediaRequest.invalid();
             page=Integer.parseInt(rawPage);
         }
+        ContentInsightsService.ListSort sort;
+        ContentInsightsService.Direction direction;
+        try {
+            sort=ContentInsightsService.ListSort.valueOf(request.getParameter("sort")==null?"LATEST":request.getParameter("sort"));
+            direction=ContentInsightsService.Direction.valueOf(request.getParameter("direction")==null?"DESC":request.getParameter("direction"));
+        } catch(IllegalArgumentException exception) { throw MediaRequest.invalid(); }
         response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");
         return ApiResponse.of(insights.list(positiveId(jwt.getSubject().substring(7)),kind(rawKind==null?"posts":rawKind),page,
-            request.getParameter("query")==null?"":request.getParameter("query")));
+            request.getParameter("query")==null?"":request.getParameter("query"),sort,direction));
     }
     @GetMapping("/api/v1/members/me/content-insights/{kind:posts|projects}/{id:[0-9]+}")
     public ApiResponse<ContentInsightsService.Detail> detail(@AuthenticationPrincipal Jwt jwt,@PathVariable String kind,@PathVariable String id,
