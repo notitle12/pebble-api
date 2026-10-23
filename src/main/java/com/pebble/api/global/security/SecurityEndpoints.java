@@ -15,6 +15,9 @@ public final class SecurityEndpoints {
     public record Endpoint(HttpMethod method, String path, Access access) {}
 
     public static final List<Endpoint> API = List.of(
+            new Endpoint(HttpMethod.POST, "/api/v1/content-views/posts/{id:[0-9]+}", Access.PUBLIC),
+            new Endpoint(HttpMethod.POST, "/api/v1/content-views/projects/{id:[0-9]+}", Access.PUBLIC),
+            new Endpoint(HttpMethod.GET, "/api/v1/members/me/content-insights", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/updates", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/updates/{id:[0-9]+}", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/admin/updates", Access.ADMIN),
@@ -153,6 +156,8 @@ public final class SecurityEndpoints {
     static RequestMatcher[] csrfExemptions() {
         // OAuth state 또는 CookieOriginFilter로 보호하는 POST에 한정한다.
         return new RequestMatcher[] {
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/content-views/posts/{id:[0-9]+}"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/content-views/projects/{id:[0-9]+}"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/members/me/withdrawal"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/blogs/{handle}/visits"),
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/naver/authorization"),
