@@ -95,6 +95,35 @@ class ContentInsightsControllerTest extends AuthenticationTestSupport {
         jdbc.update("update project set visibility_status='DELETED',deleted_at=now() where id=?",project.getId());
         mvc.perform(post("/api/v1/content-views/projects/"+project.getId()).header("Origin",ORIGIN)).andExpect(status().isNotFound());
     }
+    @Test void optionalSourcePayloadAndPrivateDetailHaveStrictContracts() throws Exception {
+        mvc.perform(post(path()).header("Origin",ORIGIN).contentType("application/json").content("{\"source\":\"GOOGLE\"}"))
+            .andExpect(status().isNoContent());
+        String detail=INSIGHTS+"/posts/"+post.getId();
+        mvc.perform(get(detail)).andExpect(status().isUnauthorized());
+        mvc.perform(get(detail).header("Authorization","Bearer "+token)).andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.item.id").value(post.getId().toString()))
+            .andExpect(jsonPath("$.data.totalViews").value(1)).andExpect(jsonPath("$.data.sources[0].source").value("GOOGLE"))
+            .andExpect(jsonPath("$.data.sources[0].views").value(1)).andExpect(jsonPath("$.data.daily.length()").value(30))
+            .andExpect(jsonPath("$.data.monthly.length()").value(12));
+        mvc.perform(get(INSIGHTS+"/items").header("Authorization","Bearer "+token)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(1)).andExpect(jsonPath("$.data.items[0].views").value(1));
+        mvc.perform(get(INSIGHTS+"/items").header("Authorization","Bearer "+token).param("kind","projects"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].views").value(0));
+        mvc.perform(get(INSIGHTS+"/projects/"+project.getId()).header("Authorization","Bearer "+token).param("days","0"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.chartDays").value(90));
+    }
+    @Test void detailAndListRejectOwnerInjectionDuplicateQueriesAndInvalidSources() throws Exception {
+        String detail=INSIGHTS+"/posts/"+post.getId();
+        mvc.perform(get(detail).header("Authorization","Bearer "+token).param("days","7","30")).andExpect(status().isBadRequest());
+        mvc.perform(get(detail).header("Authorization","Bearer "+token).param("ownerId",owner.getId().toString())).andExpect(status().isBadRequest());
+        mvc.perform(get(detail).header("Authorization","Bearer "+token).content("{}")).andExpect(status().isBadRequest());
+        mvc.perform(get(INSIGHTS+"/posts/9223372036854775807").header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+        for(String[] pair:new String[][]{{"kind","post"},{"page","10001"},{"page","01"},{"page","-1"},{"query","x".repeat(101)},{"ownerId","1"}})
+            mvc.perform(get(INSIGHTS+"/items").header("Authorization","Bearer "+token).param(pair[0],pair[1])).andExpect(status().isBadRequest());
+        mvc.perform(get(INSIGHTS+"/items").header("Authorization","Bearer "+token).param("kind","posts","projects")).andExpect(status().isBadRequest());
+        for(String payload:new String[]{"{}","{\"source\":\"google\"}","{\"source\":42}","{\"source\":\"GOOGLE\",\"url\":\"https://example.com/private?q=secret\"}","{\"source\":\"GOOGLE\",\"source\":\"NAVER\"}"})
+            mvc.perform(post(path()).header("Origin",ORIGIN).contentType("application/json").content(payload)).andExpect(status().isBadRequest());
+    }
     @Test void cookieExpiresAtSeoulMidnightAndIsSecureInProduction() {
         var beforeMidnight=ContentInsightsController.dailyVisitorCookie("value",Instant.parse("2026-10-22T14:59:59Z"),true);
         assertThat(beforeMidnight.getMaxAge()).isEqualTo(Duration.ofSeconds(1));
