@@ -50,18 +50,23 @@ class ContentInsightDetailsTest extends AuthenticationTestSupport {
         assertThat(detail.kind()).isEqualTo("posts");assertThat(detail.sourceTrackingStartedAt()).isNotNull();
         assertThat(insights.detail(owner.getId(),Kind.POST,post.getId(),0).chartDays()).isEqualTo(90);
     }
-    @Test void sourceTotalsFollowSelectedPeriodAndUnknownLegacyViewsAreNotInvented() {
+    @Test void sourceWindowIsSevenDaysRegardlessOfSelectedViewPeriod() {
         insights.recordDay(Kind.POST,post.getId(),owner.getId(),"v",today.minusDays(31),Source.GITHUB);
         insights.recordDay(Kind.POST,post.getId(),owner.getId(),"v",today.minusDays(7),Source.NAVER);
         insights.recordDay(Kind.POST,post.getId(),owner.getId(),"v",today,Source.INTERNAL);
-        assertThat(insights.detail(owner.getId(),Kind.POST,post.getId(),7).sources()).containsExactly(new Referrer(Source.INTERNAL,1));
-        assertThat(insights.detail(owner.getId(),Kind.POST,post.getId(),30).item().views()).isEqualTo(2);
+        insights.recordDay(Kind.POST,post.getId(),owner.getId(),"v",today.minusDays(6),Source.GOOGLE);
+        assertThat(insights.detail(owner.getId(),Kind.POST,post.getId(),7).sources()).containsExactly(new Referrer(Source.GOOGLE,1),new Referrer(Source.INTERNAL,1));
+        assertThat(insights.detail(owner.getId(),Kind.POST,post.getId(),30).item().views()).isEqualTo(3);
         jdbc.update("update content_view_stats set views=views+5 where kind='POST' and target_id=?",post.getId());
         var all=insights.detail(owner.getId(),Kind.POST,post.getId(),0);
-        assertThat(all.sources().getFirst()).isEqualTo(new Referrer(Source.UNKNOWN,5));
-        assertThat(all.sources().stream().mapToLong(Referrer::views).sum()).isEqualTo(all.totalViews());
+        assertThat(all.totalViews()).isEqualTo(9);
+        assertThat(all.sources()).containsExactly(new Referrer(Source.GOOGLE,1),new Referrer(Source.INTERNAL,1));
+        assertThat(all.sourceDays()).isEqualTo(7);assertThat(all.sourceFromDate()).isEqualTo(today.minusDays(6).toString());
+        insights.cleanupExpired();
+        assertThat(jdbc.queryForObject("select count(*) from content_view_source_day where target_id=?",Long.class,post.getId())).isEqualTo(2);
+        assertThat(insights.detail(owner.getId(),Kind.POST,post.getId(),90).sources()).isEqualTo(all.sources());
     }
-    @Test void monthToYearCompactionIsExactRepeatableAndPreservesAllTimeSources() {
+    @Test void monthToYearCompactionIsExactRepeatableAndDoesNotRetainOldSources() {
         LocalDate firstRetained=today.withDayOfMonth(1).minusMonths(23);
         insights.recordDay(Kind.POST,post.getId(),owner.getId(),"v",firstRetained.minusMonths(1),Source.GOOGLE);
         insights.recordDay(Kind.POST,post.getId(),owner.getId(),"v",firstRetained.minusMonths(2),Source.GOOGLE);
@@ -71,12 +76,12 @@ class ContentInsightDetailsTest extends AuthenticationTestSupport {
         insights.cleanupExpired();insights.cleanupExpired();
         var after=insights.detail(owner.getId(),Kind.POST,post.getId(),0);
         assertThat(after.sources()).isEqualTo(before.sources());assertThat(after.totalViews()).isEqualTo(4);
-        assertThat(jdbc.queryForObject("select sum(views) from content_view_source_year where target_id=?",Long.class,post.getId())).isEqualTo(2);
-        assertThat(jdbc.queryForObject("select count(*) from content_view_source_month where target_id=?",Long.class,post.getId())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select sum(views) from content_view_year where target_id=?",Long.class,post.getId())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select count(*) from content_view_month where target_id=?",Long.class,post.getId())).isEqualTo(2);
         assertThat(jdbc.queryForObject("select count(*) from content_view_source_day where target_id=?",Long.class,post.getId())).isEqualTo(1);
         assertThat(after.monthly()).isEqualTo(before.monthly());
         post.delete();posts.flush();
-        for(String table:List.of("content_view_source_year","content_view_source_month","content_view_source_day"))
+        for(String table:List.of("content_view_year","content_view_month","content_view_source_day"))
             assertThat(jdbc.queryForObject("select count(*) from "+table+" where target_id=?",Long.class,post.getId())).isZero();
     }
     @Test void listFindsZeroViewDraftsAndIsIsolatedAcrossOwnersAndKinds() {
