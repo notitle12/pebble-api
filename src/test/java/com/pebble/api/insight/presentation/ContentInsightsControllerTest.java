@@ -102,7 +102,9 @@ class ContentInsightsControllerTest extends AuthenticationTestSupport {
         mvc.perform(get(detail)).andExpect(status().isUnauthorized());
         mvc.perform(get(detail).header("Authorization","Bearer "+token)).andExpect(status().isOk())
             .andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.data.item.id").value(post.getId().toString()))
-            .andExpect(jsonPath("$.data.totalViews").value(1)).andExpect(jsonPath("$.data.sources[0].source").value("GOOGLE"))
+            .andExpect(jsonPath("$.data.totalViews").value(1)).andExpect(jsonPath("$.data.sourceDays").value(7))
+            .andExpect(jsonPath("$.data.sourceFromDate").value(LocalDate.now(ZoneId.of("Asia/Seoul")).minusDays(6).toString()))
+            .andExpect(jsonPath("$.data.sources[0].source").value("GOOGLE"))
             .andExpect(jsonPath("$.data.sources[0].views").value(1)).andExpect(jsonPath("$.data.daily.length()").value(30))
             .andExpect(jsonPath("$.data.monthly.length()").value(12));
         mvc.perform(get(INSIGHTS+"/items").header("Authorization","Bearer "+token)).andExpect(status().isOk())

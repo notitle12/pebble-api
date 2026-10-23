@@ -35,7 +35,7 @@ public class ContentInsightsService {
     public record ContentList(String kind,int page,int size,long totalElements,long totalPages,List<Item> items) { }
     public record Detail(String kind,int days,Item item,long totalViews,String fromDate,String toDate,String timeZone,
                          Instant trackingStartedAt,Instant sourceTrackingStartedAt,String monthlyCoverageFrom,int chartDays,
-                         List<Point> daily,List<Month> monthly,List<Referrer> sources) { }
+                         List<Point> daily,List<Month> monthly,int sourceDays,String sourceFromDate,List<Referrer> sources) { }
     public record Item(String id,String title,String urlKey,long views,String visibilityStatus,boolean isBlocked,boolean draft) { }
     public record Day(String date,long postViews,long projectViews) { }
     public record Insights(int days,String fromDate,String toDate,String timeZone,Instant trackingStartedAt,int chartDays,
@@ -82,10 +82,10 @@ public class ContentInsightsService {
                 insert into content_view_source_day(kind,target_id,view_date,source,views)
                 select kind,target_id,?::date,?,1 from daily
                 on conflict(kind,target_id,view_date,source) do update set views=content_view_source_day.views+1 returning kind,target_id
-            ) insert into content_view_source_month(kind,target_id,view_month,source,views)
-            select kind,target_id,?::date,?,1 from sourced
-            on conflict(kind,target_id,view_month,source) do update set views=content_view_source_month.views+1
-            """,kind.name(),targetId,day,day,source.name(),day.withDayOfMonth(1),source.name());
+            ) insert into content_view_month(kind,target_id,view_month,views)
+            select kind,target_id,?::date,1 from sourced
+            on conflict(kind,target_id,view_month) do update set views=content_view_month.views+1
+            """,kind.name(),targetId,day,day,source.name(),day.withDayOfMonth(1));
     }
 
     @Transactional
@@ -150,22 +150,15 @@ public class ContentInsightsService {
         var monthly=new LinkedHashMap<YearMonth,Long>();
         YearMonth month=YearMonth.from(today);
         for(int i=11;i>=0;i--) monthly.put(month.minusMonths(i),0L);
-        jdbc.query("select view_month,sum(views) from content_view_source_month where kind=? and target_id=? and view_month between ? and ? group by view_month",
+        jdbc.query("select view_month,views from content_view_month where kind=? and target_id=? and view_month between ? and ?",
             r->{monthly.put(YearMonth.from(r.getDate(1).toLocalDate()),r.getLong(2));},kind.name(),id,month.minusMonths(11).atDay(1),month.atDay(1));
         var counters=jdbc.query("select views from content_view_stats where kind=? and target_id=?",(r,n)->r.getLong(1),kind.name(),id);
         long total=counters.isEmpty()?0:counters.getFirst();
         long views=days==0?total:daily.values().stream().mapToLong(Long::longValue).sum();
         var sources=new EnumMap<Source,Long>(Source.class);
-        if(days==0) {
-            jdbc.query("select source,sum(views) from (select source,views from content_view_source_month where kind=? and target_id=? union all select source,views from content_view_source_year where kind=? and target_id=?) v group by source",
-                r->{sources.put(Source.valueOf(r.getString(1)),r.getLong(2));},kind.name(),id,kind.name(),id);
-        } else {
-            jdbc.query("select source,sum(views) from content_view_source_day where kind=? and target_id=? and view_date between ? and ? group by source",
-                r->{sources.put(Source.valueOf(r.getString(1)),r.getLong(2));},kind.name(),id,from,today);
-        }
-        // 이전 버전의 보존 기간 밖 숫자는 출처나 날짜를 추측하지 않는다.
-        long missing=views-sources.values().stream().mapToLong(Long::longValue).sum();
-        if(missing>0) sources.merge(Source.UNKNOWN,missing,Long::sum);
+        LocalDate sourceFrom=today.minusDays(6);
+        jdbc.query("select source,sum(views) from content_view_source_day where kind=? and target_id=? and view_date between ? and ? group by source",
+            r->{sources.put(Source.valueOf(r.getString(1)),r.getLong(2));},kind.name(),id,sourceFrom,today);
         var sourceRows=sources.entrySet().stream().filter(e->e.getValue()>0).map(e->new Referrer(e.getKey(),e.getValue()))
             .sorted(Comparator.comparingLong(Referrer::views).reversed().thenComparing(r->r.source().name())).toList();
         var timestamps=jdbc.queryForObject("select s.started_at,d.source_started_at,d.monthly_coverage_from from content_view_started s cross join content_view_detail_started d",
@@ -174,7 +167,7 @@ public class ContentInsightsService {
         return new Detail(route(kind),days,new Item(item.id(),item.title(),item.urlKey(),views,item.visibilityStatus(),item.isBlocked(),item.draft()),total,days==0?null:from.toString(),today.toString(),SEOUL.getId(),
             (Instant)timestamps[0],(Instant)timestamps[1],(String)timestamps[2],chartDays,
             daily.entrySet().stream().map(e->new Point(e.getKey().toString(),e.getValue())).toList(),
-            monthly.entrySet().stream().map(e->new Month(e.getKey().toString(),e.getValue())).toList(),sourceRows);
+            monthly.entrySet().stream().map(e->new Month(e.getKey().toString(),e.getValue())).toList(),7,sourceFrom.toString(),sourceRows);
     }
     private static String route(Kind kind) { return kind==Kind.POST?"posts":"projects"; }
 
@@ -203,24 +196,24 @@ public class ContentInsightsService {
         LocalDate today=LocalDate.now(clock.withZone(SEOUL));
         // 날짜 인덱스와 작은 배치로 잠금·삭제 부하를 제한한다.
         for(String table:List.of("content_view_visitor","content_view_day","content_view_source_day")) {
-            LocalDate before=table.equals("content_view_visitor")?today:today.minusDays(89);
+            LocalDate before=table.equals("content_view_visitor")?today:today.minusDays(table.equals("content_view_source_day")?6:89);
             jdbc.update("delete from "+table+" where ctid in (select ctid from "+table+" where view_date<? order by view_date limit 5000 for update skip locked)",before);
         }
         jdbc.update("""
             with locked as materialized (
                 select s.kind,s.target_id from content_view_stats s join (
                     select distinct kind,target_id from (
-                        select kind,target_id from content_view_source_month where view_month<? order by view_month limit 1000
+                        select kind,target_id from content_view_month where view_month<? order by view_month limit 1000
                     ) candidates
                 ) c using(kind,target_id) order by s.kind,s.target_id for update of s skip locked
             ), moved as (
-                delete from content_view_source_month where ctid in (
-                    select m.ctid from content_view_source_month m join locked l using(kind,target_id)
+                delete from content_view_month where ctid in (
+                    select m.ctid from content_view_month m join locked l using(kind,target_id)
                     where m.view_month<? order by m.view_month limit 1000 for update of m skip locked
-                ) returning kind,target_id,view_month,source,views
-            ) insert into content_view_source_year(kind,target_id,view_year,source,views)
-            select kind,target_id,extract(year from view_month)::integer,source,sum(views) from moved group by kind,target_id,extract(year from view_month)::integer,source
-            on conflict(kind,target_id,view_year,source) do update set views=content_view_source_year.views+excluded.views
+                ) returning kind,target_id,view_month,views
+            ) insert into content_view_year(kind,target_id,view_year,views)
+            select kind,target_id,extract(year from view_month)::integer,sum(views) from moved group by kind,target_id,extract(year from view_month)::integer
+            on conflict(kind,target_id,view_year) do update set views=content_view_year.views+excluded.views
             """,today.withDayOfMonth(1).minusMonths(23),today.withDayOfMonth(1).minusMonths(23));
     }
     private static ApplicationException notFound() { return new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND); }
