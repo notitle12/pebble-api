@@ -31,6 +31,7 @@ public class CookieOriginFilter extends OncePerRequestFilter {
         return !"POST".equals(request.getMethod())
                 || !("/api/v1/auth/token/refresh".equals(path) || "/api/v1/auth/logout".equals(path)
                     || path.matches("^/api/v1/blogs/[^/]+/visits$")
+                    || path.matches("^/api/v1/content-views/(posts|projects)/[0-9]+$")
                     || "/api/v1/auth/naver/withdrawal/cancel".equals(path)
                     || "/api/v1/auth/naver/withdrawal".equals(path)
                     || "/api/v1/members/me/withdrawal".equals(path)
