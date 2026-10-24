@@ -8,7 +8,7 @@ RUN groupadd --gid 10001 pebble \
     && chown -R pebble:pebble /app/logs \
     && chmod 700 /app/logs/admin-audit
 
-ARG JAR_FILE=build/libs/pebble-api-1.2.0.jar
+ARG JAR_FILE=build/libs/pebble-api-1.2.1.jar
 COPY --chown=pebble:pebble ${JAR_FILE} /app/app.jar
 
 ENV SPRING_PROFILES_ACTIVE=prod
