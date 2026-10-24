@@ -7,7 +7,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "build": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run"
+    "build": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run",
+    "deploy": "node deploy.mjs"
   },
   "devDependencies": {
     "miniflare": "5.20261001.0-alpha",

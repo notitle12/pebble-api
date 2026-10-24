@@ -1,7 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pebble-images",
-  "account_id": "[REMOVED_CLOUDFLARE_ACCOUNT_ID]",
   "main": "src/worker.mjs",
   "compatibility_date": "2026-10-04",
   "workers_dev": false,
