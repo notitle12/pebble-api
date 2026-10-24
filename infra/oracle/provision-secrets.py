@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -18,7 +19,10 @@ required = ['NAVER_CLIENT_ID', 'NAVER_CLIENT_SECRET', 'R2_ENDPOINT', 'R2_BUCKET_
             'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'MEDIA_CDN_SIGNING_KEY_BASE64']
 if set(external) != set(required) or any(not external[k] for k in required):
     raise SystemExit('Required external secret configuration is incomplete')
-if external['R2_ENDPOINT'] != 'https://[REMOVED_CLOUDFLARE_ACCOUNT_ID].r2.cloudflarestorage.com':
+account_id = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '')
+if not re.fullmatch(r'[a-fA-F0-9]{32}', account_id):
+    raise SystemExit('Set a valid CLOUDFLARE_ACCOUNT_ID before provisioning')
+if external['R2_ENDPOINT'] != f'https://{account_id.lower()}.r2.cloudflarestorage.com':
     raise SystemExit('Unexpected R2 account endpoint')
 if external['R2_BUCKET_NAME'] != 'pebble-media':
     raise SystemExit('Unexpected R2 bucket')

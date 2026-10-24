@@ -2,3 +2,5 @@
 .env*
 node_modules/
 .wrangler/
+
+!.env.deploy.example
