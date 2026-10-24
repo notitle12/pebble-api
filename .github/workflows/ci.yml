@@ -55,7 +55,7 @@ jobs:
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '21.0.13'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -63,12 +63,12 @@ jobs:
           cache-provider: basic
 
       - name: Run tests and build deployment JAR
-        run: ./gradlew clean test bootJar
+        run: ./gradlew clean test bootJar --no-build-cache
 
       - name: Set up Node for image CDN tests
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '22.23.4'
           cache: npm
           cache-dependency-path: infra/image-worker/package-lock.json
 
