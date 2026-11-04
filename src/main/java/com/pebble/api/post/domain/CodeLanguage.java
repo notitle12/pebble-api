@@ -6,6 +6,7 @@ public enum CodeLanguage {
     TYPESCRIPT,
     PYTHON,
     HTML,
+    XML,
     CSS,
     SQL,
     JSON,
