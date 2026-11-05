@@ -34,7 +34,7 @@ RUN apt-get update \
 COPY --from=java-runtime /opt/java/openjdk /opt/java/openjdk
 RUN java -version
 WORKDIR /app
-ARG JAR_FILE=build/libs/pebble-api-1.2.2.jar
+ARG JAR_FILE=build/libs/pebble-api-1.3.0.jar
 COPY --chown=pebble:pebble ${JAR_FILE} /app/app.jar
 USER 10001:10001
 EXPOSE 8080
