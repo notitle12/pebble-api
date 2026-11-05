@@ -334,15 +334,18 @@ public class PostService {
         };
     }
 
-    public Page<PostView> listMine(long memberId, PostVisibility visibility, Pageable pageable) { return listMine(memberId,visibility,null,pageable); }
+    public Page<PostView> listMine(long memberId, PostVisibility visibility, Pageable pageable) { return listMine(memberId,visibility,null,null,pageable); }
 
-    public Page<PostView> listMine(long memberId, PostVisibility visibility, Long boardId, Pageable pageable) {
+    public Page<PostView> listMine(long memberId, PostVisibility visibility, Long boardId, Pageable pageable) { return listMine(memberId,visibility,boardId,null,pageable); }
+
+    public Page<PostView> listMine(long memberId, PostVisibility visibility, Long boardId, Boolean draft, Pageable pageable) {
         members.findActiveById(memberId);
         if(boardId!=null)boards.resolveForPost(boardId,memberId);
         Specification<Post> filter = (root, query, cb) -> cb.and(
                 cb.equal(root.get("author").get("id"), memberId),
                 cb.notEqual(root.get("visibility"), PostVisibility.DELETED),
                 visibility == null ? cb.conjunction() : cb.equal(root.get("visibility"), visibility),
+                draft == null ? cb.conjunction() : cb.equal(root.get("draft"), draft),
                 boardId==null ? cb.conjunction() : cb.equal(root.get("boardId"),boardId));
         return page(posts.findAll(filter, boardId==null?pageable:boardPageable(pageable)), true);
     }
