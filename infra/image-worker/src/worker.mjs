@@ -61,8 +61,8 @@ export async function handleImage(request, env, context, {cache=globalThis.cache
     return new Response(request.method==='HEAD'?null:response.body,{headers:{
       'Content-Type':'image/webp','Cache-Control':'private, no-store','Cloudflare-CDN-Cache-Control':'no-store',
       'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Pebble-Cache':hit?'HIT':'MISS',
-      // 대표 이미지 재사용: 유효한 서명을 검증한 프로젝트 이미지만 브라우저에서 읽는다.
-      ...(objectKey.startsWith('project/')?{'Access-Control-Allow-Origin':'*'}:{})
+      // 편집용 Canvas도 만료와 서명을 검증한 응답만 자격 증명 없이 읽는다.
+      'Access-Control-Allow-Origin':'*'
     }});
   }catch{return failure(503);}
 }
