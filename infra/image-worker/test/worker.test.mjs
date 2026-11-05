@@ -69,5 +69,23 @@ test('project cover reuse permits credential-free CORS only after signature vali
   await r.arrayBuffer();await Promise.all(s.pending);
  }
  assert.equal((await s.call(signed(undefined,path),{},time+900000)).headers.get('Access-Control-Allow-Origin'),null);
- assert.equal((await setup().call()).headers.get('Access-Control-Allow-Origin'),null);
+ assert.equal((await setup().call()).headers.get('Access-Control-Allow-Origin'),'*');
+});
+
+// 본문 편집은 이미지를 바이트로 읽어 새 파일을 만들지만 인증 경계는 그대로 유지한다.
+test('body image editing reads authenticated bytes on misses and hits without credentials',async()=>{
+ const s=setup();
+ for(let i=0;i<2;i++){
+  const response=await s.call(signed(),{headers:{Origin:'https://www.pebble-log.com'}});
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'),'*');
+  assert.equal(response.headers.get('Access-Control-Allow-Credentials'),null);
+  await response.arrayBuffer();await Promise.all(s.pending);
+ }
+ const baseline=s.counts();
+ for(const url of [signed().replace(/signature=[^&]+/,'signature='+Buffer.alloc(32).toString('base64url')),signed(Math.floor(time/1000))]){
+  const response=await s.call(url);assert.equal(response.status,403);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'),null);
+ }
+ assert.deepEqual(s.counts(),baseline);
 });

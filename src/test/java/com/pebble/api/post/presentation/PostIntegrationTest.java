@@ -168,6 +168,43 @@ class PostIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void mineCanFilterDraftsBeforePaginationAndRejectsInvalidDraftQuery() throws Exception {
+        String draftOne = create(owner, "HIDDEN", null, List.of());
+        String draftTwo = create(owner, "HIDDEN", null, List.of());
+        String completedHidden = create(owner, "HIDDEN", null, List.of());
+        String deletedDraft = create(owner, "HIDDEN", null, List.of());
+        String foreignDraft = create(other, "HIDDEN", null, List.of());
+        mvc.perform(delete(PATH + "/" + deletedDraft).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isNoContent());
+        jdbc.update("update post set is_draft=true where id in (?,?,?)", Long.parseLong(draftOne), Long.parseLong(draftTwo), Long.parseLong(foreignDraft));
+        jdbc.update("update post set is_draft=true where id=?", Long.parseLong(deletedDraft));
+        em.clear();
+
+        String mine = "/api/v1/members/me/posts";
+        mvc.perform(get(mine).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(3));
+        mvc.perform(get(mine).param("draft", "true").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.containsInAnyOrder(draftOne, draftTwo)));
+        mvc.perform(get(mine).param("draft", "true").param("size", "1").param("page", "1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.totalPages").value(2)).andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].draft").value(true));
+        mvc.perform(get(mine).param("draft", "false").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].id").value(completedHidden))
+                .andExpect(jsonPath("$.data.content[0].visibilityStatus").value("HIDDEN"));
+        for (String invalid : List.of("", "TRUE", "yes", "1")) {
+            mvc.perform(get(mine + "?draft=" + invalid).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(get(mine + "?draft=true&draft=false").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(mine).param("draft", "true")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void boardOrderIsIndependentOfGlobalOrderAndIncludesPrivateOwnerPosts() throws Exception {
         long boardA=boardService.create(owner.getId(),new com.pebble.api.board.application.BoardChanges(java.util.Set.of("name"),"A",null,0)).getId();
         long boardB=boardService.create(owner.getId(),new com.pebble.api.board.application.BoardChanges(java.util.Set.of("name"),"B",null,1)).getId();

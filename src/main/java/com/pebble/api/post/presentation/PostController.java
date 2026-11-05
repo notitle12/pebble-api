@@ -95,7 +95,7 @@ public class PostController {
 
     @GetMapping("/api/v1/members/me/posts")
     public ApiResponse<PostPage> mine(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
-        checkQuery(query, Set.of("page", "size", "sort", "visibilityStatus", "boardId"));
+        checkQuery(query, Set.of("page", "size", "sort", "visibilityStatus", "boardId", "draft"));
         PostVisibility visibility = null;
         if (query.containsKey("visibilityStatus")) {
             try {
@@ -105,8 +105,15 @@ public class PostController {
                 throw invalid("visibilityStatus");
             }
         }
+        Boolean draft = null;
+        if (query.containsKey("draft")) {
+            String value = query.getFirst("draft");
+            if ("true".equals(value)) draft = true;
+            else if ("false".equals(value)) draft = false;
+            else throw invalid("draft");
+        }
         return ApiResponse.of(page(likes.decorate(
-                posts.listMine(memberId(jwt), visibility, optionalId(query,"boardId"), pageable(query, "displayOrder")), requesterId(jwt))));
+                posts.listMine(memberId(jwt), visibility, optionalId(query,"boardId"), draft, pageable(query, "displayOrder")), requesterId(jwt))));
     }
 
     @GetMapping("/api/v1/members/me/blog/posts")
