@@ -81,7 +81,7 @@ class ContentInsightsControllerTest extends AuthenticationTestSupport {
         mvc.perform(post(path()).header("Origin",ORIGIN).contentType("application/json").content("{}" )).andExpect(status().isBadRequest());
         mvc.perform(post(path()).header("Origin",ORIGIN).cookie(new Cookie(ContentInsightsController.VISITOR_COOKIE,"a"),new Cookie(ContentInsightsController.VISITOR_COOKIE,"b"))).andExpect(status().isBadRequest());
         for(String id:new String[]{"0","01","9223372036854775808"}) mvc.perform(post("/api/v1/content-views/posts/"+id).header("Origin",ORIGIN)).andExpect(status().isBadRequest());
-        for(String days:new String[]{"2","-1","007","91",""}) mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days",days)).andExpect(status().isBadRequest());
+        for(String days:new String[]{"2","-1","007","014","91",""}) mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days",days)).andExpect(status().isBadRequest());
         mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days","7","30")).andExpect(status().isBadRequest());
         mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("memberId",owner.getId().toString())).andExpect(status().isBadRequest());
         mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).content("{}" )).andExpect(status().isBadRequest());
@@ -149,6 +149,42 @@ class ContentInsightsControllerTest extends AuthenticationTestSupport {
         assertThat(overview.daily()).hasSize(1);
         assertThat(service.detail(owner.getId(),com.pebble.api.insight.application.ContentInsightsService.Kind.POST,post.getId(),1).item().views()).isEqualTo(1);
         assertThat(service.read(owner.getId(),7).postViews()).isEqualTo(10);
+    }
+    @Test void fourteenDayInsightsIncludeBothInclusiveEdgesButKeepCumulativeDetailTotals() throws Exception {
+        LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        LocalDate from=today.minusDays(13);
+        LocalDate excluded=today.minusDays(14);
+        jdbc.update("insert into content_view_stats(kind,target_id,post_id,project_id,owner_member_id,views) values('POST',?,?,null,?,28)",
+                post.getId(),post.getId(),owner.getId());
+        jdbc.update("insert into content_view_day(kind,target_id,view_date,views) values('POST',?,?,?),( 'POST',?,?,?),( 'POST',?,?,?)",
+                post.getId(),excluded,20,post.getId(),from,3,post.getId(),today,5);
+        jdbc.update("insert into content_view_stats(kind,target_id,post_id,project_id,owner_member_id,views) values('PROJECT',?,null,?,?,17)",
+                project.getId(),project.getId(),owner.getId());
+        jdbc.update("insert into content_view_day(kind,target_id,view_date,views) values('PROJECT',?,?,?),( 'PROJECT',?,?,?),( 'PROJECT',?,?,?)",
+                project.getId(),excluded,7,project.getId(),from,4,project.getId(),today,6);
+
+        mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days","14"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.days").value(14))
+                .andExpect(jsonPath("$.data.fromDate").value(from.toString())).andExpect(jsonPath("$.data.toDate").value(today.toString()))
+                .andExpect(jsonPath("$.data.chartDays").value(14)).andExpect(jsonPath("$.data.daily.length()").value(14))
+                .andExpect(jsonPath("$.data.daily[0].date").value(from.toString())).andExpect(jsonPath("$.data.daily[0].postViews").value(3))
+                .andExpect(jsonPath("$.data.daily[13].date").value(today.toString())).andExpect(jsonPath("$.data.daily[13].postViews").value(5))
+                .andExpect(jsonPath("$.data.postViews").value(8)).andExpect(jsonPath("$.data.projectViews").value(10))
+                .andExpect(jsonPath("$.data.daily[0].projectViews").value(4)).andExpect(jsonPath("$.data.daily[13].projectViews").value(6));
+        mvc.perform(get(INSIGHTS+"/posts/"+post.getId()).header("Authorization","Bearer "+token).param("days","14"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.days").value(14))
+                .andExpect(jsonPath("$.data.fromDate").value(from.toString())).andExpect(jsonPath("$.data.toDate").value(today.toString()))
+                .andExpect(jsonPath("$.data.chartDays").value(14)).andExpect(jsonPath("$.data.daily.length()").value(14))
+                .andExpect(jsonPath("$.data.daily[0].date").value(from.toString())).andExpect(jsonPath("$.data.daily[0].views").value(3))
+                .andExpect(jsonPath("$.data.daily[13].views").value(5)).andExpect(jsonPath("$.data.item.views").value(8))
+                .andExpect(jsonPath("$.data.totalViews").value(28));
+        mvc.perform(get(INSIGHTS+"/projects/"+project.getId()).header("Authorization","Bearer "+token).param("days","14"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.days").value(14))
+                .andExpect(jsonPath("$.data.fromDate").value(from.toString())).andExpect(jsonPath("$.data.toDate").value(today.toString()))
+                .andExpect(jsonPath("$.data.chartDays").value(14)).andExpect(jsonPath("$.data.daily.length()").value(14))
+                .andExpect(jsonPath("$.data.daily[0].date").value(from.toString())).andExpect(jsonPath("$.data.daily[0].views").value(4))
+                .andExpect(jsonPath("$.data.daily[13].views").value(6)).andExpect(jsonPath("$.data.item.views").value(10))
+                .andExpect(jsonPath("$.data.totalViews").value(17));
     }
     @Test void unpublishedTargetsCannotBeCounted() throws Exception {
         mvc.perform(post("/api/v1/content-views/posts/9223372036854775807").header("Origin",ORIGIN)).andExpect(status().isNotFound());

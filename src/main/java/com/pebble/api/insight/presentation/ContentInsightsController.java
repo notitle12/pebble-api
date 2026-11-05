@@ -69,7 +69,7 @@ public class ContentInsightsController {
         if(body!=null) throw MediaRequest.invalid();
         if(request.getParameterMap().entrySet().stream().anyMatch(e->!e.getKey().equals("days")||e.getValue().length!=1)) throw MediaRequest.invalid();
         String raw=request.getParameter("days");
-        if(raw!=null&&!Set.of("0","1","7","30","90").contains(raw)) throw MediaRequest.invalid();
+        if(raw!=null&&!Set.of("0","1","7","14","30","90").contains(raw)) throw MediaRequest.invalid();
         response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");
         return ApiResponse.of(insights.read(positiveId(jwt.getSubject().substring(7)),raw==null?30:Integer.parseInt(raw)));
     }
@@ -100,7 +100,7 @@ public class ContentInsightsController {
         HttpServletRequest request,HttpServletResponse response,@RequestBody(required=false) String body) {
         query(request,body,Set.of("days"));
         String raw=request.getParameter("days");
-        if(raw!=null&&!Set.of("0","1","7","30","90").contains(raw)) throw MediaRequest.invalid();
+        if(raw!=null&&!Set.of("0","1","7","14","30","90").contains(raw)) throw MediaRequest.invalid();
         response.setHeader(HttpHeaders.CACHE_CONTROL,"no-store");
         return ApiResponse.of(insights.detail(positiveId(jwt.getSubject().substring(7)),kind(kind),positiveId(id),raw==null?30:Integer.parseInt(raw)));
     }
