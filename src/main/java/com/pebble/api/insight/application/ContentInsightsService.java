@@ -92,7 +92,7 @@ public class ContentInsightsService {
 
     @Transactional
     public Insights read(long owner,int days) {
-        if(!Set.of(0,7,30,90).contains(days)) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        if(!Set.of(0,1,7,30,90).contains(days)) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
         authorize(owner);
         LocalDate today=LocalDate.now(clock.withZone(SEOUL));
         int chartDays=days==0?30:days;
@@ -176,7 +176,7 @@ public class ContentInsightsService {
     @Transactional(isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Detail detail(long owner,Kind kind,long id,int days) {
         authorize(owner);
-        if(!Set.of(0,7,30,90).contains(days)) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
+        if(!Set.of(0,1,7,30,90).contains(days)) throw new ApplicationException(GlobalErrorCode.INVALID_REQUEST);
         String fields=kind==Kind.POST?"c.title,coalesce(c.slug,c.post_number::text),c.is_draft":"c.name,null::text,false";
         var items=jdbc.query("select c.id,"+fields+",c.visibility_status,c.is_blocked from "+kind.table+" c where c.id=? and c."+kind.owner+"=? and c.deleted_at is null and c.visibility_status<>'DELETED' for share",
             (r,n)->new Item(Long.toString(r.getLong(1)),r.getString(2),r.getString(3),0,r.getString(5),r.getBoolean(6),r.getBoolean(4)),id,owner);

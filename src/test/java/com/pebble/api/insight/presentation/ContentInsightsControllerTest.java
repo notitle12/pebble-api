@@ -81,10 +81,74 @@ class ContentInsightsControllerTest extends AuthenticationTestSupport {
         mvc.perform(post(path()).header("Origin",ORIGIN).contentType("application/json").content("{}" )).andExpect(status().isBadRequest());
         mvc.perform(post(path()).header("Origin",ORIGIN).cookie(new Cookie(ContentInsightsController.VISITOR_COOKIE,"a"),new Cookie(ContentInsightsController.VISITOR_COOKIE,"b"))).andExpect(status().isBadRequest());
         for(String id:new String[]{"0","01","9223372036854775808"}) mvc.perform(post("/api/v1/content-views/posts/"+id).header("Origin",ORIGIN)).andExpect(status().isBadRequest());
-        for(String days:new String[]{"1","-1","007","91",""}) mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days",days)).andExpect(status().isBadRequest());
+        for(String days:new String[]{"2","-1","007","91",""}) mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days",days)).andExpect(status().isBadRequest());
         mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days","7","30")).andExpect(status().isBadRequest());
         mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("memberId",owner.getId().toString())).andExpect(status().isBadRequest());
         mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).content("{}" )).andExpect(status().isBadRequest());
+    }
+    @Test void oneDayInsightsUseSeoulDateForOverviewAndBothDetailKinds() throws Exception {
+        LocalDate today=LocalDate.now(ZoneId.of("Asia/Seoul"));
+        LocalDate yesterday=today.minusDays(1);
+        Instant seoulMidnight=today.atStartOfDay(ZoneId.of("Asia/Seoul")).toInstant();
+        assertThat(seoulMidnight.atZone(ZoneOffset.UTC).toLocalDate()).isEqualTo(yesterday);
+
+        mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days","1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.days").value(1))
+                .andExpect(jsonPath("$.data.fromDate").value(today.toString())).andExpect(jsonPath("$.data.toDate").value(today.toString()))
+                .andExpect(jsonPath("$.data.chartDays").value(1)).andExpect(jsonPath("$.data.daily.length()").value(1))
+                .andExpect(jsonPath("$.data.daily[0].date").value(today.toString()))
+                .andExpect(jsonPath("$.data.postViews").value(0)).andExpect(jsonPath("$.data.projectViews").value(0));
+        for(String kind:new String[]{"posts","projects"}) {
+            String id=kind.equals("posts")?post.getId().toString():project.getId().toString();
+            mvc.perform(get(INSIGHTS+"/"+kind+"/"+id).header("Authorization","Bearer "+token).param("days","1"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.days").value(1))
+                    .andExpect(jsonPath("$.data.fromDate").value(today.toString())).andExpect(jsonPath("$.data.toDate").value(today.toString()))
+                    .andExpect(jsonPath("$.data.chartDays").value(1)).andExpect(jsonPath("$.data.daily.length()").value(1))
+                    .andExpect(jsonPath("$.data.daily[0].date").value(today.toString()))
+                    .andExpect(jsonPath("$.data.item.views").value(0)).andExpect(jsonPath("$.data.sourceDays").value(7));
+        }
+
+        jdbc.update("insert into content_view_stats(kind,target_id,post_id,project_id,owner_member_id,views) values('POST',?,?,null,?,10)",
+                post.getId(),post.getId(),owner.getId());
+        jdbc.update("insert into content_view_day(kind,target_id,view_date,views) values('POST',?,?,?),( 'POST',?,?,?)",
+                post.getId(),yesterday,6,post.getId(),today,4);
+        jdbc.update("insert into content_view_stats(kind,target_id,post_id,project_id,owner_member_id,views) values('PROJECT',?,null,?,?,9)",
+                project.getId(),project.getId(),owner.getId());
+        jdbc.update("insert into content_view_day(kind,target_id,view_date,views) values('PROJECT',?,?,?),( 'PROJECT',?,?,?)",
+                project.getId(),yesterday,7,project.getId(),today,2);
+        mvc.perform(get(INSIGHTS).header("Authorization","Bearer "+token).param("days","1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.postViews").value(4)).andExpect(jsonPath("$.data.projectViews").value(2))
+                .andExpect(jsonPath("$.data.daily.length()").value(1)).andExpect(jsonPath("$.data.daily[0].postViews").value(4))
+                .andExpect(jsonPath("$.data.daily[0].projectViews").value(2));
+        mvc.perform(get(INSIGHTS+"/posts/"+post.getId()).header("Authorization","Bearer "+token).param("days","1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalViews").value(10)).andExpect(jsonPath("$.data.item.views").value(4))
+                .andExpect(jsonPath("$.data.daily.length()").value(1)).andExpect(jsonPath("$.data.daily[0].views").value(4));
+        mvc.perform(get(INSIGHTS+"/projects/"+project.getId()).header("Authorization","Bearer "+token).param("days","1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalViews").value(9)).andExpect(jsonPath("$.data.item.views").value(2))
+                .andExpect(jsonPath("$.data.daily.length()").value(1)).andExpect(jsonPath("$.data.daily[0].views").value(2));
+
+        String key=UUID.randomUUID().toString().substring(0,12);
+        Member another=agreedMember(new Member("x-"+key,null,MemberStatus.ACTIVE,null,null));
+        another.completeProfile("Other "+key,"x-"+key,another.getNickname(),Instant.now());
+        members.saveAndFlush(another);
+        String otherToken=tokens.issueForMember(another.getId(),Instant.now());
+        mvc.perform(get(INSIGHTS+"/posts/"+post.getId()).header("Authorization","Bearer "+otherToken).param("days","1"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get(INSIGHTS+"/projects/"+project.getId()).header("Authorization","Bearer "+otherToken).param("days","1"))
+                .andExpect(status().isNotFound());
+    }
+    @Test void oneDayReadUsesTheNewSeoulDayWhileUtcIsStillYesterday() {
+        var clock=Clock.fixed(Instant.parse("2026-11-05T15:00:00Z"),ZoneOffset.UTC);
+        var service=new com.pebble.api.insight.application.ContentInsightsService(clock,jdbc,members);
+        jdbc.update("insert into content_view_stats(kind,target_id,post_id,project_id,owner_member_id,views) values('POST',?,?,null,?,10)",post.getId(),post.getId(),owner.getId());
+        jdbc.update("insert into content_view_day(kind,target_id,view_date,views) values('POST',?,'2026-11-05',9),('POST',?,'2026-11-06',1)",post.getId(),post.getId());
+        var overview=service.read(owner.getId(),1);
+        assertThat(overview.fromDate()).isEqualTo("2026-11-06");
+        assertThat(overview.toDate()).isEqualTo("2026-11-06");
+        assertThat(overview.postViews()).isEqualTo(1);
+        assertThat(overview.daily()).hasSize(1);
+        assertThat(service.detail(owner.getId(),com.pebble.api.insight.application.ContentInsightsService.Kind.POST,post.getId(),1).item().views()).isEqualTo(1);
+        assertThat(service.read(owner.getId(),7).postViews()).isEqualTo(10);
     }
     @Test void unpublishedTargetsCannotBeCounted() throws Exception {
         mvc.perform(post("/api/v1/content-views/posts/9223372036854775807").header("Origin",ORIGIN)).andExpect(status().isNotFound());
