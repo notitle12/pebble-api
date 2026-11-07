@@ -19,6 +19,8 @@ import org.hibernate.annotations.Check;
 
 @Entity
 @Table(name = "post")
+// 시리즈 순서만 갱신할 때 다른 트랜잭션의 관리자 차단 상태를 덮어쓰지 않는다.
+@org.hibernate.annotations.DynamicUpdate
 @Check(name = "ck_post_summary_length", constraints = "summary is null or char_length(summary) <= 500")
 @Check(name = "ck_post_visibility", constraints = "visibility_status in ('PUBLIC', 'HIDDEN', 'DELETED')")
 @Check(name = "ck_post_blocked_metadata", constraints = "((is_blocked = true and blocked_at is not null and blocked_by_admin_id is not null) or (is_blocked = false and blocked_at is null and blocked_by_admin_id is null))")
@@ -51,6 +53,24 @@ public class Post extends BaseTimeEntity {
 
     @Column(name = "project_id")
     private Long projectId;
+
+    @Column(name = "series_id")
+    private Long seriesId;
+    @Column(name = "series_display_order", nullable = false)
+    private int seriesDisplayOrder;
+
+    public Long getSeriesId() { return seriesId; }
+    public int getSeriesDisplayOrder() { return seriesDisplayOrder; }
+    public void changeSeries(Long seriesId) {
+        ensureNotDeleted();
+        this.seriesId = seriesId;
+    }
+    public void changeSeriesOrder(int position) {
+        ensureNotDeleted();
+        if (position < 0) throw new IllegalArgumentException("Position must be nonnegative");
+        seriesDisplayOrder = position;
+    }
+
 
     @Column(nullable = false, length = 200)
     private String title;
