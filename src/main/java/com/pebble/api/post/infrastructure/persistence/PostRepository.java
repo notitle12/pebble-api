@@ -88,4 +88,36 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
             """, nativeQuery = true)
     Page<Long> findPopularIds(Pageable pageable);
 
+    @Query(value = """
+            select p.id from post p join member owner on owner.id=p.author_member_id
+            left join lateral (select count(*) as likes
+                               from post_like l join member voter on voter.id=l.member_id
+                               where l.post_id=p.id and l.deleted_at is null
+                                 and voter.status <> 'WITHDRAWAL_PENDING') ranking on true
+            where owner.handle=:handle and p.visibility_status='PUBLIC' and not p.is_blocked and not p.is_draft
+              and owner.status <> 'WITHDRAWAL_PENDING'
+            order by coalesce(ranking.likes,0) desc, coalesce(p.published_at,p.created_at) desc, p.id desc
+            """, countQuery = """
+            select count(*) from post p join member owner on owner.id=p.author_member_id
+            where owner.handle=:handle and p.visibility_status='PUBLIC' and not p.is_blocked and not p.is_draft
+              and owner.status <> 'WITHDRAWAL_PENDING'
+            """, nativeQuery = true)
+    Page<Long> findPopularPublicBlogIds(@Param("handle") String handle, Pageable pageable);
+
+    @Query(value = """
+            select p.id from post p
+            left join lateral (select count(*) as likes
+                               from post_like l join member voter on voter.id=l.member_id
+                               where l.post_id=p.id and l.deleted_at is null
+                                 and voter.status <> 'WITHDRAWAL_PENDING') ranking on true
+            where p.author_member_id=:memberId and p.visibility_status in ('PUBLIC','HIDDEN')
+              and not p.is_blocked and not p.is_draft
+            order by case when p.visibility_status='PUBLIC' then coalesce(ranking.likes,0) else 0 end desc, coalesce(p.published_at,p.created_at) desc, p.id desc
+            """, countQuery = """
+            select count(*) from post p
+            where p.author_member_id=:memberId and p.visibility_status in ('PUBLIC','HIDDEN')
+              and not p.is_blocked and not p.is_draft
+            """, nativeQuery = true)
+    Page<Long> findPopularOwnBlogIds(@Param("memberId") long memberId, Pageable pageable);
+
 }

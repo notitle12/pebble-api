@@ -175,12 +175,36 @@ public class PostService {
 
     public Page<PostView> listPopular(Pageable pageable) {
         var ranked = posts.findPopularIds(pageable);
+        return rankedPosts(ranked, pageable, publicPopularFilter(), false);
+    }
+
+    public Page<PostView> listPopularPublicBlog(String handle, Pageable pageable) {
+        members.findPublicBlog(handle);
+        var ranked = posts.findPopularPublicBlogIds(handle, pageable);
+        return rankedPosts(ranked, pageable, publicPopularFilter(), false);
+    }
+
+    public Page<PostView> listPopularOwnBlog(long memberId, Pageable pageable) {
+        members.findActiveById(memberId);
+        var ranked = posts.findPopularOwnBlogIds(memberId, pageable);
+        Specification<Post> ownerBlogFilter = (root, query, cb) -> cb.and(
+                cb.equal(root.get("author").get("id"), memberId),
+                root.get("visibility").in(PostVisibility.PUBLIC, PostVisibility.HIDDEN),
+                cb.isFalse(root.get("draft")), cb.isFalse(root.get("blocked")));
+        return rankedPosts(ranked, pageable, ownerBlogFilter, true);
+    }
+
+    private Page<PostView> rankedPosts(Page<Long> ranked, Pageable pageable, Specification<Post> filter, boolean owner) {
         if (ranked.isEmpty()) return new org.springframework.data.domain.PageImpl<>(List.of(), pageable, ranked.getTotalElements());
-        // 순위 ID를 먼저 조회하고 관계를 일괄 로딩한다. 다시 공개 조건을 적용해 비공개 전환도 보호한다.
-        var visible = posts.findAll(publicFilter(null, null, null).and((root, query, cb) -> root.get("id").in(ranked.getContent())), Pageable.unpaged());
+        // 순위 ID를 먼저 조회하고 관계를 일괄 로딩한다. 다시 화면 권한 조건을 적용해 상태 변경도 보호한다.
+        var visible = posts.findAll(filter.and((root, query, cb) -> root.get("id").in(ranked.getContent())), Pageable.unpaged());
         var byId = visible.getContent().stream().collect(java.util.stream.Collectors.toMap(Post::getId, value -> value));
         var ordered = ranked.getContent().stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
-        return page(new org.springframework.data.domain.PageImpl<>(ordered, pageable, ranked.getTotalElements()), false);
+        return page(new org.springframework.data.domain.PageImpl<>(ordered, pageable, ranked.getTotalElements()), owner);
+    }
+
+    private Specification<Post> publicPopularFilter() {
+        return publicFilter(null, null, null).and((root, query, cb) -> cb.isFalse(root.get("draft")));
     }
 
     public Page<PostView> listPublic(Long categoryId, Long authorId, Pageable pageable) {

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pebble.api.auth.application.AccessTokenService;
 import com.pebble.api.auth.application.oauth.OAuthProviderClient;
+import com.pebble.api.global.id.TsidGenerator;
 import com.pebble.api.category.domain.Category;
 import com.pebble.api.category.domain.CategoryStatus;
 import com.pebble.api.category.infrastructure.persistence.CategoryRepository;
@@ -102,6 +103,75 @@ class PostIntegrationTest extends AuthenticationTestSupport {
         mvc.perform(get(PATH + "/" + hidden).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isOk());
         mvc.perform(get(PATH + "/" + hidden).header(HttpHeaders.AUTHORIZATION, bearer(other))).andExpect(status().isNotFound());
         mvc.perform(get(PATH + "/" + hidden)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void blogPopularEndpointsRankAtMostTenAndPreservePublicAndOwnerVisibilityRules() throws Exception {
+        List<String> publicPosts = new java.util.ArrayList<>();
+        for (int index = 0; index < 12; index++) publicPosts.add(create(owner, "PUBLIC", null, List.of()));
+        String hidden = create(owner, "HIDDEN", null, List.of());
+        String draft = create(owner, "HIDDEN", null, List.of());
+        String blocked = create(owner, "HIDDEN", null, List.of());
+        jdbc.update("update post set is_draft=true where id=?", Long.parseLong(draft));
+        jdbc.update("update post set is_blocked=true,blocked_at=now(),blocked_by_admin_id=1 where id=?", Long.parseLong(blocked));
+        jdbc.update("update post set published_at=timestamp '2026-01-01 00:00:00' where author_member_id=?", owner.getId());
+
+        List<Member> voters = new java.util.ArrayList<>();
+        for (int index = 0; index < 6; index++) voters.add(initializedMember("popular-voter-" + index));
+        addLikes(publicPosts.get(0), voters.subList(0, 2));
+        addLikes(publicPosts.get(1), voters.subList(0, 1));
+        addLikes(hidden, voters);
+        addLikes(draft, voters);
+        addLikes(blocked, voters);
+        em.flush();
+        em.clear();
+
+        String publicPath = "/api/v1/blogs/" + owner.getHandle() + "/popular-posts";
+        mvc.perform(get(publicPath))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.size").value(10))
+                .andExpect(jsonPath("$.data.totalElements").value(12))
+                .andExpect(jsonPath("$.data.content.length()").value(10))
+                .andExpect(jsonPath("$.data.content[0].id").value(publicPosts.get(0)))
+                .andExpect(jsonPath("$.data.content[0].likeCount").value(2))
+                .andExpect(jsonPath("$.data.content[1].id").value(publicPosts.get(1)))
+                .andExpect(jsonPath("$.data.content[2].likeCount").value(0))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(hidden))))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(draft))))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(blocked))));
+        mvc.perform(get(publicPath).param("size", "11")).andExpect(status().isBadRequest());
+        mvc.perform(get(publicPath).param("page", "1").param("size", "2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.size").value(2))
+                .andExpect(jsonPath("$.data.content[0].id").value(publicPosts.get(11)));
+
+        String ownPath = "/api/v1/members/me/blog/posts/popular";
+        mvc.perform(get(ownPath)).andExpect(status().isUnauthorized());
+        mvc.perform(get(ownPath).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(13))
+                .andExpect(jsonPath("$.data.content[2].id").value(hidden))
+                .andExpect(jsonPath("$.data.content[2].visibilityStatus").value("HIDDEN"))
+                .andExpect(jsonPath("$.data.content[2].likeCount").value(0))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(draft))))
+                .andExpect(jsonPath("$.data.content[*].id", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(blocked))));
+        mvc.perform(get(ownPath).param("size", "11").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void popularRemainsAnAvailablePublicPostSlug() throws Exception {
+        var json = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(basic("PUBLIC"));
+        json.put("slug", "popular");
+        mvc.perform(post(PATH).header(HttpHeaders.AUTHORIZATION, bearer(owner)).contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(json))).andExpect(status().isCreated());
+        mvc.perform(get(blogPath(owner, "popular"))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.slug").value("popular"));
+    }
+
+    private void addLikes(String postId, List<Member> voters) {
+        for (Member voter : voters) jdbc.update(
+                "insert into post_like (id, post_id, member_id, created_at) values (?, ?, ?, clock_timestamp())",
+                TsidGenerator.generate(), Long.parseLong(postId), voter.getId());
     }
 
     @Test
