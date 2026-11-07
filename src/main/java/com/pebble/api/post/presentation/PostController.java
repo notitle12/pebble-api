@@ -78,6 +78,19 @@ public class PostController {
         return ApiResponse.of(page(likes.decorate(posts.listPopular(rankedPage), requesterId(jwt))));
     }
 
+    @GetMapping("/api/v1/blogs/{handle}/popular-posts")
+    public ApiResponse<PostPage> popularBlog(@PathVariable String handle, @RequestParam MultiValueMap<String, String> query,
+                                             @AuthenticationPrincipal Jwt jwt) {
+        var requested = popularPageable(query);
+        return ApiResponse.of(page(likes.decorate(posts.listPopularPublicBlog(handle, requested), requesterId(jwt))));
+    }
+
+    @GetMapping("/api/v1/members/me/blog/posts/popular")
+    public ApiResponse<PostPage> popularOwnBlog(@AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String, String> query) {
+        var requested = popularPageable(query);
+        return ApiResponse.of(page(likes.decorate(posts.listPopularOwnBlog(memberId(jwt), requested), requesterId(jwt))));
+    }
+
     @GetMapping("/api/v1/posts")
     public ApiResponse<PostPage> list(@RequestParam MultiValueMap<String, String> query, @AuthenticationPrincipal Jwt jwt) {
         checkQuery(query, Set.of("page", "size", "sort", "categoryId", "authorId"));
@@ -240,6 +253,14 @@ public class PostController {
                 || !Set.of("asc", "desc").contains(parts[1])) throw invalid("sort");
         Sort.Direction direction = Sort.Direction.fromString(parts[1]);
         return PageRequest.of(page, size, Sort.by(direction, parts[0], "id"));
+    }
+
+    private PageRequest popularPageable(MultiValueMap<String, String> query) {
+        checkQuery(query, Set.of("page", "size"));
+        int page = integer(query.getFirst("page"), 0, "page");
+        int size = integer(query.getFirst("size"), 10, "size");
+        if (page < 0 || size < 1 || size > 10 || (long) page * size > Integer.MAX_VALUE) throw invalid("page/size");
+        return PageRequest.of(page, size);
     }
 
     private int integer(String value, int fallback, String field) {
