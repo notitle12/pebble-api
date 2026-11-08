@@ -18,6 +18,12 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificationExecutor<Post> {
+    List<Post> findByAuthorIdAndSeriesIdAndVisibilityNotOrderBySeriesDisplayOrderAscIdAsc(Long authorId, Long seriesId, PostVisibility visibility);
+
+    @Modifying(flushAutomatically = true)
+    @Query("update Post p set p.seriesId = null, p.seriesDisplayOrder = 0, p.updatedAt = :now where p.author.id = :memberId and p.seriesId = :seriesId")
+    int detachSeries(@Param("memberId") long memberId, @Param("seriesId") long seriesId, @Param("now") Instant now);
+
     List<Post> findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(Long authorId, PostVisibility visibility);
 
     List<Post> findByAuthorIdAndBoardIdAndVisibilityNotOrderByBoardDisplayOrderAscIdAsc(Long authorId, Long boardId, PostVisibility visibility);

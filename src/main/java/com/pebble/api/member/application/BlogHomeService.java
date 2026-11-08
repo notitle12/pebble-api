@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class BlogHomeService {
     public static final Set<String> SECTION_KEYS = Set.of("ACTIVITY", "TECH_STACKS", "PROJECTS", "RECENT_POSTS");
+    public static final List<String> SIDEBAR_KEYS = List.of("BOARDS", "PROJECTS", "SERIES");
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final MemberQueryService members;
@@ -28,13 +29,19 @@ public class BlogHomeService {
     private final Clock clock;
 
     public record Section(String key, boolean visible) { }
-    public record Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Integer featuredProjectLimit) {
-        public Settings { if (activityDisplay == null) activityDisplay = "GRASS"; if (featuredProjectLimit == null) featuredProjectLimit = 6; }
+    public record Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Integer featuredProjectLimit, List<String> sidebarOrder) {
+        public Settings { if (activityDisplay == null) activityDisplay = "GRASS"; if (featuredProjectLimit == null) featuredProjectLimit = 6; sidebarOrder = sidebarOrder == null ? SIDEBAR_KEYS : List.copyOf(sidebarOrder); }
+        public Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Integer featuredProjectLimit) { this(sections, techStacks, featuredProjectIds, activityDisplay, featuredProjectLimit, SIDEBAR_KEYS); }
         public Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay) { this(sections, techStacks, featuredProjectIds, activityDisplay, 6); }
         public Settings(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds) { this(sections, techStacks, featuredProjectIds, "GRASS"); }
     }
     public record Activity(LocalDate from, LocalDate to, String timeZone, List<PostQueryService.ActivityDay> days) { }
-    public record Home(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Integer featuredProjectLimit, Activity activity) { }
+    public record Home(List<Section> sections, List<String> techStacks, List<String> featuredProjectIds, String activityDisplay, Integer featuredProjectLimit, Activity activity, List<String> sidebarOrder) { }
+    public record Navigation(List<String> sidebarOrder) { }
+
+    public Navigation publicNavigation(String handle) {
+        return new Navigation(read(members.findPublicBlog(handle).getId()).sidebarOrder());
+    }
 
     public Settings mine(long memberId) {
         members.findProfileCompleted(memberId);
@@ -42,7 +49,10 @@ public class BlogHomeService {
     }
 
     @Transactional
-    public Settings save(long memberId, Settings settings) {
+    public Settings save(long memberId, Settings settings) { return save(memberId, settings, true); }
+
+    @Transactional
+    public Settings save(long memberId, Settings settings, boolean sidebarOrderProvided) {
         members.findProfileCompletedForWrite(memberId);
         Settings previous = read(memberId);
         List<String> selected = new ArrayList<>();
@@ -54,7 +64,7 @@ public class BlogHomeService {
             projects.requirePublicForWrite(projectId);
             selected.add(id);
         }
-        settings = new Settings(settings.sections(), settings.techStacks(), List.copyOf(selected), settings.activityDisplay(), settings.featuredProjectLimit());
+        settings = new Settings(settings.sections(), settings.techStacks(), List.copyOf(selected), settings.activityDisplay(), settings.featuredProjectLimit(), sidebarOrderProvided ? settings.sidebarOrder() : previous.sidebarOrder());
         try {
             jdbc.update("""
                     insert into blog_home_settings(member_id, settings) values (?, ?::jsonb)
@@ -80,7 +90,7 @@ public class BlogHomeService {
                 ids.add(id);
             }
         } else ids.remove(id);
-        return save(memberId, new Settings(current.sections(), current.techStacks(), List.copyOf(ids), current.activityDisplay(), current.featuredProjectLimit()));
+        return save(memberId, new Settings(current.sections(), current.techStacks(), List.copyOf(ids), current.activityDisplay(), current.featuredProjectLimit(), current.sidebarOrder()));
     }
 
     public Home publicHome(String handle) {
@@ -94,7 +104,7 @@ public class BlogHomeService {
         LocalDate from = to.minusYears(1).plusDays(1);
         boolean activityVisible = settings.sections().stream().anyMatch(section -> section.key().equals("ACTIVITY") && section.visible());
         return new Home(settings.sections(), settings.techStacks(), publicProjects.stream().limit(settings.featuredProjectLimit()).toList(), settings.activityDisplay(), settings.featuredProjectLimit(),
-                new Activity(from, to, "Asia/Seoul", activityVisible ? posts.publicActivity(memberId, from, to) : List.of()));
+                new Activity(from, to, "Asia/Seoul", activityVisible ? posts.publicActivity(memberId, from, to) : List.of()), settings.sidebarOrder());
     }
 
     private Settings read(long memberId) {

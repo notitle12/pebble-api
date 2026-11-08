@@ -275,6 +275,53 @@ class BlogHomeIntegrationTest extends AuthenticationTestSupport {
         }
     }
 
+    @Test void sidebarMenuOrderDefaultsPersistsAndLegacyWritesPreserveIt() throws Exception {
+        String navigation = path().replace("/home", "/navigation");
+        mvc.perform(get(navigation)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sidebarOrder[0]").value("BOARDS"))
+                .andExpect(jsonPath("$.data.sidebarOrder.length()").value(3))
+                .andExpect(jsonPath("$.data.activity").doesNotExist())
+                .andExpect(jsonPath("$.data.techStacks").doesNotExist());
+        var input = settings(List.of());
+        // Existing stored JSON with no new field also reads with the default order.
+        jdbc.update("insert into blog_home_settings(member_id,settings) values(?,?::jsonb)", owner.getId(), mapper.writeValueAsString(input));
+        mvc.perform(get(mine()).header("Authorization", bearer(owner)))
+                .andExpect(jsonPath("$.data.sidebarOrder[2]").value("SERIES"));
+        input.put("sidebarOrder", List.of("SERIES", "PROJECTS", "BOARDS"));
+        mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.sidebarOrder[0]").value("SERIES"));
+        mvc.perform(get(navigation)).andExpect(status().isOk()).andExpect(jsonPath("$.data.sidebarOrder[0]").value("SERIES"));
+        mvc.perform(get(path())).andExpect(jsonPath("$.data.sidebarOrder[0]").value("SERIES"));
+        mvc.perform(get(mine()).header("Authorization", bearer(other))).andExpect(jsonPath("$.data.sidebarOrder[0]").value("BOARDS"));
+        input.remove("sidebarOrder");input.put("techStacks", List.of("Java"));
+        mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.sidebarOrder[0]").value("SERIES"));
+        long projectId = project(owner, "PUBLIC");
+        mvc.perform(put("/api/v1/members/me/projects/" + projectId + "/featured").header("Authorization", bearer(owner))
+                .contentType("application/json").content("{\"featured\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.sidebarOrder[0]").value("SERIES"))
+                .andExpect(jsonPath("$.data.techStacks[0]").value("Java"));
+        mvc.perform(get(navigation+"?order=SERIES")).andExpect(status().isBadRequest());
+        mvc.perform(get(navigation).contentType("application/json").content("{}")).andExpect(status().isBadRequest());
+        owner.requestWithdrawal(Instant.now());members.saveAndFlush(owner);
+        mvc.perform(get(navigation)).andExpect(status().isNotFound());
+    }
+
+    @Test void sidebarOrderRejectsUnknownFixedHomeMissingDuplicateAndMalformedValues() throws Exception {
+        var input = settings(List.of());
+        for (Object value : List.of(List.of(), List.of("BOARDS", "PROJECTS"), List.of("SERIES", "SERIES", "BOARDS"),
+                List.of("HOME", "PROJECTS", "SERIES"), List.of("BOARDS", "PROJECTS", "INVALID"),
+                List.of("BOARDS", 1, "SERIES"), List.of("BOARDS", "PROJECTS", "SERIES", "HOME"), "SERIES")) {
+            input.put("sidebarOrder", value);
+            mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input)))
+                    .andExpect(status().isBadRequest());
+        }
+        input.put("sidebarOrder", null);
+        mvc.perform(put(mine()).header("Authorization", bearer(owner)).contentType("application/json").content(mapper.writeValueAsString(input)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(mine()).header("Authorization", bearer(owner))).andExpect(jsonPath("$.data.sidebarOrder[0]").value("BOARDS"));
+    }
+
     private Map<String,Object> settings(List<String> ids) { return new java.util.LinkedHashMap<>(Map.of("sections",List.of(section("ACTIVITY",true),section("TECH_STACKS",true),section("PROJECTS",true),section("RECENT_POSTS",true)),"techStacks",List.of(),"featuredProjectIds",ids)); }
     private Map<String,Object> section(String key,boolean visible) { return Map.of("key",key,"visible",visible); }
     private String mine() { return "/api/v1/members/me/blog-home"; }
