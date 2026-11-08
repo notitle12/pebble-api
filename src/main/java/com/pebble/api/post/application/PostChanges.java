@@ -10,7 +10,13 @@ import java.util.Set;
 /** 수정 시 생략과 명시적 null을 구분하는 입력이다. */
 public record PostChanges(Set<String> supplied, String title, String summary, Long categoryId,
                           List<String> tags, List<BlockInput> blocks, PostVisibility visibilityStatus, String slug,
-                          Integer displayOrder, Long boardId, Long projectId, Boolean draft, Long thumbnailImageId, Integer boardDisplayOrder) {
+                          Integer displayOrder, Long boardId, Long projectId, Boolean draft, Long thumbnailImageId, Integer boardDisplayOrder, Long seriesId, Integer seriesDisplayOrder) {
+    public PostChanges(Set<String> supplied, String title, String summary, Long categoryId, List<String> tags,
+                       List<BlockInput> blocks, PostVisibility visibilityStatus, String slug, Integer displayOrder,
+                       Long boardId, Long projectId, Boolean draft, Long thumbnailImageId, Integer boardDisplayOrder) {
+        this(supplied,title,summary,categoryId,tags,blocks,visibilityStatus,slug,displayOrder,boardId,projectId,draft,thumbnailImageId,boardDisplayOrder,null,null);
+    }
+
     public PostChanges(Set<String> supplied, String title, String summary, Long categoryId, List<String> tags,
                        List<BlockInput> blocks, PostVisibility visibilityStatus, String slug, Integer displayOrder,
                        Long boardId, Long projectId, Boolean draft, Long thumbnailImageId) {

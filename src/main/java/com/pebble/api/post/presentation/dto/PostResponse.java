@@ -14,7 +14,7 @@ import org.springframework.data.domain.Page;
 public record PostResponse(String id, String postNumber, String slug, String urlKey, int displayOrder, int boardDisplayOrder, Author author, String title, String summary,
                            @JsonInclude(JsonInclude.Include.NON_NULL) List<Block> blocks,
                            Classification category, List<String> tags,
-                           String boardId, String projectId, String thumbnailUrl, String thumbnailImageId, boolean draft,
+                           String boardId, String projectId, String seriesId, @JsonInclude(JsonInclude.Include.NON_NULL) Integer seriesDisplayOrder, String thumbnailUrl, String thumbnailImageId, boolean draft,
                            PostVisibility visibilityStatus, long likeCount, boolean likedByMe,
                            Instant publishedAt, Instant createdAt, Instant updatedAt,
                            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean isBlocked) {
@@ -33,7 +33,9 @@ public record PostResponse(String id, String postNumber, String slug, String url
                         category.getSlug(), category.getStatus()),
                 view.tags(),
                 post.getBoardId() == null ? null : post.getBoardId().toString(),
-                post.getProjectId() == null ? null : post.getProjectId().toString(), view.thumbnailUrl(),
+                post.getProjectId() == null ? null : post.getProjectId().toString(),
+                post.getSeriesId() == null ? null : post.getSeriesId().toString(),
+                view.owner() ? post.getSeriesDisplayOrder() : null, view.thumbnailUrl(),
                 post.getThumbnailImageId() == null ? null : post.getThumbnailImageId().toString(), post.isDraft(), post.getVisibility(), view.likeCount(), view.likedByMe(), post.getPublishedAt(), post.getCreatedAt(),
                 post.getUpdatedAt(), view.owner() ? post.isBlocked() : null);
     }

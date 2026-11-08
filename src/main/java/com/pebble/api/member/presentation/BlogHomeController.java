@@ -27,6 +27,14 @@ public class BlogHomeController {
         return ApiResponse.of(homes.publicHome(handle));
     }
 
+    @GetMapping("/api/v1/blogs/{handle}/navigation")
+    public ApiResponse<BlogHomeService.Navigation> navigation(@PathVariable String handle, HttpServletRequest request,
+                                                             @RequestBody(required=false) String body) {
+        noPayload(request, body);
+        if (!handle.matches("^[a-z][a-z0-9_-]{1,28}[a-z0-9_]$")) throw new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
+        return ApiResponse.of(homes.publicNavigation(handle));
+    }
+
     @GetMapping("/api/v1/members/me/blog-home")
     public ApiResponse<BlogHomeService.Settings> mine(@AuthenticationPrincipal Jwt jwt, HttpServletRequest request,
                                                      @RequestBody(required=false) String body) {
@@ -42,7 +50,7 @@ public class BlogHomeController {
         try {
             JsonNode json = mapper.reader().with(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
                     .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(body);
-            return ApiResponse.of(homes.save(memberId(jwt), BlogHomeRequest.parse(json)));
+            return ApiResponse.of(homes.save(memberId(jwt), BlogHomeRequest.parse(json), json.has("sidebarOrder")));
         } catch (java.io.IOException exception) { throw MediaRequest.invalid(); }
     }
 

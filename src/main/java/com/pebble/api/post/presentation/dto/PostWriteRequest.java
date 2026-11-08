@@ -19,7 +19,7 @@ import java.util.Locale;
 public final class PostWriteRequest {
     private static final Set<String> FIELDS = Set.of("title", "summary", "blocks", "categoryId",
             "tags", "boardId", "projectId", "visibilityStatus", "slug", "displayOrder", "draft",
-            "thumbnailImageId", "boardDisplayOrder");
+            "thumbnailImageId", "boardDisplayOrder", "seriesId", "seriesDisplayOrder");
 
     private PostWriteRequest() {
     }
@@ -115,8 +115,17 @@ public final class PostWriteRequest {
         if (create && thumbnailImageId != null) {
             fail("thumbnailImageId", "초안 생성 후 본문 이미지를 업로드한 다음 수정 요청에서 선택해 주세요.");
         }
+        Long seriesId = json.hasNonNull("seriesId") ? id(json.get("seriesId"), "seriesId") : null;
+        Integer seriesOrder = null;
+        if (json.has("seriesDisplayOrder")) {
+            JsonNode node = json.get("seriesDisplayOrder");
+            if (create || json.has("seriesId") || !node.isIntegralNumber() || !node.canConvertToInt() || node.intValue() < 0) {
+                fail("seriesDisplayOrder", "시리즈 안의 순서를 0 이상의 정수로 지정해 주세요.");
+            }
+            seriesOrder = node.intValue();
+        }
         return new PostChanges(Set.copyOf(supplied), title, summary, categoryId, tags, blocks, visibility, slug, order,
-                boardId, projectId, draft, thumbnailImageId, boardOrder);
+                boardId, projectId, draft, thumbnailImageId, boardOrder, seriesId, seriesOrder);
     }
 
     public static long id(String value, String field) {

@@ -18,7 +18,19 @@ public final class BlogHomeRequest {
         Set<String> allowed = new HashSet<>(Set.of("sections", "techStacks", "featuredProjectIds"));
         if (json.has("activityDisplay")) allowed.add("activityDisplay");
         if (json.has("featuredProjectLimit")) allowed.add("featuredProjectLimit");
+        if (json.has("sidebarOrder")) allowed.add("sidebarOrder");
         fields(json, allowed);
+        List<String> sidebarOrder = BlogHomeService.SIDEBAR_KEYS;
+        if (json.has("sidebarOrder")) {
+            var items = array(json.get("sidebarOrder"), 3);
+            if (items.size() != 3) throw MediaRequest.invalid();
+            var order = new ArrayList<String>();
+            for (var item : items) {
+                if (!item.isTextual() || !BlogHomeService.SIDEBAR_KEYS.contains(item.textValue()) || order.contains(item.textValue())) throw MediaRequest.invalid();
+                order.add(item.textValue());
+            }
+            sidebarOrder = List.copyOf(order);
+        }
         int featuredProjectLimit = 6;
         if (json.has("featuredProjectLimit")) {
             var limit = json.get("featuredProjectLimit");
@@ -58,7 +70,7 @@ public final class BlogHomeRequest {
             try { Long.parseLong(item.textValue()); } catch (NumberFormatException exception) { throw MediaRequest.invalid(); }
             ids.add(item.textValue());
         }
-        return new BlogHomeService.Settings(List.copyOf(sections), List.copyOf(stacks), List.copyOf(ids), activityDisplay, featuredProjectLimit);
+        return new BlogHomeService.Settings(List.copyOf(sections), List.copyOf(stacks), List.copyOf(ids), activityDisplay, featuredProjectLimit, sidebarOrder);
     }
 
     private static JsonNode array(JsonNode node, int max) {

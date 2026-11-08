@@ -40,6 +40,7 @@ public class PostService {
     private final ProjectQueryService projects;
     private final org.springframework.beans.factory.ObjectProvider<com.pebble.api.global.media.R2ObjectStorage> mediaStorage;
     private final PostThumbnailService thumbnails;
+    private final PostSeriesService series;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @Transactional
@@ -67,6 +68,7 @@ public class PostService {
         moveToBoardStart(post, null);
         post.changeProject(input.projectId());
         appendToProject(post);
+        series.assign(post, input.seriesId());
         ordered.add(position, post);
         applyOrder(ordered);
         List<PostBlock> savedBlocks = insertBlocks(post, input.blocks());
@@ -144,6 +146,8 @@ public class PostService {
             post.changeProject(input.projectId());
             if (!Objects.equals(previousProject, input.projectId())) appendToProject(post);
         }
+        if (input.has("seriesId")) series.assign(post, input.seriesId());
+        if (input.has("seriesDisplayOrder")) series.move(post, input.seriesDisplayOrder());
         Category category = post.getCategory();
         if (input.has("categoryId")) {
             category = input.categoryId() == null ? null : categories.resolveForPost(input.categoryId(),
@@ -171,6 +175,7 @@ public class PostService {
         posts.flush();
         applyOrder(posts.findByAuthorIdAndVisibilityNotOrderByDisplayOrderAscIdAsc(memberId, PostVisibility.DELETED));
         normalizeBoard(memberId,post.getBoardId());
+        series.normalize(memberId, post.getSeriesId());
     }
 
     public Page<PostView> listPopular(Pageable pageable) {
@@ -275,6 +280,17 @@ public class PostService {
         long authorId = posts.findAuthorIdForManagement(id).orElseThrow(PostService::notFound);
         members.findForManagementWrite(authorId);
         return posts.findByIdForUpdate(id).orElseThrow(PostService::notFound);
+    }
+
+    public Page<PostView> listSeries(long id, long memberId, boolean owner, Pageable requested) {
+        if (owner) series.own(id, memberId);
+        var ordered = org.springframework.data.domain.PageRequest.of(requested.getPageNumber(), requested.getPageSize(),
+                org.springframework.data.domain.Sort.by("seriesDisplayOrder", "id"));
+        Specification<Post> placement = (root, query, cb) -> cb.and(cb.equal(root.get("seriesId"), id), cb.equal(root.get("author").get("id"), memberId));
+        Specification<Post> visibility = owner
+                ? (root, query, cb) -> cb.notEqual(root.get("visibility"), PostVisibility.DELETED)
+                : publicFilter(null, memberId, null).and((root, query, cb) -> cb.isFalse(root.get("draft")));
+        return page(posts.findAll(placement.and(visibility), ordered), owner);
     }
 
     public Page<PostView> listBoard(long ownerId, long boardId, Pageable pageable) {
