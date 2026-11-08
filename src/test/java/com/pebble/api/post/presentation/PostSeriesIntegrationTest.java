@@ -177,6 +177,46 @@ class PostSeriesIntegrationTest extends AuthenticationTestSupport {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test void seriesOrderPersistsAndPublicListsFollowItWithoutExposingPrivatePositions() throws Exception {
+        String a = createSeries(owner, "first"), hidden = createSeries(owner, "private"), b = createSeries(owner, "last");
+        String firstPost = createPost(owner, "public one", "PUBLIC", a, false);
+        createPost(owner, "private one", "HIDDEN", hidden, false);
+        createPost(owner, "public two", "PUBLIC", b, false);
+        mvc.perform(get("/api/v1/members/me/series").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data[0].id").value(b)).andExpect(jsonPath("$.data[2].id").value(a));
+        seriesPatch(owner, a, "{\"displayOrder\":0}").andExpect(status().isOk()).andExpect(jsonPath("$.data.name").value("first"));
+        mvc.perform(get("/api/v1/members/me/series").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data[0].id").value(a)).andExpect(jsonPath("$.data[1].id").value(b));
+        mvc.perform(get("/api/v1/blogs/" + owner.getHandle() + "/series"))
+                .andExpect(jsonPath("$.data.length()").value(2)).andExpect(jsonPath("$.data[0].id").value(a))
+                .andExpect(jsonPath("$.data[1].id").value(b)).andExpect(jsonPath("$.data[0].displayOrder").doesNotExist());
+        assertThat(jdbc.queryForObject("select series_id from post where id=?", Long.class, Long.parseLong(firstPost))).isEqualTo(Long.parseLong(a));
+        seriesPatch(owner, a, "{\"description\":\"edited without moving\"}").andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select display_order from post_series where id=?", Integer.class, Long.parseLong(a))).isZero();
+        mvc.perform(delete("/api/v1/series/" + b).header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForList("select display_order from post_series where owner_member_id=? order by display_order", Integer.class, owner.getId())).containsExactly(0, 1);
+    }
+
+    @Test void seriesOrderRejectsBadRanksAndOtherOwnersAndRollsBackMixedUpdates() throws Exception {
+        String a = createSeries(owner, "unchanged"), b = createSeries(owner, "second");
+        for (String value : new String[]{"null", "-1", "1.5", "2147483648", "\"0\"", "true", "2"})
+            seriesPatch(owner, a, "{\"displayOrder\":" + value + "}").andExpect(status().isBadRequest());
+        seriesPatch(other, a, "{\"displayOrder\":0}").andExpect(status().isNotFound());
+        seriesPatch(owner, a, "{\"displayOrder\":2,\"name\":\"bad\"}").andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/series/" + a).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(jsonPath("$.data.name").value("unchanged"));
+        seriesWrite(owner, "{\"name\":\"invalid create\",\"displayOrder\":0}").andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/v1/series/" + b).contentType(MediaType.APPLICATION_JSON).content("{\"displayOrder\":0}"))
+                .andExpect(status().isForbidden()); // unauthenticated writes fail the existing CSRF gate
+        mvc.perform(patch("/api/v1/series/" + b).header(HttpHeaders.AUTHORIZATION, "Bearer invalid")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"displayOrder\":0}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private ResultActions seriesPatch(Member member, String id, String body) throws Exception {
+        return mvc.perform(patch("/api/v1/series/" + id).header(HttpHeaders.AUTHORIZATION, bearer(member)).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
     private String createSeries(Member member, String name) throws Exception {
         return json(seriesWrite(member, mapper.writeValueAsString(java.util.Map.of("name", name)))
                 .andExpect(status().isCreated())).at("/data/id").asText();

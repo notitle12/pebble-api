@@ -15,6 +15,7 @@ public class PostSeries extends BaseTimeEntity {
     @Column(name = "owner_member_id", nullable = false, updatable = false) private Long ownerMemberId;
     @Column(nullable = false, length = 100) private String name;
     @Column(nullable = false, length = 1000) private String description;
+    @Column(name = "display_order", nullable = false) private int displayOrder;
 
     protected PostSeries() { }
     public PostSeries(long ownerMemberId, String name, String description) {
@@ -37,4 +38,9 @@ public class PostSeries extends BaseTimeEntity {
     public Long getOwnerMemberId() { return ownerMemberId; }
     public String getName() { return name; }
     public String getDescription() { return description; }
+    public int getDisplayOrder() { return displayOrder; }
+    public void changeOrder(int position) {
+        if (position < 0) throw new IllegalArgumentException("Invalid series order");
+        this.displayOrder = position;
+    }
 }

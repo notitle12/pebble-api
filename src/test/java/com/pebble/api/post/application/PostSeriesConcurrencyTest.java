@@ -129,6 +129,19 @@ class PostSeriesConcurrencyTest extends AuthenticationTestSupport {
     private long create(long owner, String name) {
         return Long.parseLong(series.create(owner, new PostSeriesChanges(name, "")).id());
     }
+
+    @Test void concurrentSeriesReorderAndCreateRemainContiguousAndKeepAllSeries() throws Exception {
+        long owner = member(), a = create(owner, "a"), b = create(owner, "b");
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> { await(start); return series.update(a, owner, new PostSeriesChanges(null, null, 0)); });
+            var second = executor.submit(() -> { await(start); return create(owner, "new"); });
+            start.countDown();
+            first.get(10, TimeUnit.SECONDS); long c = second.get(10, TimeUnit.SECONDS);
+            assertThat(jdbc.queryForList("select id from post_series where owner_member_id=?", Long.class, owner)).containsExactlyInAnyOrder(a, b, c);
+            assertThat(jdbc.queryForList("select display_order from post_series where owner_member_id=? order by display_order", Integer.class, owner)).containsExactly(0, 1, 2);
+        }
+    }
     private long member() {
         long id = transactions.execute(status -> members.saveAndFlush(agreedMember(new Member("series-" + java.util.UUID.randomUUID().toString().substring(0, 8), null,
                 MemberStatus.ACTIVE, null, null))).getId());

@@ -42,7 +42,7 @@ public class PostSeriesService {
         return jdbc.query("select s.*,count(p.id) as post_count from post_series s left join post p on p.series_id=s.id "
                 + "and p.author_member_id=s.owner_member_id" + visible
                 + " where s.owner_member_id=? group by s.id" + (publicly ? " having count(p.id)>0" : "")
-                + " order by s.created_at desc,s.id desc", (rs, row) -> new SeriesView(rs.getString("id"),
+                + " order by s.display_order,s.id", (rs, row) -> new SeriesView(rs.getString("id"),
                 rs.getString("name"), rs.getString("description"), rs.getLong("post_count"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()), memberId);
     }
@@ -62,14 +62,28 @@ public class PostSeriesService {
     @Transactional
     public SeriesView create(long memberId, PostSeriesChanges input) {
         members.findProfileCompletedForWrite(memberId);
-        if (series.countByOwnerMemberId(memberId) >= 100) throw new ApplicationException(PostError.SERIES_LIMIT);
-        return view(series.saveAndFlush(new PostSeries(memberId, input.name(), input.description())), false);
+        var ordered = new ArrayList<>(series.findByOwnerMemberIdOrderByDisplayOrderAscIdAsc(memberId));
+        if (ordered.size() >= 100) throw new ApplicationException(PostError.SERIES_LIMIT);
+        PostSeries created = series.save(new PostSeries(memberId, input.name(), input.description()));
+        ordered.addFirst(created);
+        applySeriesOrder(ordered);
+        series.flush();
+        return view(created, false);
     }
 
     @Transactional
     public SeriesView update(long id, long memberId, PostSeriesChanges input) {
         members.findProfileCompletedForWrite(memberId);
         PostSeries found = owned(id, memberId);
+        if (input.displayOrder() != null) {
+            var ordered = new ArrayList<>(series.findByOwnerMemberIdOrderByDisplayOrderAscIdAsc(memberId));
+            int position = input.displayOrder();
+            if (position < 0 || position >= ordered.size()) throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR,
+                    "displayOrder", "현재 시리즈 목록의 순서 범위를 확인해 주세요.");
+            ordered.removeIf(item -> item.getId().equals(found.getId()));
+            ordered.add(position, found);
+            applySeriesOrder(ordered);
+        }
         found.update(input.name() == null ? found.getName() : input.name(),
                 input.description() == null ? found.getDescription() : input.description());
         series.flush();
@@ -83,6 +97,8 @@ public class PostSeriesService {
         PostSeries found = owned(id, memberId);
         posts.detachSeries(memberId, id, Instant.now());
         series.delete(found);
+        series.flush();
+        applySeriesOrder(series.findByOwnerMemberIdOrderByDisplayOrderAscIdAsc(memberId));
         series.flush();
     }
 
@@ -125,6 +141,10 @@ public class PostSeriesService {
 
     private void applyOrder(List<Post> ordered) {
         for (int index = 0; index < ordered.size(); index++) ordered.get(index).changeSeriesOrder(index);
+    }
+
+    private void applySeriesOrder(List<PostSeries> ordered) {
+        for (int index = 0; index < ordered.size(); index++) ordered.get(index).changeOrder(index);
     }
 
     private SeriesView view(PostSeries value, boolean publicly) {

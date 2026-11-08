@@ -10,10 +10,17 @@ public final class PostSeriesWriteRequest {
     private PostSeriesWriteRequest() { }
     public static PostSeriesChanges parse(JsonNode json, boolean create) {
         if (json == null || !json.isObject() || json.isEmpty()) throw invalid("series");
-        json.fieldNames().forEachRemaining(field -> { if (!Set.of("name", "description").contains(field)) throw invalid(field); });
+        json.fieldNames().forEachRemaining(field -> { if (!Set.of("name", "description", "displayOrder").contains(field)) throw invalid(field); });
+        if (create && json.has("displayOrder")) throw invalid("displayOrder");
         String name = create || json.has("name") ? text(json.get("name"), "name", 100, true) : null;
         String description = json.has("description") ? text(json.get("description"), "description", 1000, false) : create ? "" : null;
-        return new PostSeriesChanges(name, description);
+        Integer order = null;
+        if (json.has("displayOrder")) {
+            JsonNode value = json.get("displayOrder");
+            if (!value.isIntegralNumber() || !value.canConvertToInt() || value.intValue() < 0) throw invalid("displayOrder");
+            order = value.intValue();
+        }
+        return new PostSeriesChanges(name, description, order);
     }
     private static String text(JsonNode json, String field, int max, boolean required) {
         if (json == null || !json.isTextual()) throw invalid(field);
@@ -28,6 +35,7 @@ public final class PostSeriesWriteRequest {
         return value;
     }
     private static ApplicationException invalid(String field) {
-        return new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, field, "시리즈 이름은 1~100자, 소개는 1000자 이내로 입력해 주세요.");
+        return new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, field,
+                field.equals("displayOrder") ? "현재 시리즈 목록의 순서 범위를 확인해 주세요." : "시리즈 이름은 1~100자, 소개는 1000자 이내로 입력해 주세요.");
     }
 }
