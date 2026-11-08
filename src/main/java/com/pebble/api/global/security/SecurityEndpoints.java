@@ -78,6 +78,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.GET, "/api/v1/members/me/series", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/series/{id:[0-9]+}", Access.USER),
             new Endpoint(HttpMethod.GET, "/api/v1/series/{id:[0-9]+}/posts", Access.USER),
+            new Endpoint(HttpMethod.PUT, "/api/v1/members/me/series/order", Access.USER),
             new Endpoint(HttpMethod.POST, "/api/v1/series", Access.USER),
             new Endpoint(HttpMethod.PATCH, "/api/v1/series/{id:[0-9]+}", Access.USER),
             new Endpoint(HttpMethod.DELETE, "/api/v1/series/{id:[0-9]+}", Access.USER),

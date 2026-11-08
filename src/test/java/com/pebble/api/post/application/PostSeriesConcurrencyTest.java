@@ -149,6 +149,21 @@ class PostSeriesConcurrencyTest extends AuthenticationTestSupport {
         profiles.complete(id, "blog-" + id, "series-" + id, null);
         return id;
     }
+
+    @Test void simultaneousBatchSavesOnlyApplyOneOriginalSnapshot() throws Exception {
+        long owner=member(),a=create(owner,"a"),b=create(owner,"b");
+        long first=posts.create(owner,postInput(a)).post().getId(),second=posts.create(owner,postInput(a)).post().getId();
+        var input=new PostSeriesOrderChanges(new PostSeriesOrderChanges.Order(List.of(b,a),List.of(a,b)),a,
+                new PostSeriesOrderChanges.Order(List.of(first,second),List.of(second,first)));
+        CountDownLatch start=new CountDownLatch(1);
+        java.util.concurrent.Callable<String> save=()->{await(start);try{series.saveOrders(owner,input);return "OK";}catch(ApplicationException e){return e.error().code();}};
+        try(var executor=Executors.newFixedThreadPool(2)){
+            var one=executor.submit(save);var two=executor.submit(save);start.countDown();
+            assertThat(List.of(one.get(10,TimeUnit.SECONDS),two.get(10,TimeUnit.SECONDS))).containsExactlyInAnyOrder("OK","SERIES_ORDER_CONFLICT");
+        }
+        assertThat(jdbc.queryForList("select id from post_series where owner_member_id=? order by display_order",Long.class,owner)).containsExactly(a,b);
+        assertThat(jdbc.queryForList("select id from post where series_id=? order by series_display_order",Long.class,a)).containsExactly(second,first);
+    }
     private PostChanges postInput(long id) throws Exception {
         return PostWriteRequest.parse(mapper.readTree("{\"title\":\"title\",\"visibilityStatus\":\"PUBLIC\",\"seriesId\":\"" + id
                 + "\",\"blocks\":[{\"type\":\"TEXT\",\"content\":\"content\"}]}"), true);

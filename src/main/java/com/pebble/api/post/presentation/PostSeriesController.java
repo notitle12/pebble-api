@@ -12,6 +12,7 @@ import com.pebble.api.post.application.PostSeriesService.SeriesView;
 import com.pebble.api.post.application.PostService;
 import com.pebble.api.post.presentation.dto.PostResponse.PostPage;
 import com.pebble.api.post.presentation.dto.PostSeriesWriteRequest;
+import com.pebble.api.post.presentation.dto.PostSeriesOrderRequest;
 import com.pebble.api.post.presentation.dto.PostWriteRequest;
 import java.net.URI;
 import java.util.List;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -68,6 +70,13 @@ public class PostSeriesController {
     public ApiResponse<PostPage> ownPosts(@PathVariable String id, @AuthenticationPrincipal Jwt jwt, @RequestParam MultiValueMap<String,String> query) {
         long memberId = memberId(jwt);
         return ApiResponse.of(PostPage.from(likes.decorate(posts.listSeries(id(id), memberId, true, pageable(query)), memberId), profileImages::url));
+    }
+    @PutMapping(value = "/api/v1/members/me/series/order", consumes = "application/json")
+    public ResponseEntity<Void> saveOrders(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam MultiValueMap<String,String> query, @RequestBody JsonNode body) {
+        checkQuery(query, Set.of());
+        series.saveOrders(memberId(jwt), PostSeriesOrderRequest.parse(body));
+        return ResponseEntity.noContent().build();
     }
     @GetMapping("/api/v1/blogs/{handle}/series")
     public ApiResponse<List<SeriesView>> publicList(@PathVariable String handle, @RequestParam MultiValueMap<String,String> query) {

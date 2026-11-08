@@ -17,6 +17,7 @@ import com.pebble.api.support.AuthenticationTestSupport;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -215,6 +216,59 @@ class PostSeriesIntegrationTest extends AuthenticationTestSupport {
 
     private ResultActions seriesPatch(Member member, String id, String body) throws Exception {
         return mvc.perform(patch("/api/v1/series/" + id).header(HttpHeaders.AUTHORIZATION, bearer(member)).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    @Test void oneRequestAtomicallySavesBothOrdersAndKeepsPostContentAndGlobalOrder() throws Exception {
+        String a = createSeries(owner, "a"), b = createSeries(owner, "b");
+        String first = createPost(owner, "first", "PUBLIC", a, false), second = createPost(owner, "second", "PUBLIC", a, false), draft = createPost(owner, "draft", "HIDDEN", a, true);
+        int globalOrder = jdbc.queryForObject("select display_order from post where id=?", Integer.class, Long.parseLong(first));
+        saveOrders(owner, List.of(b,a), List.of(a,b), a, List.of(first,second,draft), List.of(draft,second,first)).andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/members/me/series").header(HttpHeaders.AUTHORIZATION,bearer(owner))).andExpect(jsonPath("$.data[0].id").value(a));
+        mvc.perform(get("/api/v1/series/"+a+"/posts").header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(jsonPath("$.data.content[0].id").value(draft)).andExpect(jsonPath("$.data.content[1].id").value(second)).andExpect(jsonPath("$.data.content[2].id").value(first));
+        mvc.perform(get("/api/v1/blogs/"+owner.getHandle()+"/series/"+a+"/posts"))
+                .andExpect(jsonPath("$.data.totalElements").value(2)).andExpect(jsonPath("$.data.content[0].id").value(second));
+        mvc.perform(get("/api/v1/posts/"+first).header(HttpHeaders.AUTHORIZATION,bearer(owner)))
+                .andExpect(jsonPath("$.data.blocks[0].content").value("original text")).andExpect(jsonPath("$.data.tags[0]").value("keep"));
+        assertThat(jdbc.queryForObject("select display_order from post where id=?",Integer.class,Long.parseLong(first))).isEqualTo(globalOrder);
+    }
+
+    @Test void stalePartRejectsBothOrdersWithoutChangingTheOtherPart() throws Exception {
+        String a=createSeries(owner,"a"),b=createSeries(owner,"b"),first=createPost(owner,"one","PUBLIC",a,false),second=createPost(owner,"two","PUBLIC",a,false);
+        saveOrders(owner,List.of(b,a),List.of(a,b),a,List.of(second,first),List.of(first,second))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("POST_ORDER_CONFLICT"));
+        assertThat(jdbc.queryForList("select id::text from post_series where owner_member_id=? order by display_order",String.class,owner.getId())).containsExactly(b,a);
+        saveOrders(owner,List.of(a,b),List.of(b,a),a,List.of(first,second),List.of(second,first))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("SERIES_ORDER_CONFLICT"));
+        assertThat(jdbc.queryForList("select id::text from post where series_id=? order by series_display_order",String.class,Long.parseLong(a))).containsExactly(first,second);
+        patchPost(owner,second,"{\"seriesId\":null}").andExpect(status().isOk());
+        saveOrders(owner,null,null,a,List.of(first,second),List.of(second,first)).andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject("select series_id from post where id=?",Long.class,Long.parseLong(second))).isNull();
+    }
+
+    @Test void batchOrderValidatesPayloadAndOwnershipAndRejectsUnsupportedQueries() throws Exception {
+        String a=createSeries(owner,"a"),post=createPost(owner,"one","PUBLIC",a,false);
+        for(String body:new String[]{"{}","null","{\"extra\":1}","{\"seriesOrder\":null}","{\"seriesOrder\":{\"expectedIds\":[1],\"ids\":[1]}}","{\"seriesOrder\":{\"expectedIds\":[\"1\",\"1\"],\"ids\":[\"1\",\"1\"]}}","{\"postOrder\":{\"seriesId\":null,\"expectedIds\":[],\"ids\":[]}}"})
+            mvc.perform(put("/api/v1/members/me/series/order").header(HttpHeaders.AUTHORIZATION,bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+        saveOrders(owner,List.of(a),List.of("1"),null,null,null).andExpect(status().isBadRequest());
+        saveOrders(other,null,null,a,List.of(post),List.of(post)).andExpect(status().isNotFound());
+        mvc.perform(put("/api/v1/members/me/series/order").param("sort","name").header(HttpHeaders.AUTHORIZATION,bearer(owner))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"seriesOrder\":{\"expectedIds\":[],\"ids\":[]}}")).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/v1/members/me/series/order").contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isForbidden());
+    }
+
+    @Test void batchCanSaveOnlyOneScopeAndAcceptsAnEmptySeries() throws Exception {
+        String a=createSeries(owner,"a"),b=createSeries(owner,"b");
+        saveOrders(owner,List.of(b,a),List.of(a,b),null,null,null).andExpect(status().isNoContent());
+        saveOrders(owner,null,null,a,List.of(),List.of()).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForList("select id::text from post_series where owner_member_id=? order by display_order",String.class,owner.getId())).containsExactly(a,b);
+    }
+
+    private ResultActions saveOrders(Member member,List<String> expectedSeries,List<String> series,String id,List<String> expectedPosts,List<String> posts) throws Exception {
+        var body=mapper.createObjectNode();
+        if(expectedSeries!=null)body.set("seriesOrder",mapper.valueToTree(java.util.Map.of("expectedIds",expectedSeries,"ids",series)));
+        if(expectedPosts!=null)body.set("postOrder",mapper.valueToTree(java.util.Map.of("seriesId",id,"expectedIds",expectedPosts,"ids",posts)));
+        return mvc.perform(put("/api/v1/members/me/series/order").header(HttpHeaders.AUTHORIZATION,bearer(member)).contentType(MediaType.APPLICATION_JSON).content(body.toString()));
     }
 
     private String createSeries(Member member, String name) throws Exception {

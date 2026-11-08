@@ -131,6 +131,45 @@ public class PostSeriesService {
         applyOrder(ordered);
     }
 
+    @Transactional
+    public void saveOrders(long memberId, PostSeriesOrderChanges input) {
+        members.findProfileCompletedForWrite(memberId);
+        if (input.seriesOrder() == null && input.postOrder() == null) throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR);
+        List<PostSeries> currentSeries = null;
+        List<Post> currentPosts = null;
+        if (input.seriesOrder() != null) {
+            currentSeries = series.findByOwnerMemberIdOrderByDisplayOrderAscIdAsc(memberId);
+            validateOrder(currentSeries.stream().map(PostSeries::getId).toList(), input.seriesOrder(), 100, PostError.SERIES_ORDER_CONFLICT);
+        }
+        if (input.postOrder() != null) {
+            if (input.seriesId() == null) throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR);
+            owned(input.seriesId(), memberId);
+            currentPosts = ordered(memberId, input.seriesId());
+            validateOrder(currentPosts.stream().map(Post::getId).toList(), input.postOrder(), 10000, PostError.POST_ORDER_CONFLICT);
+        }
+        // Validate both original lists under the member lock before changing either order.
+        if (currentSeries != null) {
+            var byId = currentSeries.stream().collect(java.util.stream.Collectors.toMap(PostSeries::getId, item -> item));
+            for (int index = 0; index < input.seriesOrder().ids().size(); index++) byId.get(input.seriesOrder().ids().get(index)).changeOrder(index);
+        }
+        if (currentPosts != null) {
+            var byId = currentPosts.stream().collect(java.util.stream.Collectors.toMap(Post::getId, item -> item));
+            for (int index = 0; index < input.postOrder().ids().size(); index++) byId.get(input.postOrder().ids().get(index)).changeSeriesOrder(index);
+        }
+        posts.flush();
+    }
+
+    private void validateOrder(List<Long> current, PostSeriesOrderChanges.Order order, int limit, PostError conflict) {
+        var expected = order.expectedIds();
+        var desired = order.ids();
+        var unique = new java.util.HashSet<>(expected);
+        if (expected.size() > limit || unique.size() != expected.size() || desired.size() != expected.size()
+                || new java.util.HashSet<>(desired).size() != desired.size() || !unique.equals(new java.util.HashSet<>(desired))) {
+            throw new ApplicationException(GlobalErrorCode.VALIDATION_ERROR, "ids", "전체 순서를 중복이나 누락 없이 전달해 주세요.");
+        }
+        if (!current.equals(expected)) throw new ApplicationException(conflict);
+    }
+
     public void normalize(long memberId, Long id) {
         if (id != null) applyOrder(ordered(memberId, id));
     }
