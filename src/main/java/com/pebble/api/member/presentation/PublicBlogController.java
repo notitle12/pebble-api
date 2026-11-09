@@ -4,6 +4,7 @@ import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.global.exception.GlobalErrorCode;
 import com.pebble.api.global.presentation.response.ApiResponse;
 import com.pebble.api.member.application.MemberQueryService;
+import com.pebble.api.member.application.BlogFollowService;
 import com.pebble.api.member.presentation.dto.PublicBlogResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PublicBlogController {
     private final MemberQueryService members;
     private final com.pebble.api.member.application.MemberProfileImages images;
+    private final BlogFollowService follows;
 
     @GetMapping("/api/v1/blogs/{handle}")
     public ApiResponse<PublicBlogResponse> profile(@PathVariable String handle, HttpServletRequest request,
@@ -28,6 +30,7 @@ public class PublicBlogController {
             throw new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
         }
         var member = members.findPublicBlog(handle);
-        return ApiResponse.of(PublicBlogResponse.from(member, images.url(member)));
+        var counts = follows.counts(member.getId());
+        return ApiResponse.of(PublicBlogResponse.from(member, images.url(member), counts.followers(), counts.following()));
     }
 }
