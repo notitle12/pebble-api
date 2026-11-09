@@ -7,6 +7,8 @@ import com.pebble.api.member.domain.MemberError;
 import com.pebble.api.member.domain.MemberStatus;
 import com.pebble.api.member.infrastructure.persistence.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +78,23 @@ public class MemberQueryService {
             throw new ApplicationException(GlobalErrorCode.RESOURCE_NOT_FOUND);
         }
         return member;
+    }
+
+    public Page<Member> searchPublicBlogs(String term, Pageable page) {
+        String pattern = containsPattern(term);
+        String handlePattern = term.startsWith("@") && term.length() > 1 ? containsPattern(term.substring(1)) : pattern;
+        return memberRepository.findAll((root, query, cb) -> {
+            var lowered = cb.lower(cb.literal(pattern));
+            return cb.and(cb.notEqual(root.get("status"), MemberStatus.WITHDRAWAL_PENDING),
+                    cb.isNotNull(root.get("profileCompletedAt")),
+                    cb.or(cb.like(cb.lower(root.get("blogName")), lowered, '\\'),
+                            cb.like(cb.lower(root.get("nickname")), lowered, '\\'),
+                            cb.like(cb.lower(root.get("handle")), cb.lower(cb.literal(handlePattern)), '\\')));
+        }, page);
+    }
+
+    private static String containsPattern(String term) {
+        return "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
     }
 
     @Transactional
