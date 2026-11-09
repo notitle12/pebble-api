@@ -256,6 +256,20 @@ class ArchitectureSpecInputTest {
         node.put("description", "\u0000"); reject(value.toString());
     }
 
+    @Test void optionalNodeShapeIsValidatedAndPreserved() throws Exception {
+        ObjectNode value = spec();
+        ObjectNode node = (ObjectNode) value.withArray("nodes").get(0);
+        for (String shape : List.of("RECTANGLE", "CIRCLE", "ELLIPSE", "DIAMOND")) {
+            node.put("shape", shape);
+            var block = PostWriteRequest.parse(request(value.toString()), false).blocks().getFirst();
+            assertThat(mapper.readTree(block.content()).at("/nodes/0/shape").asText()).isEqualTo(shape);
+        }
+        node.putNull("shape"); validate(value.toString());
+        node.remove("shape"); validate(value.toString());
+        for (String invalid : List.of("TRIANGLE", "<svg/>", "circle")) { node.put("shape", invalid); reject(value.toString()); }
+        node.put("shape", 1); reject(value.toString());
+    }
+
     private ObjectNode spec() throws Exception { return (ObjectNode) mapper.readTree(VALID); }
     private void validate(String value) { PostWriteRequest.parse(request(value), false); }
     private void reject(String value) { assertThatThrownBy(() -> validate(value)).as(value).isInstanceOf(ApplicationException.class); }

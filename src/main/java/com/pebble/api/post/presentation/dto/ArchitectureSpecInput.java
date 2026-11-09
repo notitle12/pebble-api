@@ -23,6 +23,7 @@ public final class ArchitectureSpecInput {
     private static final Set<String> GROUP_TYPES = Set.of("ORACLE_CLOUD", "AWS", "CLOUDFLARE", "DOCKER", "CLOUD", "CONTAINER", "CUSTOM");
     private static final Set<String> GROUP_COLORS = Set.of("BLUE", "GREEN", "PURPLE", "AMBER", "ROSE", "PEACH", "TEAL", "INDIGO", "PINK", "GRAY");
     private static final Set<String> NODE_TYPES = Set.of("CLIENT", "APP", "DATABASE", "CACHE", "STORAGE", "PROXY", "CUSTOM");
+    private static final Set<String> NODE_SHAPES = Set.of("RECTANGLE", "CIRCLE", "ELLIPSE", "DIAMOND");
     private static final Set<String> ICONS = Set.of("ANDROID", "ANGULAR", "AWS", "AZURE", "C", "CACHE", "CLIENT", "CLOUD", "CLOUDFLARE", "CONTAINER", "CPP", "CSHARP", "CSS", "DART", "DATABASE", "DJANGO", "DOCKER", "DOCKER_COMPOSE", "DOTNET", "ELASTICSEARCH", "EXPRESS", "FASTAPI", "FIGMA", "FIREBASE", "FLASK", "FLUTTER", "GIT", "GITHUB_ACTIONS", "GITLAB_CI", "GO", "GOOGLE_CLOUD", "GRAFANA", "GRAPHQL", "HIBERNATE", "HTML", "HUGGING_FACE", "IOS", "JAVA", "JAVASCRIPT", "JENKINS", "JPA", "KAFKA", "KOTLIN", "KUBERNETES", "LANGCHAIN", "LARAVEL", "LINUX", "MARIADB", "MONGODB", "MYSQL", "NAVER_CLOUD", "NESTJS", "NETLIFY", "NEXTJS", "NGINX", "NODEJS", "NUXT", "OLLAMA", "OPENAI", "OPENSEARCH", "ORACLE", "ORACLE_CLOUD", "PERSON", "PHP", "POSTGRESQL", "PROMETHEUS", "PYTHON", "PYTORCH", "R2", "RABBITMQ", "REACT", "REACT_NATIVE", "REDIS", "REDUX", "RUBY", "RUBY_ON_RAILS", "RUST", "SCIKIT_LEARN", "SENTRY", "SERVER", "SPRING", "SPRING_BOOT", "SQLITE", "STORAGE", "STRIPE", "SUPABASE", "SVELTE", "SVELTEKIT", "SWIFT", "TAILWIND_CSS", "TENSORFLOW", "TERRAFORM", "TOSS_PAYMENTS", "TYPESCRIPT", "VERCEL", "VUEJS", "WORKERS");
     private ArchitectureSpecInput() {}
     private static boolean container(String type) { return "DOCKER".equals(type) || "CONTAINER".equals(type); }
@@ -97,11 +98,15 @@ public final class ArchitectureSpecInput {
         index = 0;
         for (JsonNode node : nodes) {
             String prefix = field + ".nodes[" + index++ + "]";
-            object(node, Set.of("id", "type", "label", "typeLabel", "groupId", "icon", "position", "description"), prefix);
+            object(node, Set.of("id", "type", "label", "typeLabel", "groupId", "icon", "position", "description", "shape"), prefix);
             nodeIds.add(uniqueId(node.get("id"), prefix + ".id", ids));
             String type = text(node.get("type"), prefix + ".type", 40, true);
             if (!NODE_TYPES.contains(type)) fail(prefix + ".type", "지원하지 않는 요소입니다.");
-            text(node.get("label"), prefix + ".label", 100, true);
+            JsonNode shape = node.get("shape");
+            if (shape != null && !shape.isNull() && (!shape.isTextual() || !NODE_SHAPES.contains(shape.textValue())))
+                fail(prefix + ".shape", "지원하는 기본 도형을 선택해 주세요.");
+            if (shape != null && !shape.isNull()) text(node.get("label"), prefix + ".label", 100, false);
+            else text(node.get("label"), prefix + ".label", 100, true);
             optionalText(node, "description", prefix, 300);
             customTypeLabel(node, type, prefix);
             JsonNode icon = node.get("icon");
