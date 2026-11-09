@@ -31,6 +31,16 @@ public class Project extends BaseTimeEntity {
     @Column(columnDefinition = "jsonb")
     private com.fasterxml.jackson.databind.JsonNode document;
 
+    @Column(name = "gallery_cover_media_id")
+    private Long galleryCoverMediaId;
+
+    public Long getGalleryCoverMediaId() { return galleryCoverMediaId; }
+    public void changeGalleryCoverMediaId(Long mediaId) {
+        ensureNotDeleted();
+        this.galleryCoverMediaId = mediaId;
+        updatedAt = Instant.now();
+    }
+
     public com.fasterxml.jackson.databind.JsonNode getDocument() { return document; }
     public void changeDocument(com.fasterxml.jackson.databind.JsonNode document) {
         ensureNotDeleted();

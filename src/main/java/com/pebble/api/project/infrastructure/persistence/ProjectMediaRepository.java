@@ -13,6 +13,9 @@ public interface ProjectMediaRepository extends JpaRepository<ProjectMedia, Long
 
     List<ProjectMedia> findByProjectIdInAndMediaRole(java.util.Collection<Long> projectIds, MediaRole mediaRole);
 
+    List<ProjectMedia> findByProjectIdInAndMediaRoleInOrderByDisplayOrderAscIdAsc(
+            java.util.Collection<Long> projectIds, java.util.Collection<MediaRole> mediaRoles);
+
     boolean existsByProjectIdAndMediaRole(long projectId, MediaRole mediaRole);
 
     @Modifying

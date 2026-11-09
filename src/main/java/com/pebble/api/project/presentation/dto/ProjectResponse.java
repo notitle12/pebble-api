@@ -25,7 +25,8 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                               Instant publishedAt, Instant createdAt, Instant updatedAt,
                               @JsonInclude(JsonInclude.Include.NON_NULL) Boolean isBlocked,
                               @JsonInclude(JsonInclude.Include.NON_NULL) com.fasterxml.jackson.databind.JsonNode document,
-                              @JsonInclude(JsonInclude.Include.NON_NULL) String thumbnailUrl) {
+                              @JsonInclude(JsonInclude.Include.NON_NULL) String thumbnailUrl,
+                              String galleryCoverMediaId) {
     public static ProjectResponse from(ProjectView view) { return from(view, com.pebble.api.member.domain.Member::getProfileImageUrl); }
 
     public static ProjectResponse from(ProjectView view, java.util.function.Function<com.pebble.api.member.domain.Member, String> imageUrl) {
@@ -46,7 +47,7 @@ public record ProjectResponse(String id, Owner owner, String name, String summar
                 view.media() == null ? null : view.media().stream().map(ProjectMediaResponse::from).toList(), project.getVisibility(), view.likeCount(), view.likedByMe(), project.getPublishedAt(),
                 project.getCreatedAt(), project.getUpdatedAt(), view.owner() ? project.isBlocked() : null,
                 view.detail()?project.getDocument():null,
-                view.thumbnailUrl());
+                view.thumbnailUrl(), project.getGalleryCoverMediaId() == null ? null : project.getGalleryCoverMediaId().toString());
     }
 
     public record Owner(String id, String handle, String blogName, String nickname, String profileImageUrl) { }

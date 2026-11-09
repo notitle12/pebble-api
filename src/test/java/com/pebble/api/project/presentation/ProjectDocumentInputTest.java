@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.pebble.api.global.exception.ApplicationException;
 import com.pebble.api.project.presentation.dto.ProjectDocumentInput;
+import com.pebble.api.project.presentation.dto.ProjectWriteRequest;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
@@ -43,6 +44,18 @@ class ProjectDocumentInputTest {
     @Test void acceptsNarrativeAndInlineImages(){
         ProjectDocumentInput.validate(document("HTML","<p>배경</p><img src=\"https://api.example/api/v1/projects/10/media/20/content\">"));
         ProjectDocumentInput.validate(document("TEXT","😀".repeat(50000)));
+    }
+    @Test void parsesDurableGalleryCoverSelectionAndExplicitReset(){
+        var selected = ProjectWriteRequest.parse(mapper.createObjectNode().put("galleryCoverMediaId", "721389012345680001"), false);
+        assertThat(selected.has("galleryCoverMediaId")).isTrue();
+        assertThat(selected.galleryCoverMediaId()).isEqualTo(721389012345680001L);
+        var reset = ProjectWriteRequest.parse(mapper.createObjectNode().putNull("galleryCoverMediaId"), false);
+        assertThat(reset.has("galleryCoverMediaId")).isTrue();
+        assertThat(reset.galleryCoverMediaId()).isNull();
+        var omitted = ProjectWriteRequest.parse(mapper.createObjectNode(), false);
+        assertThat(omitted.has("galleryCoverMediaId")).isFalse();
+        assertThatThrownBy(() -> ProjectWriteRequest.parse(mapper.createObjectNode().put("galleryCoverMediaId", "01"), false))
+                .isInstanceOf(ApplicationException.class);
     }
     @Test void rejectsUnexpectedFieldsPendingImagesAndInvalidUnicode(){
         for(var doc:java.util.List.of(document("TEXT","bad\u0000"),document("TEXT","\ud800"),document("TEXT","x".repeat(50001)),
