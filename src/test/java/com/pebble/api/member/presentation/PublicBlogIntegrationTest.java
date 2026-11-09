@@ -69,6 +69,46 @@ class PublicBlogIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void searchReturnsPublicBlogNamesNicknamesAndHandlesWithStablePages() throws Exception {
+        String term = "match-" + UUID.randomUUID().toString().substring(0, 8);
+        Member first = searchBlog("a-" + term, "첫번째 " + term, "writer-a-" + term, true);
+        Member second = searchBlog("b-" + term, "두번째 " + term, "writer-b-" + term, true);
+        Member pending = searchBlog("c-" + term, "탈퇴 " + term, "writer-c-" + term, true);
+        searchBlog(null, null, "writer-d-" + term, false);
+        pending.requestWithdrawal(Instant.now());
+        members.flush();
+
+        mvc.perform(get("/api/v1/blogs").queryParam("q", "  " + term.toUpperCase(java.util.Locale.ROOT) + "  ")
+                        .queryParam("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(2))
+                .andExpect(jsonPath("$.data.hasNext").value(true))
+                .andExpect(jsonPath("$.data.content[0].length()").value(4))
+                .andExpect(jsonPath("$.data.content[0].handle").value(first.getHandle()));
+        mvc.perform(get("/api/v1/blogs").queryParam("q", term).queryParam("size", "1").queryParam("page", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.hasPrevious").value(true))
+                .andExpect(jsonPath("$.data.content[0].handle").value(second.getHandle()));
+        for (String search : new String[]{"첫번째", first.getNickname(), "@" + first.getHandle()}) {
+            mvc.perform(get("/api/v1/blogs").queryParam("q", search))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.content[0].handle").value(first.getHandle()));
+        }
+        mvc.perform(get("/api/v1/blogs").queryParam("q", term + "%"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.totalElements").value(0));
+    }
+
+    @Test
+    void publicSearchRejectsMalformedQueriesAndWrites() throws Exception {
+        mvc.perform(get("/api/v1/blogs")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/blogs").queryParam("q", "one", "two")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/blogs").queryParam("q", "가".repeat(201))).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/blogs").queryParam("q", "blog").queryParam("page", "2147483647"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/blogs")).andExpect(status().isForbidden());
+    }
+
+    @Test
     void rejectsUnexpectedQueryAndBodyAndUnimplementedPublicWrites() throws Exception {
         Member member = blog(true);
         mvc.perform(get(path(member)).queryParam("memberId", "1")).andExpect(status().isBadRequest());
@@ -94,8 +134,12 @@ class PublicBlogIntegrationTest extends AuthenticationTestSupport {
 
     private Member blog(boolean completed) {
         String unique = UUID.randomUUID().toString().substring(0, 12);
-        Member member = agreedMember(new Member("writer-" + unique, "https://example.test/avatar.png", MemberStatus.ACTIVE, null, null));
-        if (completed) member.completeProfile("빈 블로그", "blog-" + unique, member.getNickname(), Instant.now());
+        return searchBlog("blog-" + unique, "빈 블로그", "writer-" + unique, completed);
+    }
+
+    private Member searchBlog(String handle, String blogName, String nickname, boolean completed) {
+        Member member = agreedMember(new Member(nickname, "https://example.test/avatar.png", MemberStatus.ACTIVE, null, null));
+        if (completed) member.completeProfile(blogName, handle, nickname, Instant.now());
         return members.saveAndFlush(member);
     }
 

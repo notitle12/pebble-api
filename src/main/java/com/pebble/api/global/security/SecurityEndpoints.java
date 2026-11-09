@@ -109,6 +109,7 @@ public final class SecurityEndpoints {
             new Endpoint(HttpMethod.GET, "/api/v1/projects/popular", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/posts", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/posts/{postId:[0-9]+}", Access.PUBLIC),
+            new Endpoint(HttpMethod.GET, "/api/v1/blogs", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/blogs/{handle}", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/blogs/{handle}/links", Access.PUBLIC),
             new Endpoint(HttpMethod.GET, "/api/v1/blogs/{handle}/home", Access.PUBLIC),
