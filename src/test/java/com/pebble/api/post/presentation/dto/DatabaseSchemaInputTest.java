@@ -28,6 +28,20 @@ class DatabaseSchemaInputTest {
             assertThat(block.type()).isEqualTo(BlockType.DB_SCHEMA); assertThat(block.content()).isEqualTo(content); assertThat(block.language()).isNull();
         }
     }
+    @Test void acceptsAndPreservesOptionalResponsiveDisplayWidth() throws Exception {
+        ObjectNode schema = (ObjectNode) json.readTree(VALID);
+        schema.put("displayWidth", 72);
+        String content = schema.toString();
+        assertThat(PostWriteRequest.parse(request(content), false).blocks().getFirst().content()).isEqualTo(content);
+        schema.putNull("displayWidth"); PostWriteRequest.parse(request(schema.toString()), false);
+        schema.remove("displayWidth"); PostWriteRequest.parse(request(schema.toString()), false);
+        for (String invalid : List.of("24", "101", "1.5", "\"80\"", "true")) {
+            schema = (ObjectNode) json.readTree(VALID);
+            schema.set("displayWidth", json.readTree(invalid));
+            ObjectNode candidate = schema;
+            assertThatThrownBy(() -> PostWriteRequest.parse(request(candidate.toString()), false)).isInstanceOf(ApplicationException.class);
+        }
+    }
     @Test void rejectsDanglingReferencesDuplicateNamesUnknownFieldsAndInvalidKeys() {
         for (String content : List.of(VALID.replace("\"columnId\":\"id\"", "\"columnId\":\"missing\""),
                 VALID.replace("\"tableId\":\"members\"", "\"tableId\":\"missing\""),

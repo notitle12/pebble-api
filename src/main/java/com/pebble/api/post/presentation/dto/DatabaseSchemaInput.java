@@ -26,9 +26,12 @@ public final class DatabaseSchemaInput {
         JsonNode schema;
         try { schema = JSON.readTree(content); }
         catch (JsonProcessingException exception) { fail(field, "올바른 DB 설계 JSON을 입력해 주세요."); return; }
-        object(schema, Set.of("schemaVersion", "display", "tables"), field);
+        object(schema, Set.of("schemaVersion", "display", "tables", "displayWidth"), field);
         JsonNode version = schema.get("schemaVersion");
         if (version == null || !version.isIntegralNumber() || !version.canConvertToInt() || version.intValue() != 1) fail(field, "스키마 버전 1만 지원합니다.");
+        JsonNode displayWidth = schema.get("displayWidth");
+        if (displayWidth != null && !displayWidth.isNull() && (!displayWidth.isIntegralNumber() || !displayWidth.canConvertToInt()
+                || displayWidth.intValue() < 25 || displayWidth.intValue() > 100)) fail(field + ".displayWidth", "25~100 범위의 정수 너비를 입력해 주세요.");
         String display = text(schema.get("display"), field + ".display", 4, true);
         if (!Set.of("BOTH", "ERD", "SPEC").contains(display)) fail(field, "표시 방식을 확인해 주세요.");
         JsonNode tables = schema.get("tables");

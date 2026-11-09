@@ -34,10 +34,11 @@ public final class ArchitectureSpecInput {
             fail(field, "올바른 아키텍처 JSON을 입력해 주세요.");
             return;
         }
-        object(spec, Set.of("schemaVersion", "groups", "nodes", "edges"), field);
+        object(spec, Set.of("schemaVersion", "groups", "nodes", "edges", "displayWidth"), field);
         JsonNode version = spec.get("schemaVersion");
         if (version == null || !version.isIntegralNumber() || !version.canConvertToInt() || version.intValue() != 1)
             fail(field + ".schemaVersion", "아키텍처 버전 1만 지원합니다.");
+        optionalDisplayWidth(spec, field);
         JsonNode groups = array(spec, "groups", field, 0, 10);
         JsonNode nodes = array(spec, "nodes", field, 1, 30);
         JsonNode edges = array(spec, "edges", field, 0, 60);
@@ -147,6 +148,13 @@ public final class ArchitectureSpecInput {
                 }
             }
         }
+    }
+
+    private static void optionalDisplayWidth(JsonNode spec, String field) {
+        JsonNode value = spec.get("displayWidth");
+        if (value != null && !value.isNull() && (!value.isIntegralNumber() || !value.canConvertToInt()
+                || value.intValue() < 25 || value.intValue() > 100))
+            fail(field + ".displayWidth", "25~100 범위의 정수 너비를 입력해 주세요.");
     }
 
     private static void dimension(JsonNode value, String field, int min) {
