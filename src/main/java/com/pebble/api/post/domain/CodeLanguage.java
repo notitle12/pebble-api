@@ -12,6 +12,7 @@ public enum CodeLanguage {
     JSON,
     YAML,
     MARKDOWN,
+    MERMAID,
     BASH,
     SHELL
 }
