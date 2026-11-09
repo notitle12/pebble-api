@@ -184,9 +184,15 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
                 otherMediaId, Long.parseLong(otherId), "SCREENSHOT", "gallery/two.webp", "gallery/two-thumb.webp", 0);
         patch(id, "{\"galleryCoverMediaId\":\"" + mediaId + "\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.galleryCoverMediaId").value(Long.toString(mediaId)));
-        patch(id, "{\"galleryCoverMediaId\":\"" + otherMediaId + "\"}").andExpect(status().isNotFound());
-        jdbc.update("delete from project_media where id=?", mediaId);
+        mvc.perform(delete(PATH + "/" + id + "/media/" + mediaId).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isNoContent());
+        patch(id, "{\"summary\":\"kept after media removal\"}").andExpect(status().isOk());
         assertThat(jdbc.queryForObject("select gallery_cover_media_id from project where id=?", Long.class, Long.parseLong(id))).isNull();
+        patch(id, "{\"galleryCoverMediaId\":\"" + otherMediaId + "\"}").andExpect(status().isNotFound());
+        patch(otherId, "{\"galleryCoverMediaId\":\"" + otherMediaId + "\"}").andExpect(status().isOk());
+        mvc.perform(delete(PATH + "/" + otherId).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("select gallery_cover_media_id from project where id=?", Long.class, Long.parseLong(otherId))).isNull();
     }
 
     @Test

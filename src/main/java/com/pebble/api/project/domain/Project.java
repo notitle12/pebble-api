@@ -41,6 +41,10 @@ public class Project extends BaseTimeEntity {
         updatedAt = Instant.now();
     }
 
+    public void clearGalleryCoverIfSelected(long mediaId) {
+        if (galleryCoverMediaId != null && galleryCoverMediaId == mediaId) changeGalleryCoverMediaId(null);
+    }
+
     public com.fasterxml.jackson.databind.JsonNode getDocument() { return document; }
     public void changeDocument(com.fasterxml.jackson.databind.JsonNode document) {
         ensureNotDeleted();
@@ -125,6 +129,7 @@ public class Project extends BaseTimeEntity {
 
     public void delete() {
         ensureNotDeleted();
+        galleryCoverMediaId = null;
         visibility = ProjectVisibility.DELETED;
         deletedAt = Instant.now();
     }
