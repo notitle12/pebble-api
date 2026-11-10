@@ -35,12 +35,14 @@ class PublicBlogIntegrationTest extends AuthenticationTestSupport {
     void emptyBlogHasPublicProfileWithoutPrivateMemberInformation() throws Exception {
         Member member = blog(true);
         mvc.perform(get(path(member))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(5))
+                .andExpect(jsonPath("$.data.length()").value(7))
                 .andExpect(jsonPath("$.data.id").value(member.getId().toString()))
                 .andExpect(jsonPath("$.data.handle").value(member.getHandle()))
                 .andExpect(jsonPath("$.data.blogName").value("빈 블로그"))
                 .andExpect(jsonPath("$.data.nickname").value(member.getNickname()))
                 .andExpect(jsonPath("$.data.profileImageUrl").value("https://example.test/avatar.png"))
+                .andExpect(jsonPath("$.data.followerCount").value(0))
+                .andExpect(jsonPath("$.data.followingCount").value(0))
                 .andExpect(jsonPath("$.data.status").doesNotExist())
                 .andExpect(jsonPath("$.data.email").doesNotExist());
         mvc.perform(get(path(member) + "/posts")).andExpect(status().isOk())
