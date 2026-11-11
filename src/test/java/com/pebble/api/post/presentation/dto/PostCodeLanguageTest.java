@@ -24,6 +24,17 @@ class PostCodeLanguageTest {
     }
 
     @Test
+    void acceptsMermaidSourceWithoutRewritingIt() {
+        String source = "flowchart LR\n  A[요청] --> B[서버]";
+        var input = mapper.createObjectNode();
+        input.putArray("blocks").addObject().put("type", "CODE").put("content", source).put("language", "MERMAID");
+
+        var block = PostWriteRequest.parse(input, false).blocks().getFirst();
+        assertThat(block.language()).isEqualTo(CodeLanguage.MERMAID);
+        assertThat(block.content()).isEqualTo(source);
+    }
+
+    @Test
     void stillRejectsUnsupportedCodeLanguages() {
         var input = mapper.createObjectNode();
         input.putArray("blocks").addObject().put("type", "CODE").put("content", "code").put("language", "UNKNOWN");
