@@ -173,6 +173,29 @@ class ProjectIntegrationTest extends AuthenticationTestSupport {
     }
 
     @Test
+    void galleryCoverMustBelongToProjectAndMediaDeletionClearsSelection() throws Exception {
+        String id = projectId(create(owner, "PUBLIC", "Gallery", null, null, List.of(), List.of(), List.of(), "IN_PROGRESS", null, null));
+        String otherId = projectId(create(owner, "PUBLIC", "Other gallery", null, null, List.of(), List.of(), List.of(), "IN_PROGRESS", null, null));
+        long mediaId = 721389012345680100L;
+        jdbc.update("insert into project_media(id,project_id,media_role,storage_key,thumbnail_storage_key,display_order,created_at) values (?,?,?,?,?,?,now())",
+                mediaId, Long.parseLong(id), "SCREENSHOT", "gallery/one.webp", "gallery/one-thumb.webp", 0);
+        long otherMediaId = 721389012345680101L;
+        jdbc.update("insert into project_media(id,project_id,media_role,storage_key,thumbnail_storage_key,display_order,created_at) values (?,?,?,?,?,?,now())",
+                otherMediaId, Long.parseLong(otherId), "SCREENSHOT", "gallery/two.webp", "gallery/two-thumb.webp", 0);
+        patch(id, "{\"galleryCoverMediaId\":\"" + mediaId + "\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.galleryCoverMediaId").value(Long.toString(mediaId)));
+        mvc.perform(delete(PATH + "/" + id + "/media/" + mediaId).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isNoContent());
+        patch(id, "{\"summary\":\"kept after media removal\"}").andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select gallery_cover_media_id from project where id=?", Long.class, Long.parseLong(id))).isNull();
+        patch(id, "{\"galleryCoverMediaId\":\"" + otherMediaId + "\"}").andExpect(status().isNotFound());
+        patch(otherId, "{\"galleryCoverMediaId\":\"" + otherMediaId + "\"}").andExpect(status().isOk());
+        mvc.perform(delete(PATH + "/" + otherId).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+                .andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("select gallery_cover_media_id from project where id=?", Long.class, Long.parseLong(otherId))).isNull();
+    }
+
+    @Test
     void publicListFiltersByTechStackLifecycleAndPaginatesUsingStableDefaultOrder() throws Exception {
         TechStack selected = techStack("selected", TechStackStatus.ACTIVE);
         TechStack otherTechStack = techStack("other", TechStackStatus.ACTIVE);

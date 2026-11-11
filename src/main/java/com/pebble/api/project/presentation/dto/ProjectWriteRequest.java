@@ -21,7 +21,7 @@ import java.util.Set;
 public final class ProjectWriteRequest {
     private static final Set<String> FIELDS = Set.of("name", "summary", "description", "architectureDescription",
             "executionInstructions", "lifecycleStatus", "startedOn", "completedOn", "techStackIds", "features",
-            "links", "visibilityStatus", "document");
+            "links", "visibilityStatus", "document", "galleryCoverMediaId");
 
     private ProjectWriteRequest() { }
 
@@ -53,9 +53,11 @@ public final class ProjectWriteRequest {
         if (visibility == ProjectVisibility.DELETED) fail("visibilityStatus", "PUBLIC 또는 HIDDEN을 지정해 주세요.");
         JsonNode document = json.get("document");
         if (document != null && !document.isNull()) ProjectDocumentInput.validate(document);
+        Long galleryCoverMediaId = json.has("galleryCoverMediaId") && !json.get("galleryCoverMediaId").isNull()
+                ? id(text(json.get("galleryCoverMediaId"), "galleryCoverMediaId", 19, false, true), "galleryCoverMediaId") : null;
         return new ProjectChanges(Set.copyOf(supplied), name, summary, description, architecture, execution,
                 lifecycle, startedOn, completedOn, techStackIds, features, links, visibility,
-                document == null || document.isNull() ? null : document.deepCopy());
+                document == null || document.isNull() ? null : document.deepCopy(), galleryCoverMediaId);
     }
 
     public static long id(String value, String field) {

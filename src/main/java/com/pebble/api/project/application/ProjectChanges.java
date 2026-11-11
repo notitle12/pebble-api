@@ -11,13 +11,24 @@ public record ProjectChanges(Set<String> supplied, String name, String summary, 
                              String architectureDescription, String executionInstructions,
                              ProjectLifecycleStatus lifecycleStatus, LocalDate startedOn, LocalDate completedOn,
                              List<Long> techStackIds, List<FeatureInput> features, List<LinkInput> links,
-                             ProjectVisibility visibilityStatus, com.fasterxml.jackson.databind.JsonNode document) {
+                             ProjectVisibility visibilityStatus, com.fasterxml.jackson.databind.JsonNode document,
+                             Long galleryCoverMediaId) {
+    public ProjectChanges(Set<String> supplied, String name, String summary, String description,
+                          String architectureDescription, String executionInstructions,
+                          ProjectLifecycleStatus lifecycleStatus, LocalDate startedOn, LocalDate completedOn,
+                          List<Long> techStackIds, List<FeatureInput> features, List<LinkInput> links,
+                          ProjectVisibility visibilityStatus, com.fasterxml.jackson.databind.JsonNode document) {
+        this(supplied, name, summary, description, architectureDescription, executionInstructions,
+                lifecycleStatus, startedOn, completedOn, techStackIds, features, links,
+                visibilityStatus, document, null);
+    }
+
     public ProjectChanges(Set<String> supplied, String name, String summary, String description,
                           String architectureDescription, String executionInstructions,
                           ProjectLifecycleStatus lifecycleStatus, LocalDate startedOn, LocalDate completedOn,
                           List<Long> techStackIds, List<FeatureInput> features, List<LinkInput> links, ProjectVisibility visibilityStatus) {
         this(supplied,name,summary,description,architectureDescription,executionInstructions,lifecycleStatus,startedOn,completedOn,
-                techStackIds,features,links,visibilityStatus,null);
+                techStackIds,features,links,visibilityStatus,null,null);
     }
     public boolean has(String field) { return supplied.contains(field); }
     public record FeatureInput(String title, String description) { }

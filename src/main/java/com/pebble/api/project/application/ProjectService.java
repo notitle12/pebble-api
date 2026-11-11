@@ -70,6 +70,7 @@ public class ProjectService {
         ordered.add(0, project);
         applyOrder(ordered);
         if(input.has("document")){validateDocumentImages(project,input.document());project.changeDocument(input.document());}
+        if(input.has("galleryCoverMediaId") && input.galleryCoverMediaId() != null) throw notFound();
         replaceFeatures(project, input.features());
         replaceLinks(project, input.links());
         replaceTechStacks(project, selected, List.of());
@@ -230,6 +231,7 @@ public class ProjectService {
                 input.has("completedOn") ? input.completedOn() : project.getCompletedOn());
         if (input.has("visibilityStatus")) project.changeVisibility(input.visibilityStatus());
         if(input.has("document")){validateDocumentImages(project,input.document());project.changeDocument(input.document());}
+        if(input.has("galleryCoverMediaId")) changeGalleryCover(project, input.galleryCoverMediaId());
         if (input.has("features")) replaceFeatures(project, input.features());
         if (input.has("links")) replaceLinks(project, input.links());
         if (selected != null) replaceTechStacks(project, selected, currentTechStacks);
@@ -307,9 +309,21 @@ public class ProjectService {
 
     private ProjectView detailView(Project project, boolean owner) {
         initializeOwner(project);
+        var mediaRows = mediaViews(project, owner);
         return new ProjectView(project, features.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
                 links.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()),
-                projectTechStacks.findForProjects(List.of(project.getId())).stream().map(ProjectTechStack::getTechStack).toList(), true, owner, 0, false, mediaViews(project,owner));
+                projectTechStacks.findForProjects(List.of(project.getId())).stream().map(ProjectTechStack::getTechStack).toList(),
+                true, owner, 0, false, mediaRows, galleryThumbnailUrl(project, mediaRows));
+    }
+
+    private String galleryThumbnailUrl(Project project, List<ProjectMediaView> rows) {
+        var gallery = rows.stream().filter(row -> row.mediaRole() == com.pebble.api.project.domain.MediaRole.THUMBNAIL
+                || row.mediaRole() == com.pebble.api.project.domain.MediaRole.SCREENSHOT).toList();
+        String selectedId = project.getGalleryCoverMediaId() == null ? null : project.getGalleryCoverMediaId().toString();
+        var selected = selectedId == null ? null : gallery.stream().filter(row -> row.id().equals(selectedId)).findFirst().orElse(null);
+        if (selected == null) selected = gallery.stream().filter(row -> row.mediaRole() == com.pebble.api.project.domain.MediaRole.THUMBNAIL)
+                .findFirst().orElseGet(() -> gallery.stream().findFirst().orElse(null));
+        return selected == null ? null : selected.thumbnailUrl() != null ? selected.thumbnailUrl() : selected.url();
     }
 
     private Page<ProjectView> page(Page<Project> page, boolean owner) {
@@ -322,13 +336,21 @@ public class ProjectService {
             }
             var client = mediaStorage.getIfAvailable();
             if (client != null) {
-                var thumbMedia = media.findByProjectIdInAndMediaRole(projectIds, com.pebble.api.project.domain.MediaRole.THUMBNAIL);
-                Map<Long, Project> projectMap = page.getContent().stream().collect(Collectors.toMap(Project::getId, p -> p));
-                for (var item : thumbMedia) {
-                    Project p = projectMap.get(item.getProjectId());
-                    if (p != null && isPublic(p)) {
-                        String key = item.getThumbnailStorageKey() != null ? item.getThumbnailStorageKey() : item.getStorageKey();
-                        thumbnailsByProject.put(item.getProjectId(), client.signedUrl(key));
+                var galleryMedia = media.findByProjectIdInAndMediaRoleInOrderByDisplayOrderAscIdAsc(projectIds,
+                        List.of(com.pebble.api.project.domain.MediaRole.THUMBNAIL, com.pebble.api.project.domain.MediaRole.SCREENSHOT));
+                Map<Long, List<com.pebble.api.project.domain.ProjectMedia>> galleryByProject = galleryMedia.stream()
+                        .collect(Collectors.groupingBy(com.pebble.api.project.domain.ProjectMedia::getProjectId));
+                for (Project p : page.getContent()) {
+                    if (!isPublic(p)) continue;
+                    var rows = galleryByProject.getOrDefault(p.getId(), List.of());
+                    var selectedMedia = p.getGalleryCoverMediaId() == null ? null : rows.stream()
+                            .filter(item -> item.getId().equals(p.getGalleryCoverMediaId())).findFirst().orElse(null);
+                    if (selectedMedia == null) selectedMedia = rows.stream()
+                            .filter(item -> item.getMediaRole() == com.pebble.api.project.domain.MediaRole.THUMBNAIL)
+                            .findFirst().orElseGet(() -> rows.stream().findFirst().orElse(null));
+                    if (selectedMedia != null) {
+                        String key = selectedMedia.getThumbnailStorageKey() != null ? selectedMedia.getThumbnailStorageKey() : selectedMedia.getStorageKey();
+                        thumbnailsByProject.put(p.getId(), client.signedUrl(key));
                     }
                 }
             }
@@ -351,6 +373,17 @@ public class ProjectService {
 
     static boolean referencesImage(Project project,long imageId){
         return project.getDocument()!=null&&project.getDocument().toString().contains("/projects/"+project.getId()+"/media/"+imageId+"/content");
+    }
+    private void changeGalleryCover(Project project, Long mediaId) {
+        if (mediaId == null) {
+            project.changeGalleryCoverMediaId(null);
+            return;
+        }
+        var item = media.findById(mediaId).filter(candidate -> candidate.getProjectId() == project.getId())
+                .filter(candidate -> candidate.getMediaRole() == com.pebble.api.project.domain.MediaRole.SCREENSHOT
+                        || candidate.getMediaRole() == com.pebble.api.project.domain.MediaRole.THUMBNAIL)
+                .orElseThrow(ProjectService::notFound);
+        project.changeGalleryCoverMediaId(item.getId());
     }
     private void validateDocumentImages(Project project,com.fasterxml.jackson.databind.JsonNode document){
         if(document==null)return;

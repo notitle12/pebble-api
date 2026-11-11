@@ -32,17 +32,14 @@ public class ProjectMediaService {
     private final MediaDeletionQueue deletion;
 
     public ProjectMediaView replaceCover(long memberId,long projectId,byte[] source){
-        owned(memberId,projectId);
-        media.findByProjectIdOrderByDisplayOrderAscIdAsc(projectId).stream()
-                .filter(item->item.getMediaRole()==MediaRole.THUMBNAIL).forEach(media::delete);
+        removeCoverMedia(owned(memberId,projectId));
         media.flush();
         return upload(memberId,projectId,source,MediaRole.THUMBNAIL,null,0);
     }
 
     public void deleteCover(long memberId, long projectId) {
         Project project = owned(memberId, projectId);
-        media.findByProjectIdOrderByDisplayOrderAscIdAsc(projectId).stream()
-                .filter(item -> item.getMediaRole() == MediaRole.THUMBNAIL).forEach(media::delete);
+        removeCoverMedia(project);
         project.touchMedia();
         media.flush();
         projects.flush();
@@ -88,10 +85,21 @@ public class ProjectMediaService {
 
     public void delete(long memberId, long projectId, long mediaId) {
         Project project = owned(memberId, projectId);
-        media.delete(item(projectId, mediaId));
+        removeMedia(project, item(projectId, mediaId));
         project.touchMedia();
         media.flush();
         projects.flush();
+    }
+
+    private void removeCoverMedia(Project project) {
+        media.findByProjectIdOrderByDisplayOrderAscIdAsc(project.getId()).stream()
+                .filter(item -> item.getMediaRole() == MediaRole.THUMBNAIL)
+                .forEach(item -> removeMedia(project, item));
+    }
+
+    private void removeMedia(Project project, ProjectMedia item) {
+        project.clearGalleryCoverIfSelected(item.getId());
+        media.delete(item);
     }
 
     @Transactional(readOnly=true)

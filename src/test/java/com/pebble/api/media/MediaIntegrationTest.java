@@ -223,13 +223,16 @@ class MediaIntegrationTest extends AuthenticationTestSupport {
     @Test
     void replacingCoverRollsBackOldImageWhenStorageFails() throws Exception {
         var old=projectMedia.upload(owner.getId(),projectId,png(),MediaRole.THUMBNAIL,null,0);
+        jdbc.update("update project set gallery_cover_media_id=? where id=?", Long.parseLong(old.id()), projectId);
         failPut=true;
         assertThatThrownBy(()->projectMedia.replaceCover(owner.getId(),projectId,png())).isInstanceOf(IllegalStateException.class);
         assertThat(jdbc.queryForObject("select id from project_media where project_id=? and media_role='THUMBNAIL'",Long.class,projectId)).isEqualTo(Long.parseLong(old.id()));
+        assertThat(jdbc.queryForObject("select gallery_cover_media_id from project where id=?", Long.class, projectId)).isEqualTo(Long.parseLong(old.id()));
         failPut=false;
         var next=projectMedia.replaceCover(owner.getId(),projectId,png());
         assertThat(next.id()).isNotEqualTo(old.id());
         assertThat(jdbc.queryForObject("select count(*) from project_media where project_id=? and media_role='THUMBNAIL'",Long.class,projectId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select gallery_cover_media_id from project where id=?", Long.class, projectId)).isNull();
     }
 
     @Test
